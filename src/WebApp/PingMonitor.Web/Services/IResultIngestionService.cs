@@ -1,8 +1,9 @@
 using PingMonitor.Web.Contracts.Results;
+using PingMonitor.Web.Models;
 
 namespace PingMonitor.Web.Services;
 
 public interface IResultIngestionService
 {
-    Task<SubmitResultsResponse> IngestAsync(string instanceId, SubmitResultsRequest request, CancellationToken cancellationToken);
+    Task<SubmitResultsResponse> IngestAsync(Agent agent, SubmitResultsRequest request, CancellationToken cancellationToken);
 }

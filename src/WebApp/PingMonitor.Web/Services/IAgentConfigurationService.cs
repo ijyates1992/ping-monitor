@@ -1,10 +1,9 @@
 using PingMonitor.Web.Contracts.Config;
-using PingMonitor.Web.Contracts.Hello;
+using PingMonitor.Web.Models;
 
 namespace PingMonitor.Web.Services;
 
 public interface IAgentConfigurationService
 {
-    Task<AgentHelloResponse> BuildHelloResponseAsync(string instanceId, AgentHelloRequest request, CancellationToken cancellationToken);
-    Task<AgentConfigResponse> GetConfigurationAsync(string instanceId, CancellationToken cancellationToken);
+    Task<AgentConfigResponse> GetConfigurationAsync(Agent agent, CancellationToken cancellationToken);
 }
