@@ -178,6 +178,7 @@ Correctness, safety, and predictability take priority over elegance.
 ### GitHub authentication and issue creation
 
 - This repository allows use of GitHub Personal Access Tokens (PATs)
+- The default origin remote points to https://github.com/ijyates1992/ping-monitor and requires authenticated access; when a command needs credentials, prompt the user for their GitHub username and personal access token
 - Codex should attempt to create issues automatically when required
 - If issue creation fails:
   - report the failure clearly
