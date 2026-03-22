@@ -1,0 +1,1 @@
+"""Ping monitor agent package."""
