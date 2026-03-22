@@ -20,6 +20,20 @@ No implementation may violate these constraints unless:
 
 ---
 
+## Runtime constraints
+
+### Web application
+
+- The control-plane web application must target **.NET 10**
+- Changes to the web application runtime require an explicit issue and an update to this document
+
+### Agent
+
+- The execution-plane agent must be implemented in **Python**
+- Changes to the agent runtime require an explicit issue and an update to this document
+
+---
+
 ## Network model
 
 ### Inbound connectivity

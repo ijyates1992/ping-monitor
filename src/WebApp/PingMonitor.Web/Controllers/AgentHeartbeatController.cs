@@ -23,16 +23,13 @@ public sealed class AgentHeartbeatController : ControllerBase
     [ProducesResponseType(typeof(AgentHeartbeatResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AgentHeartbeatResponse>> PostAsync([FromBody] AgentHeartbeatRequest request, CancellationToken cancellationToken)
     {
-        var instanceId = Request.Headers["X-Instance-Id"].ToString();
-
-        // TODO: Enforce authenticated agent access and persist heartbeat metadata.
-        var isAuthenticated = await _authenticationService.ValidateAsync(instanceId, Request.Headers.Authorization, cancellationToken);
-        if (!isAuthenticated)
+        var authenticationResult = await _authenticationService.AuthenticateAsync(Request, cancellationToken);
+        if (!authenticationResult.Succeeded)
         {
-            return Unauthorized();
+            return authenticationResult.ToActionResult(HttpContext);
         }
 
-        var response = await _heartbeatService.ProcessHeartbeatAsync(instanceId, request, cancellationToken);
+        var response = await _heartbeatService.ProcessHeartbeatAsync(authenticationResult.Agent!, request, cancellationToken);
         return Ok(response);
     }
 }

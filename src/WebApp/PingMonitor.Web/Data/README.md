@@ -1,3 +1,9 @@
 # Data
 
-This folder is reserved for persistence-related code. Persistence is intentionally not implemented in the phase 1 skeleton.
+This folder contains the minimal persistence implementation needed for authenticated agent `/hello` handling.
+
+## Current scope
+
+- EF Core `DbContext` for the `Agent` entity only
+- SQLite provider for local development and initial end-to-end wiring
+- no result ingestion, state engine, or alerting persistence yet

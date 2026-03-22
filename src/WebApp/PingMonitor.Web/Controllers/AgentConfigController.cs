@@ -23,16 +23,13 @@ public sealed class AgentConfigController : ControllerBase
     [ProducesResponseType(typeof(AgentConfigResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AgentConfigResponse>> GetAsync(CancellationToken cancellationToken)
     {
-        var instanceId = Request.Headers["X-Instance-Id"].ToString();
-
-        // TODO: Enforce authenticated agent access before returning assignments.
-        var isAuthenticated = await _authenticationService.ValidateAsync(instanceId, Request.Headers.Authorization, cancellationToken);
-        if (!isAuthenticated)
+        var authenticationResult = await _authenticationService.AuthenticateAsync(Request, cancellationToken);
+        if (!authenticationResult.Succeeded)
         {
-            return Unauthorized();
+            return authenticationResult.ToActionResult(HttpContext);
         }
 
-        var response = await _configurationService.GetConfigurationAsync(instanceId, cancellationToken);
+        var response = await _configurationService.GetConfigurationAsync(authenticationResult.Agent!, cancellationToken);
         return Ok(response);
     }
 }
