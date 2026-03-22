@@ -1,0 +1,427 @@
+# Data model
+
+## Overview
+
+This document defines the core data model for the monitoring platform.
+
+It describes:
+
+- entities and their purpose  
+- relationships between entities  
+- key fields and constraints  
+- scoping rules (per agent vs global)  
+
+This model is **authoritative** and must align with:
+
+- `docs/agent-api.md`
+- `docs/monitoring-state-machine.md`
+- `docs/PLATFORM_CONSTRAINTS.md`
+
+---
+
+## Design principles
+
+- State is derived, not stored blindly  
+- Raw results are immutable facts  
+- State is tracked per **agent assignment**  
+- Entities must be clearly scoped  
+- Relationships must be explicit  
+- Prefer append-only history where possible  
+- Avoid hidden coupling between entities  
+
+---
+
+## Core entities
+
+### Agent
+
+Represents a monitoring agent instance.
+
+#### Purpose
+
+- identity and authentication  
+- heartbeat tracking  
+- assignment ownership  
+
+#### Key fields
+
+- `agentId` (internal, immutable, GUID/ULID)
+- `instanceId` (human-readable, unique)
+- `name`
+- `site`
+- `enabled` (bool)
+
+#### Authentication
+
+- `apiKeyHash`
+- `apiKeyCreatedAtUtc`
+- `apiKeyRevoked` (bool)
+
+#### Health tracking
+
+- `lastHeartbeatUtc`
+- `lastSeenUtc`
+- `status` (derived: ONLINE / STALE / OFFLINE)
+
+#### Metadata
+
+- `agentVersion`
+- `platform`
+- `machineName`
+- `createdAtUtc`
+
+---
+
+### Endpoint
+
+Represents a logical target to monitor.
+
+#### Purpose
+
+- reusable target definition  
+- dependency relationships  
+- grouping and tagging  
+
+#### Key fields
+
+- `endpointId`
+- `name`
+- `target` (IP or hostname)
+- `enabled` (bool)
+
+#### Relationships
+
+- `dependsOnEndpointId` (nullable)
+
+#### Metadata
+
+- `tags` (array or join table)
+- `notes`
+- `createdAtUtc`
+
+---
+
+### MonitorAssignment
+
+Defines what an agent monitors and how.
+
+#### Purpose
+
+- binds an agent to an endpoint  
+- defines check behaviour  
+
+#### Key fields
+
+- `assignmentId`
+- `agentId`
+- `endpointId`
+
+#### Check configuration
+
+- `checkType` (v1: icmp)
+- `enabled` (bool)
+
+#### Timing
+
+- `pingIntervalSeconds`
+- `retryIntervalSeconds`
+- `timeoutMs`
+
+#### Thresholds
+
+- `failureThreshold`
+- `recoveryThreshold`
+
+#### Metadata
+
+- `createdAtUtc`
+- `updatedAtUtc`
+
+---
+
+## Important rule
+
+**State is per MonitorAssignment, not per Endpoint.**
+
+---
+
+### CheckResult
+
+Represents a single raw check result.
+
+#### Purpose
+
+- immutable fact record  
+- basis for state calculation  
+
+#### Key fields
+
+- `resultId` (optional, or implicit)
+- `assignmentId`
+- `agentId`
+- `endpointId`
+
+#### Result data
+
+- `checkedAtUtc`
+- `success` (bool)
+- `roundTripMs` (nullable)
+- `errorCode` (nullable)
+- `errorMessage` (nullable)
+
+#### Metadata
+
+- `receivedAtUtc`
+- `batchId` (for idempotency)
+
+#### Constraints
+
+- append-only  
+- never modified after insert  
+
+---
+
+### EndpointState
+
+Represents current derived state for an assignment.
+
+#### Purpose
+
+- current state snapshot  
+- fast lookup for UI and alerting  
+
+#### Key fields
+
+- `assignmentId` (PK)
+- `currentState` (UNKNOWN / UP / DEGRADED / DOWN / SUPPRESSED)
+
+#### Counters
+
+- `consecutiveFailureCount`
+- `consecutiveSuccessCount`
+
+#### Timing
+
+- `lastCheckUtc`
+- `lastStateChangeUtc`
+
+#### Dependency tracking
+
+- `suppressedByEndpointId` (nullable)
+
+---
+
+### StateTransition
+
+Represents a historical state change.
+
+#### Purpose
+
+- auditability  
+- incident reconstruction  
+- reporting  
+
+#### Key fields
+
+- `transitionId`
+- `assignmentId`
+- `agentId`
+- `endpointId`
+
+#### Transition data
+
+- `previousState`
+- `newState`
+- `transitionAtUtc`
+
+#### Context
+
+- `reasonCode`
+- `dependencyEndpointId` (nullable)
+
+---
+
+### AlertEvent
+
+Represents an alert lifecycle.
+
+#### Purpose
+
+- track active incidents  
+- support notifications  
+- support audit/history  
+
+#### Key fields
+
+- `alertId`
+- `assignmentId`
+- `endpointId`
+- `agentId`
+
+#### Lifecycle
+
+- `openedAtUtc`
+- `closedAtUtc` (nullable)
+
+#### State
+
+- `status` (OPEN / CLOSED)
+
+#### Context
+
+- `triggerState` (usually DOWN)
+- `clearedState` (usually UP)
+
+#### Metadata
+
+- `suppressed` (bool)
+- `notes`
+
+---
+
+## Relationships
+
+### Core relationships
+
+- Agent 1 → many MonitorAssignments  
+- Endpoint 1 → many MonitorAssignments  
+- Endpoint 1 → optional parent Endpoint  
+
+- MonitorAssignment 1 → many CheckResults  
+- MonitorAssignment 1 → 1 EndpointState  
+- MonitorAssignment 1 → many StateTransitions  
+- MonitorAssignment 1 → many AlertEvents  
+
+---
+
+## Relationship diagram (conceptual)
+
+Agent
+  └── MonitorAssignment
+        ├── Endpoint
+        │     └── (dependsOn → Endpoint)
+        ├── CheckResult (many)
+        ├── EndpointState (1)
+        ├── StateTransition (many)
+        └── AlertEvent (many)
+
+---
+
+## Scoping rules
+
+### Per-agent scope
+
+These are scoped per agent:
+
+- MonitorAssignment  
+- CheckResult  
+- EndpointState  
+- StateTransition  
+- AlertEvent  
+
+### Global scope
+
+These are shared:
+
+- Endpoint  
+
+### Important implication
+
+The same endpoint may have:
+
+- different states  
+- different results  
+- different alerts  
+
+depending on the agent.
+
+---
+
+## Dependency rules (data level)
+
+- dependencies are defined at the Endpoint level  
+- evaluation occurs at assignment level  
+- dependency lookup must use:
+  - same agent scope  
+  - corresponding assignment  
+
+---
+
+## Identity rules
+
+- `agentId` is internal and immutable  
+- `instanceId` is user-facing and unique  
+- `endpointId` is stable  
+- `assignmentId` uniquely identifies monitoring context  
+
+---
+
+## Deletion rules
+
+### Hard delete (discouraged)
+
+Should rarely be used.
+
+### Soft delete (recommended)
+
+Use flags:
+
+- `enabled = false`
+
+### Behaviour
+
+- disabled assignments → state becomes `UNKNOWN`  
+- disabled endpoints → assignments must be disabled  
+- historical data must not be removed automatically  
+
+---
+
+## Data retention (initial guidance)
+
+- CheckResults may grow large → future retention policy required  
+- StateTransitions should be retained longer  
+- AlertEvents should be retained indefinitely (recommended)  
+
+---
+
+## Idempotency
+
+### Result ingestion
+
+- `batchId` must be used to prevent duplicate inserts  
+- duplicate batches must not duplicate CheckResults  
+
+---
+
+## Future extensions
+
+The model must support:
+
+- multiple agents per endpoint  
+- additional check types  
+- degraded state metrics  
+- maintenance mode  
+- alert routing  
+- agent grouping  
+
+---
+
+## Non-goals (v1)
+
+- multi-parent dependencies  
+- cross-agent correlation  
+- distributed consensus  
+- automatic topology discovery  
+
+---
+
+## Summary
+
+This data model enforces:
+
+- clear separation of concerns  
+- deterministic state calculation  
+- per-agent visibility  
+- full auditability  
+
+**Raw data is stored. State is derived. Alerts follow state.**
