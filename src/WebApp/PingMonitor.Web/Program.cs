@@ -21,19 +21,7 @@ builder.Services.Configure<AgentApiOptions>(builder.Configuration.GetSection(Age
 builder.Services.Configure<DevelopmentSeedAgentOptions>(builder.Configuration.GetSection(DevelopmentSeedAgentOptions.SectionName));
 builder.Services.Configure<StartupGateOptions>(builder.Configuration.GetSection(StartupGateOptions.SectionName));
 
-builder.Services.AddDbContextFactory<PingMonitorDbContext>((serviceProvider, options) =>
-{
-    var configurationStore = serviceProvider.GetRequiredService<IStartupDatabaseConfigurationStore>();
-    var startupGateOptions = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<StartupGateOptions>>().Value;
-    var configuration = configurationStore.LoadAsync(CancellationToken.None).GetAwaiter().GetResult();
-    var password = configuration is null ? null : configurationStore.LoadPasswordAsync(CancellationToken.None).GetAwaiter().GetResult();
-    var connectionString = configuration is not null && configuration.IsComplete && !string.IsNullOrWhiteSpace(password)
-        ? configurationStore.BuildConnectionString(configuration, password)
-        : $"Server=localhost;Port={startupGateOptions.DefaultMySqlPort};Database=pingmonitor_placeholder;User ID=placeholder;Password=placeholder;SslMode=Preferred;AllowPublicKeyRetrieval=True";
-
-    options.UseMySQL(connectionString);
-});
-
+builder.Services.AddSingleton<IDbContextFactory<PingMonitorDbContext>, DynamicPingMonitorDbContextFactory>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<PingMonitorDbContext>>().CreateDbContext());
 
 builder.Services
