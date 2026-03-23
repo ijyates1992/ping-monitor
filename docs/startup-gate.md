@@ -2,7 +2,7 @@
 
 ## Overview
 
-The startup gate is a controlled initialization and safety mechanism that prevents the application from running in a partially configured or inconsistent state.
+The startup gate is a controlled initialization and safety mechanism for the .NET 10 web application that prevents the application from running in a partially configured or inconsistent state.
 
 It ensures that all critical prerequisites are satisfied before the main application becomes available.
 
@@ -164,6 +164,7 @@ The application constructs the connection string internally.
 
 ### Storage
 
+- MySQL is the only supported database engine for the startup gate and the wider application  
 - configuration is stored locally in application configuration  
 - credentials must not be exposed after saving  
 - password should be protected using secure storage mechanisms where possible  
