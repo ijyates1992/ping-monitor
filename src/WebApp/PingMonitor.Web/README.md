@@ -56,5 +56,6 @@ In development, inspect current assignment state and transition history at:
 ## Operational status page
 
 In normal startup mode, the first operational status page is available at `GET /status`.
+The default landing page at `GET /` routes to the same `StatusController.Index` page so the control plane has an operational landing route immediately after startup-gate completion.
 
 It shows the current server-derived state for each `MonitorAssignment`, including endpoint, target, agent instance, state, counters, dependency parent, suppression source, check type, and enabled flags. The page is assignment-scoped, so the same endpoint can appear more than once for different agents. `SUPPRESSED` is derived on the server from dependency evaluation and is never agent-supplied.
