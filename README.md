@@ -1,6 +1,6 @@
 # Network Monitoring Web App
 
-A lightweight, agent-based network monitoring platform built with .NET.
+A lightweight, agent-based network monitoring platform with a .NET 10 control plane and Python execution agents.
 
 This system focuses on **reliable uptime monitoring**, **clean alerting**, and **predictable behaviour**, without the complexity of a full NMS.
 
@@ -38,7 +38,7 @@ The design prioritises:
 
 ### Execution Plane (Agents)
 
-- Lightweight .NET worker services
+- Lightweight Python agents
 - Run on remote networks/sites
 - Execute checks locally (ICMP ping in v1)
 - Report raw results to the server
@@ -189,12 +189,12 @@ Each endpoint (per agent) has a state:
 
 ---
 
-## Tech Stack (Planned)
+## Tech Stack
 
-- .NET (ASP.NET Core + Worker Services)
+- .NET 10 (ASP.NET Core web application)
+- Python agents
 - REST API (agent communication)
-- MySQL or PostgreSQL (production)
-- SQLite (optional for development)
+- MySQL (used in all environments)
 - Razor / Blazor (UI)
 
 ---
@@ -208,9 +208,9 @@ Each endpoint (per agent) has a state:
 
 ---
 
-## Getting Started (Planned)
+## Getting Started
 
-> Initial setup instructions will be added as the project structure is created.
+> Initial setup instructions are still being expanded as the platform foundation is completed.
 
 Expected flow:
 
@@ -235,9 +235,9 @@ Expected flow:
 
 ## Status
 
-🚧 Early development / design phase
+🚧 Foundational implementation in progress
 
-Core architecture is being defined before implementation begins.
+Startup gate and agent API endpoints are in place, with MySQL used in all environments. The core control-plane and execution-plane foundation exists, while the server-side state engine and alert lifecycle remain to be completed.
 
 ---
 

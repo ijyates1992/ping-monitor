@@ -31,6 +31,14 @@ This model is **authoritative** and must align with:
 
 ---
 
+## Storage baseline
+
+- MySQL is the only supported database engine in all environments
+- The data model does not define a SQLite or alternate relational database path
+- Startup-gate schema validation must align with this model before the main application becomes available
+
+---
+
 ## Core entities
 
 ### Agent
