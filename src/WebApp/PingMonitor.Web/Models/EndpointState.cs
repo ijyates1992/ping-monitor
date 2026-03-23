@@ -9,4 +9,7 @@ public sealed class EndpointState
     public DateTimeOffset? LastCheckUtc { get; set; }
     public DateTimeOffset? LastStateChangeUtc { get; set; }
     public string? SuppressedByEndpointId { get; set; }
+
+    public string AgentId { get; set; } = string.Empty;
+    public string EndpointId { get; set; } = string.Empty;
 }

@@ -81,7 +81,7 @@ builder.Services.AddScoped<IAgentHelloService, AgentHelloService>();
 builder.Services.AddScoped<IAgentConfigurationService, AgentConfigurationService>();
 builder.Services.AddScoped<IResultIngestionService, ResultIngestionService>();
 builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
-builder.Services.AddScoped<IStateEvaluationService, PlaceholderStateEvaluationService>();
+builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();
 builder.Services.AddScoped<IStartupGateService, StartupGateService>();
 builder.Services.AddSingleton<IStartupDatabaseConfigurationStore, FileStartupDatabaseConfigurationStore>();
 builder.Services.AddSingleton<ILocalRequestEvaluator, LocalRequestEvaluator>();

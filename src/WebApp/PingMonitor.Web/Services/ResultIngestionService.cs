@@ -9,10 +9,14 @@ namespace PingMonitor.Web.Services;
 internal sealed class ResultIngestionService : IResultIngestionService
 {
     private readonly PingMonitorDbContext _dbContext;
+    private readonly IStateEvaluationService _stateEvaluationService;
 
-    public ResultIngestionService(PingMonitorDbContext dbContext)
+    public ResultIngestionService(
+        PingMonitorDbContext dbContext,
+        IStateEvaluationService stateEvaluationService)
     {
         _dbContext = dbContext;
+        _stateEvaluationService = stateEvaluationService;
     }
 
     public async Task<SubmitResultsResponse> IngestAsync(Agent agent, SubmitResultsRequest request, CancellationToken cancellationToken)
@@ -119,9 +123,17 @@ internal sealed class ResultIngestionService : IResultIngestionService
             _dbContext.ResultBatches.Add(batch);
 
             agent.LastSeenUtc = receivedAtUtc;
+            agent.Status = AgentHealthStatus.Online;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            var affectedAssignmentIds = storedResults
+                .Select(x => x.AssignmentId)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            await _stateEvaluationService.EvaluateAssignmentsAsync(affectedAssignmentIds, cancellationToken);
 
             return new SubmitResultsResponse(true, storedResults.Length, false, serverTimeUtc);
         }

@@ -25,6 +25,7 @@ internal sealed class AgentHeartbeatService : IHeartbeatService
         agent.LastHeartbeatUtc = now;
         agent.LastSeenUtc = now;
         agent.AgentVersion = request.AgentVersion.Trim();
+        agent.Status = AgentHealthStatus.Online;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
