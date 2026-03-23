@@ -2,7 +2,7 @@ namespace PingMonitor.Web.Models;
 
 public sealed class CheckResult
 {
-    public string? ResultId { get; set; }
+    public string CheckResultId { get; set; } = string.Empty;
     public string AssignmentId { get; set; } = string.Empty;
     public string AgentId { get; set; } = string.Empty;
     public string EndpointId { get; set; } = string.Empty;
