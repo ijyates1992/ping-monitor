@@ -240,6 +240,8 @@ Supported parameters:
 
 The script restores and builds the main .NET 10 web project, runs .NET tests when test projects exist, and performs a lightweight Python syntax check for the agent. It does **not** publish or deploy the application.
 
+For the supported Windows/IIS deployment flow, including publish output and startup-gate first-run setup, see `docs/iis-build-and-setup.md`.
+
 ## Development Workflow
 
 - All changes must be linked to GitHub issues
