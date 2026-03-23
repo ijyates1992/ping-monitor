@@ -14,6 +14,7 @@ public sealed class StatusController : Controller
     }
 
     [HttpGet("")]
+    [HttpGet("/")]
     public async Task<IActionResult> Index([FromQuery] string? state, [FromQuery] string? agent, [FromQuery] string? search, CancellationToken cancellationToken)
     {
         var viewModel = await _endpointStatusQueryService.GetStatusPageAsync(state, agent, search, cancellationToken);
