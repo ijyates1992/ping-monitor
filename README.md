@@ -224,6 +224,22 @@ Expected flow:
 
 ---
 
+## Build Script
+
+For a repository-root build on Windows, run the PowerShell script from the repo root:
+
+```powershell
+./scripts/build.ps1
+```
+
+Supported parameters:
+
+- `-Configuration Debug|Release`
+- `-SkipTests`
+- `-SkipPythonChecks`
+
+The script restores and builds the main .NET 10 web project, runs .NET tests when test projects exist, and performs a lightweight Python syntax check for the agent. It does **not** publish or deploy the application.
+
 ## Development Workflow
 
 - All changes must be linked to GitHub issues
