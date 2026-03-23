@@ -42,7 +42,8 @@ internal sealed class StartupGateService : IStartupGateService
             ApplicationVersion = applicationVersion,
             DatabaseConfiguration = configuration,
             IsLocalRequest = isLocalRequest,
-            CanPerformWriteActions = isLocalRequest
+            CanPerformWriteActions = isLocalRequest,
+            RequiredSchemaVersion = _requiredSchemaVersion
         };
 
         if (configuration is null || !configuration.IsComplete)
@@ -110,7 +111,6 @@ internal sealed class StartupGateService : IStartupGateService
 
         status.SchemaState = schemaStatus.State;
         status.CurrentSchemaVersion = schemaStatus.CurrentSchemaVersion;
-        status.RequiredSchemaVersion = _requiredSchemaVersion;
         status.Diagnostics.AddRange(schemaStatus.Diagnostics);
         if (schemaStatus.State != StartupGateSchemaState.Compatible)
         {
