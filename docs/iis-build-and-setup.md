@@ -225,6 +225,23 @@ Keep these deployment details in mind:
 - Confirm the **.NET 10 Hosting Bundle** is installed on the server.
 - If IIS was installed after the Hosting Bundle, repair/re-run the Hosting Bundle installer.
 
+### Landing page times out after startup gate is complete
+
+If startup-gate setup succeeds locally but the public landing page at `https://your-hostname/` hangs or times out after that, verify that the deployed application is running a build that processes forwarded proxy headers before HTTPS redirection.
+
+Why this matters:
+
+- the application is expected to run behind IIS with HTTPS exposed to users
+- without forwarded header processing, an app behind a proxy can misread the original request scheme/host
+- that can cause incorrect HTTPS redirect behavior after startup-gate completion, which may appear in browser diagnostics as a timeout or an unsafe attempt to reload the deployed URL from `chrome-error://chromewebdata/`
+
+Practical checks:
+
+- confirm IIS is serving the latest published output, not an older publish folder
+- recycle the IIS application pool after deploying the updated publish output
+- verify the site binding and certificate are correct for the public hostname
+- if another reverse proxy sits in front of IIS, make sure it preserves standard forwarded headers
+
 ### Site keeps landing on `/startup-gate`
 
 That means one or more startup checks still fail. Review the diagnostics shown by the gate and verify:
