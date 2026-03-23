@@ -49,7 +49,7 @@ builder.Services.AddScoped<IAgentAuthenticationService, AgentAuthenticationServi
 builder.Services.AddScoped<IAgentHelloService, AgentHelloService>();
 builder.Services.AddScoped<IAgentConfigurationService, PlaceholderAgentConfigurationService>();
 builder.Services.AddScoped<IResultIngestionService, PlaceholderResultIngestionService>();
-builder.Services.AddScoped<IHeartbeatService, PlaceholderHeartbeatService>();
+builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
 builder.Services.AddScoped<IStateEvaluationService, PlaceholderStateEvaluationService>();
 builder.Services.AddScoped<DevelopmentAgentSeeder>();
 

@@ -1,4 +1,4 @@
-# Local `/api/v1/agent/hello` example
+# Local agent API examples
 
 `docs/agent-api.md` remains the source of truth for the contract. This note shows the minimal local development flow.
 
@@ -17,7 +17,7 @@ dev-agent-01
 
 The plaintext development API key is never stored in configuration. Startup hashes the supplied `DevelopmentSeedAgent__ApiKey` value before saving it.
 
-## Example request
+## Example request: `/hello`
 
 ```bash
 curl -i   -X POST https://localhost:5001/api/v1/agent/hello   -H 'Content-Type: application/json'   -H 'Accept: application/json'   -H 'X-Instance-Id: dev-agent-01'   -H "Authorization: Bearer ${DevelopmentSeedAgent__ApiKey}"   -d '{
@@ -40,5 +40,54 @@ curl -i   -X POST https://localhost:5001/api/v1/agent/hello   -H 'Content-Type: 
   "resultBatchIntervalSeconds": 10,
   "maxResultBatchSize": 500,
   "configVersion": "cfg_dev_v1"
+}
+```
+
+## Example request: `/config`
+
+```bash
+curl -i \
+  https://localhost:5001/api/v1/agent/config \
+  -H 'Accept: application/json' \
+  -H 'X-Instance-Id: dev-agent-01' \
+  -H "Authorization: Bearer ${DevelopmentSeedAgent__ApiKey}"
+```
+
+## Example success response
+
+```json
+{
+  "configVersion": "cfg_dev_v1",
+  "generatedAtUtc": "2026-03-21T21:30:10Z",
+  "assignments": []
+}
+```
+
+## Example request: `/heartbeat`
+
+```bash
+curl -i \
+  -X POST https://localhost:5001/api/v1/agent/heartbeat \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'X-Instance-Id: dev-agent-01' \
+  -H "Authorization: Bearer ${DevelopmentSeedAgent__ApiKey}" \
+  -d '{
+    "agentVersion": "0.1.0",
+    "sentAtUtc": "2026-03-21T21:31:00Z",
+    "configVersion": "cfg_dev_v1",
+    "activeAssignments": 0,
+    "queuedResultCount": 0,
+    "status": "online"
+  }'
+```
+
+## Example success response
+
+```json
+{
+  "ok": true,
+  "serverTimeUtc": "2026-03-21T21:31:00Z",
+  "configChanged": false
 }
 ```
