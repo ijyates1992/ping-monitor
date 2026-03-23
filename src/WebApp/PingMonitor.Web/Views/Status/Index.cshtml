@@ -1,0 +1,181 @@
+@model PingMonitor.Web.ViewModels.Status.EndpointStatusPageViewModel
+@using PingMonitor.Web.Models
+@{
+    static string FormatDate(DateTimeOffset? value) => value.HasValue ? value.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") : "No checks yet";
+    static string FormatDependency(string? endpointId, string? endpointName, string emptyText) => string.IsNullOrWhiteSpace(endpointId)
+        ? emptyText
+        : string.IsNullOrWhiteSpace(endpointName)
+            ? $"{endpointId} (name unavailable)"
+            : endpointName;
+    static string StateClass(EndpointStateKind state) => state switch
+    {
+        EndpointStateKind.Up => "state-up",
+        EndpointStateKind.Down => "state-down",
+        EndpointStateKind.Suppressed => "state-suppressed",
+        EndpointStateKind.Degraded => "state-degraded",
+        _ => "state-unknown"
+    };
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Endpoint status</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6f8;
+            --card: #ffffff;
+            --text: #102a43;
+            --muted: #52606d;
+            --border: #d9e2ec;
+            --up: #137333;
+            --down: #b42318;
+            --suppressed: #7a2e0e;
+            --unknown: #475467;
+            --degraded: #b54708;
+            --accent: #0f62fe;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 1180px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .summary-grid, .filter-grid, .row-meta { display: grid; gap: .75rem; }
+        .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .summary-item { border: 1px solid var(--border); border-radius: 12px; padding: .85rem; }
+        .summary-item strong { display: block; font-size: 1.4rem; margin-top: .25rem; }
+        .filter-grid { grid-template-columns: 1fr; }
+        label { display: block; font-weight: 600; margin-bottom: .35rem; }
+        input, select { width: 100%; padding: .85rem; border: 1px solid var(--border); border-radius: 10px; font-size: 1rem; }
+        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+        .button, .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .8rem 1rem; border-radius: 10px; font-weight: 600; text-decoration: none; }
+        .button { border: 0; background: var(--accent); color: white; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: white; }
+        .badge { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: .3rem .65rem; border-radius: 999px; font-size: .9rem; font-weight: 700; letter-spacing: .02em; }
+        .state-up { color: var(--up); background: #e7f6ec; }
+        .state-down { color: var(--down); background: #fee4e2; }
+        .state-suppressed { color: var(--suppressed); background: #fff1eb; }
+        .state-unknown { color: var(--unknown); background: #eaecf0; }
+        .state-degraded { color: var(--degraded); background: #fff7e6; }
+        .muted { color: var(--muted); }
+        .row-list { display: grid; gap: .9rem; }
+        .status-row { border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+        .status-row h2 { margin: 0; font-size: 1.1rem; }
+        .row-header { display: flex; flex-direction: column; gap: .75rem; margin-bottom: .85rem; }
+        .row-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .meta-item { min-width: 0; }
+        .meta-item span { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .2rem; }
+        .empty { text-align: center; padding: 1rem; border: 1px dashed var(--border); border-radius: 12px; }
+        .nowrap { white-space: nowrap; }
+        @@media (min-width: 720px) {
+            .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+            .filter-grid { grid-template-columns: 1fr 220px 220px; align-items: end; }
+            .row-header { flex-direction: row; justify-content: space-between; align-items: start; }
+            .row-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Operational endpoint status</h1>
+            <p class="muted">Current assignment-scoped status derived by the server state engine. Missing state rows are shown as <strong>UNKNOWN</strong> until trusted server-side state exists.</p>
+        </section>
+
+        <section class="card">
+            <h2>Summary</h2>
+            <div class="summary-grid">
+                <div class="summary-item"><div class="muted">Total assignments</div><strong>@Model.Summary.TotalAssignments</strong></div>
+                <div class="summary-item"><div class="muted">UP</div><strong>@Model.Summary.UpCount</strong></div>
+                <div class="summary-item"><div class="muted">DOWN</div><strong>@Model.Summary.DownCount</strong></div>
+                <div class="summary-item"><div class="muted">SUPPRESSED</div><strong>@Model.Summary.SuppressedCount</strong></div>
+                <div class="summary-item"><div class="muted">UNKNOWN</div><strong>@Model.Summary.UnknownCount</strong></div>
+                <div class="summary-item"><div class="muted">DEGRADED</div><strong>@Model.Summary.DegradedCount</strong></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Filters</h2>
+            <form method="get" action="/status" class="stack">
+                <div class="filter-grid">
+                    <div>
+                        <label for="search">Search endpoint or target</label>
+                        <input id="search" name="search" value="@Model.Filters.Search" placeholder="Endpoint name or IP / hostname" />
+                    </div>
+                    <div>
+                        <label for="state">State</label>
+                        <select id="state" name="state">
+                            <option value="">All states</option>
+                            @foreach (var state in Model.Filters.AvailableStates)
+                            {
+                                <option value="@state" selected="@(string.Equals(Model.Filters.State, state.ToString(), StringComparison.OrdinalIgnoreCase))">@state</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label for="agent">Agent</label>
+                        <select id="agent" name="agent">
+                            <option value="">All agents</option>
+                            @foreach (var availableAgent in Model.Filters.AvailableAgents)
+                            {
+                                <option value="@availableAgent" selected="@(string.Equals(Model.Filters.Agent, availableAgent, StringComparison.Ordinal))">@availableAgent</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="button-row">
+                    <button class="button" type="submit">Apply filters</button>
+                    <a class="button-secondary" href="/status">Clear filters</a>
+                </div>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>Assignments</h2>
+            @if (Model.Rows.Count == 0)
+            {
+                <div class="empty">
+                    <p><strong>No assignments match the current view.</strong></p>
+                    <p class="muted">If assignments have not been created yet, they will appear here once the server has configuration records. Assignments with no current state snapshot are still shown as UNKNOWN when present.</p>
+                </div>
+            }
+            else
+            {
+                <div class="row-list">
+                    @foreach (var row in Model.Rows)
+                    {
+                        <article class="status-row">
+                            <div class="row-header">
+                                <div>
+                                    <h2>@row.EndpointName</h2>
+                                    <div class="muted">@row.Target</div>
+                                </div>
+                                <div class="badge @StateClass(row.CurrentState)">@row.CurrentState</div>
+                            </div>
+
+                            <div class="row-meta">
+                                <div class="meta-item"><span>Agent / instance</span><div>@row.AgentName <span class="muted">(@row.AgentInstanceId)</span></div></div>
+                                <div class="meta-item"><span>Check type</span><div>@row.CheckType</div></div>
+                                <div class="meta-item"><span>Last check</span><div class="nowrap">@FormatDate(row.LastCheckUtc)</div></div>
+                                <div class="meta-item"><span>Last state change</span><div class="nowrap">@FormatDate(row.LastStateChangeUtc)</div></div>
+                                <div class="meta-item"><span>Consecutive failures</span><div>@row.ConsecutiveFailureCount</div></div>
+                                <div class="meta-item"><span>Consecutive successes</span><div>@row.ConsecutiveSuccessCount</div></div>
+                                <div class="meta-item"><span>Dependency parent</span><div>@FormatDependency(row.ParentEndpointId, row.ParentEndpointName, "None")</div></div>
+                                <div class="meta-item"><span>Suppressed by</span><div>@FormatDependency(row.SuppressedByEndpointId, row.SuppressedByEndpointName, "Not suppressed")</div></div>
+                                <div class="meta-item"><span>Assignment enabled</span><div>@(row.AssignmentEnabled ? "Enabled" : "Disabled")</div></div>
+                                <div class="meta-item"><span>Endpoint enabled</span><div>@(row.EndpointEnabled ? "Enabled" : "Disabled")</div></div>
+                                <div class="meta-item"><span>Assignment ID</span><div>@row.AssignmentId</div></div>
+                                <div class="meta-item"><span>Endpoint ID</span><div>@row.EndpointId</div></div>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+</main>
+</body>
+</html>

@@ -7,6 +7,7 @@ using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.StartupGate;
+using PingMonitor.Web.Services.Status;
 using PingMonitor.Web.Support;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -82,6 +83,7 @@ builder.Services.AddScoped<IAgentConfigurationService, AgentConfigurationService
 builder.Services.AddScoped<IResultIngestionService, ResultIngestionService>();
 builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
 builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();
+builder.Services.AddScoped<IEndpointStatusQueryService, EndpointStatusQueryService>();
 builder.Services.AddScoped<IStartupGateService, StartupGateService>();
 builder.Services.AddSingleton<IStartupDatabaseConfigurationStore, FileStartupDatabaseConfigurationStore>();
 builder.Services.AddSingleton<ILocalRequestEvaluator, LocalRequestEvaluator>();
