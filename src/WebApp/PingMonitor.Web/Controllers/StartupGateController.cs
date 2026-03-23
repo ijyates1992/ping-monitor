@@ -41,7 +41,7 @@ public sealed class StartupGateController : Controller
 
     [HttpPost("database")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveDatabaseConfiguration([FromForm] StartupDatabaseConfigurationForm form, CancellationToken cancellationToken)
+    public async Task<IActionResult> SaveDatabaseConfiguration([FromForm(Name = "DatabaseForm")] StartupDatabaseConfigurationForm form, CancellationToken cancellationToken)
     {
         var status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
         if (!status.CanPerformWriteActions)
@@ -105,7 +105,7 @@ public sealed class StartupGateController : Controller
 
     [HttpPost("admin")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CreateInitialAdmin([FromForm] StartupAdminBootstrapForm form, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateInitialAdmin([FromForm(Name = "AdminForm")] StartupAdminBootstrapForm form, CancellationToken cancellationToken)
     {
         var status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
         if (!status.CanPerformWriteActions)
