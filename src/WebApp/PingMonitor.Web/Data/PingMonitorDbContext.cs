@@ -1,13 +1,15 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Models.Identity;
 using EndpointModel = PingMonitor.Web.Models.Endpoint;
-using System.Text.Json;
 
 namespace PingMonitor.Web.Data;
 
-public sealed class PingMonitorDbContext : DbContext
+public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, string>
 {
     public PingMonitorDbContext(DbContextOptions<PingMonitorDbContext> options)
         : base(options)
@@ -19,9 +21,12 @@ public sealed class PingMonitorDbContext : DbContext
     public DbSet<MonitorAssignment> MonitorAssignments => Set<MonitorAssignment>();
     public DbSet<CheckResult> CheckResults => Set<CheckResult>();
     public DbSet<ResultBatch> ResultBatches => Set<ResultBatch>();
+    public DbSet<AppSchemaInfo> AppSchemaInfos => Set<AppSchemaInfo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
+
         var stringListConverter = new ValueConverter<List<string>, string>(
             tags => JsonSerializer.Serialize(tags, (JsonSerializerOptions?)null),
             value => string.IsNullOrWhiteSpace(value)
@@ -31,6 +36,12 @@ public sealed class PingMonitorDbContext : DbContext
             (left, right) => left!.SequenceEqual(right!),
             value => value.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode(StringComparison.Ordinal))),
             value => value.ToList());
+
+        var schemaInfo = modelBuilder.Entity<AppSchemaInfo>();
+        schemaInfo.ToTable("AppSchemaInfo");
+        schemaInfo.HasKey(x => x.AppSchemaInfoId);
+        schemaInfo.Property(x => x.CurrentSchemaVersion).IsRequired();
+        schemaInfo.Property(x => x.UpdatedAtUtc).IsRequired();
 
         var agent = modelBuilder.Entity<Agent>();
         agent.ToTable("Agents");

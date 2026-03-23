@@ -183,6 +183,8 @@ The implementation must follow it exactly.
 
 ### Storage
 
+- MySQL is the only supported database engine in all environments
+- The web application must not introduce SQLite, in-memory, or alternate relational database paths without an explicit issue and a matching update to this document
 - Raw monitoring results must be stored
 - State transitions must be auditable
 

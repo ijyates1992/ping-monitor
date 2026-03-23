@@ -1,0 +1,150 @@
+@model PingMonitor.Web.ViewModels.StartupGate.StartupGatePageViewModel
+@using PingMonitor.Web.Services.StartupGate
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ping Monitor startup gate</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f4f6f8; color: #1f2933; }
+        main { max-width: 980px; margin: 0 auto; padding: 1rem; }
+        .card { background: #fff; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+        h1, h2 { margin-top: 0; }
+        .grid { display: grid; gap: .75rem; }
+        @@media (min-width: 700px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+        label { display: block; font-weight: 600; margin-bottom: .25rem; }
+        input { width: 100%; box-sizing: border-box; padding: .85rem; border: 1px solid #cbd2d9; border-radius: 10px; font-size: 1rem; }
+        button { border: 0; background: #0f62fe; color: white; padding: .9rem 1rem; border-radius: 10px; font-size: 1rem; font-weight: 600; }
+        button[disabled] { background: #9aa5b1; }
+        .muted { color: #52606d; }
+        .ok { color: #137333; font-weight: 600; }
+        .bad { color: #b42318; font-weight: 600; }
+        .warn { color: #b54708; font-weight: 600; }
+        .banner { border-radius: 10px; padding: .8rem 1rem; margin-bottom: 1rem; }
+        .banner.ok { background: #e7f6ec; }
+        .banner.bad { background: #fee4e2; }
+        ul { padding-left: 1.25rem; }
+        .inline-list { display: grid; grid-template-columns: minmax(180px, 220px) 1fr; gap: .5rem .75rem; }
+        .inline-list dt { font-weight: 600; }
+        .hint { font-size: .95rem; }
+        .validation-summary-errors { color: #b42318; }
+    </style>
+</head>
+<body>
+<main>
+    <section class="card">
+        <h1>Startup gate</h1>
+        <p class="muted">The web application remains blocked until database configuration, MySQL connectivity, schema compatibility, and the first admin user are all confirmed.</p>
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <div class="banner ok">@Model.StatusMessage</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="banner bad">@Model.ErrorMessage</div>
+        }
+        @Html.ValidationSummary(excludePropertyErrors: false)
+    </section>
+
+    <section class="card">
+        <h2>Diagnostics</h2>
+        <dl class="inline-list">
+            <dt>Application version</dt><dd>@Model.Status.ApplicationVersion</dd>
+            <dt>Environment</dt><dd>@Model.Status.EnvironmentName</dd>
+            <dt>Startup mode</dt><dd>@Model.Status.Mode</dd>
+            <dt>Failing stage</dt><dd>@Model.Status.FailingStage</dd>
+            <dt>Access mode</dt><dd>@(Model.Status.IsLocalRequest ? "Local" : "Remote")</dd>
+            <dt>Write actions enabled</dt><dd>@(Model.Status.CanPerformWriteActions ? "Yes" : "No")</dd>
+            <dt>DB config</dt><dd class="@(Model.Status.IsDatabaseConfigurationPresent ? "ok" : "bad")">@(Model.Status.IsDatabaseConfigurationPresent ? "Present" : "Missing")</dd>
+            <dt>DB connection</dt><dd class="@(Model.Status.IsDatabaseConnectionSuccessful ? "ok" : "bad")">@(Model.Status.IsDatabaseConnectionSuccessful ? "Success" : "Not ready")</dd>
+            <dt>Schema status</dt><dd class="@((Model.Status.SchemaState == StartupGateSchemaState.Compatible) ? "ok" : "warn")">@Model.Status.SchemaState</dd>
+            <dt>Current schema version</dt><dd>@(Model.Status.CurrentSchemaVersion?.ToString() ?? "n/a")</dd>
+            <dt>Required schema version</dt><dd>@Model.Status.RequiredSchemaVersion</dd>
+            <dt>Admin status</dt><dd class="@(Model.Status.AdminUserExists ? "ok" : "bad")">@(Model.Status.AdminUserExists ? "Present" : "Missing")</dd>
+        </dl>
+
+        <h3>Diagnostic messages</h3>
+        <ul>
+            @foreach (var message in Model.Status.Diagnostics)
+            {
+                <li>@message</li>
+            }
+        </ul>
+
+        @if (!Model.Status.CanPerformWriteActions)
+        {
+            <p class="warn hint">Writable startup-gate actions are disabled for remote requests. Use loopback access on the server (localhost, 127.0.0.1, or ::1) to perform setup.</p>
+        }
+    </section>
+
+    <section class="card">
+        <h2>MySQL configuration</h2>
+        <p class="muted">The application builds the MySQL connection string internally from these values. The saved password is never shown back in this UI.</p>
+        <form method="post" action="/startup-gate/database" class="grid two">
+            @Html.AntiForgeryToken()
+            <div>
+                <label asp-for="DatabaseForm.Host"></label>
+                <input asp-for="DatabaseForm.Host" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div>
+                <label asp-for="DatabaseForm.Port"></label>
+                <input asp-for="DatabaseForm.Port" type="number" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div>
+                <label asp-for="DatabaseForm.DatabaseName"></label>
+                <input asp-for="DatabaseForm.DatabaseName" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div>
+                <label asp-for="DatabaseForm.Username"></label>
+                <input asp-for="DatabaseForm.Username" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <label asp-for="DatabaseForm.Password"></label>
+                <input asp-for="DatabaseForm.Password" type="password" placeholder="@(Model.Status.DatabaseConfiguration?.HasPassword == true ? "Saved password is not displayed" : "Enter database password")" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <button type="submit" disabled="@(!Model.Status.CanPerformWriteActions)">Save MySQL configuration</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>Schema apply</h2>
+        <p class="muted">Schema creation and upgrades are explicit. They are never applied automatically during normal startup.</p>
+        <p>Schema state: <strong>@Model.Status.SchemaState</strong></p>
+        <form method="post" action="/startup-gate/schema/apply">
+            @Html.AntiForgeryToken()
+            <button type="submit" disabled="@(!Model.Status.CanPerformWriteActions)">Create / apply required schema</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>Initial admin bootstrap</h2>
+        <p class="muted">The first admin user must be created explicitly and only once.</p>
+        <form method="post" action="/startup-gate/admin" class="grid two">
+            @Html.AntiForgeryToken()
+            <div>
+                <label asp-for="AdminForm.Username"></label>
+                <input asp-for="AdminForm.Username" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div>
+                <label asp-for="AdminForm.Email"></label>
+                <input asp-for="AdminForm.Email" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div>
+                <label asp-for="AdminForm.Password"></label>
+                <input asp-for="AdminForm.Password" type="password" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div>
+                <label asp-for="AdminForm.ConfirmPassword"></label>
+                <input asp-for="AdminForm.ConfirmPassword" type="password" readonly="@(!Model.Status.CanPerformWriteActions)" />
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <button type="submit" disabled="@(!Model.Status.CanPerformWriteActions || Model.Status.AdminUserExists)">Create initial admin</button>
+            </div>
+        </form>
+    </section>
+</main>
+</body>
+</html>
