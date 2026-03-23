@@ -114,6 +114,8 @@ app.Use(async (context, next) =>
 });
 
 app.MapControllers();
-app.MapDefaultControllerRoute();
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Status}/{action=Index}/{id?}");
 
 app.Run();
