@@ -26,6 +26,7 @@ internal sealed class AgentHelloService : IAgentHelloService
         agent.AgentVersion = request.AgentVersion.Trim();
         agent.MachineName = request.MachineName.Trim();
         agent.Platform = request.Platform.Trim();
+        agent.Status = AgentHealthStatus.Online;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 

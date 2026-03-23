@@ -19,7 +19,9 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "Endpoints",
         "MonitorAssignments",
         "CheckResults",
-        "ResultBatches"
+        "ResultBatches",
+        "EndpointStates",
+        "StateTransitions"
     ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
@@ -112,6 +114,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        await EnsureStateEngineTablesAsync(dbContext, cancellationToken);
 
         var schemaInfo = await dbContext.AppSchemaInfos.OrderByDescending(x => x.AppSchemaInfoId).FirstOrDefaultAsync(cancellationToken);
         if (schemaInfo is null)
@@ -133,5 +136,41 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         _logger.LogInformation("Startup gate schema apply completed successfully.");
 
         return await GetStatusAsync(cancellationToken);
+    }
+
+    private static async Task EnsureStateEngineTablesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        const string createEndpointStatesSql = """
+            CREATE TABLE IF NOT EXISTS `EndpointStates` (
+                `AssignmentId` varchar(64) NOT NULL,
+                `CurrentState` varchar(16) NOT NULL,
+                `ConsecutiveFailureCount` int NOT NULL,
+                `ConsecutiveSuccessCount` int NOT NULL,
+                `LastCheckUtc` datetime(6) NULL,
+                `LastStateChangeUtc` datetime(6) NULL,
+                `SuppressedByEndpointId` varchar(64) NULL,
+                `AgentId` varchar(64) NOT NULL,
+                `EndpointId` varchar(64) NOT NULL,
+                PRIMARY KEY (`AssignmentId`)
+            );
+            """;
+
+        const string createStateTransitionsSql = """
+            CREATE TABLE IF NOT EXISTS `StateTransitions` (
+                `TransitionId` varchar(64) NOT NULL,
+                `AssignmentId` varchar(64) NOT NULL,
+                `AgentId` varchar(64) NOT NULL,
+                `EndpointId` varchar(64) NOT NULL,
+                `PreviousState` varchar(16) NOT NULL,
+                `NewState` varchar(16) NOT NULL,
+                `TransitionAtUtc` datetime(6) NOT NULL,
+                `ReasonCode` varchar(64) NULL,
+                `DependencyEndpointId` varchar(64) NULL,
+                PRIMARY KEY (`TransitionId`)
+            );
+            """;
+
+        await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
     }
 }

@@ -93,6 +93,8 @@ internal sealed class DevelopmentAgentSeeder
 
         await EnsureAssignmentAsync(agent.AgentId, gatewayEndpoint.EndpointId, "assignment-dev-gateway", now, cancellationToken);
         await EnsureAssignmentAsync(agent.AgentId, printerEndpoint.EndpointId, "assignment-dev-printer", now, cancellationToken);
+        await EnsureStateAsync(agent.AgentId, gatewayEndpoint.EndpointId, "assignment-dev-gateway", cancellationToken);
+        await EnsureStateAsync(agent.AgentId, printerEndpoint.EndpointId, "assignment-dev-printer", cancellationToken);
     }
 
     private async Task<EndpointModel> EnsureEndpointAsync(
@@ -153,5 +155,24 @@ internal sealed class DevelopmentAgentSeeder
         assignment.FailureThreshold = endpointId == "endpoint-dev-gateway" ? 3 : 2;
         assignment.RecoveryThreshold = 2;
         assignment.UpdatedAtUtc = now;
+    }
+
+    private async Task EnsureStateAsync(string agentId, string endpointId, string assignmentId, CancellationToken cancellationToken)
+    {
+        var state = await _dbContext.EndpointStates.SingleOrDefaultAsync(x => x.AssignmentId == assignmentId, cancellationToken);
+        if (state is not null)
+        {
+            state.AgentId = agentId;
+            state.EndpointId = endpointId;
+            return;
+        }
+
+        _dbContext.EndpointStates.Add(new EndpointState
+        {
+            AssignmentId = assignmentId,
+            AgentId = agentId,
+            EndpointId = endpointId,
+            CurrentState = EndpointStateKind.Unknown
+        });
     }
 }

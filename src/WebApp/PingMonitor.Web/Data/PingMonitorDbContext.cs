@@ -21,6 +21,8 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<MonitorAssignment> MonitorAssignments => Set<MonitorAssignment>();
     public DbSet<CheckResult> CheckResults => Set<CheckResult>();
     public DbSet<ResultBatch> ResultBatches => Set<ResultBatch>();
+    public DbSet<EndpointState> EndpointStates => Set<EndpointState>();
+    public DbSet<StateTransition> StateTransitions => Set<StateTransition>();
     public DbSet<AppSchemaInfo> AppSchemaInfos => Set<AppSchemaInfo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -107,5 +109,30 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         resultBatch.Property(x => x.ReceivedAtUtc).IsRequired();
         resultBatch.Property(x => x.AcceptedCount).IsRequired();
         resultBatch.HasIndex(x => new { x.AgentId, x.BatchId }).IsUnique();
+
+        var endpointState = modelBuilder.Entity<EndpointState>();
+        endpointState.ToTable("EndpointStates");
+        endpointState.HasKey(x => x.AssignmentId);
+        endpointState.Property(x => x.AssignmentId).HasMaxLength(64);
+        endpointState.Property(x => x.AgentId).HasMaxLength(64).IsRequired();
+        endpointState.Property(x => x.EndpointId).HasMaxLength(64).IsRequired();
+        endpointState.Property(x => x.CurrentState).HasConversion<string>().HasMaxLength(16).IsRequired();
+        endpointState.Property(x => x.LastStateChangeUtc);
+        endpointState.Property(x => x.LastCheckUtc);
+        endpointState.Property(x => x.SuppressedByEndpointId).HasMaxLength(64);
+
+        var stateTransition = modelBuilder.Entity<StateTransition>();
+        stateTransition.ToTable("StateTransitions");
+        stateTransition.HasKey(x => x.TransitionId);
+        stateTransition.Property(x => x.TransitionId).HasMaxLength(64);
+        stateTransition.Property(x => x.AssignmentId).HasMaxLength(64).IsRequired();
+        stateTransition.Property(x => x.AgentId).HasMaxLength(64).IsRequired();
+        stateTransition.Property(x => x.EndpointId).HasMaxLength(64).IsRequired();
+        stateTransition.Property(x => x.PreviousState).HasConversion<string>().HasMaxLength(16).IsRequired();
+        stateTransition.Property(x => x.NewState).HasConversion<string>().HasMaxLength(16).IsRequired();
+        stateTransition.Property(x => x.TransitionAtUtc).IsRequired();
+        stateTransition.Property(x => x.ReasonCode).HasMaxLength(64);
+        stateTransition.Property(x => x.DependencyEndpointId).HasMaxLength(64);
+        stateTransition.HasIndex(x => new { x.AssignmentId, x.TransitionAtUtc });
     }
 }

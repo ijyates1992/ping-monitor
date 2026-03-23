@@ -34,3 +34,21 @@ If no admin exists, the gate remains active. A local request can create the firs
 ## Remote diagnostics
 
 While the gate is active, remote requests can only view diagnostics. They cannot save database settings, apply schema changes, or create the initial admin.
+
+## Development state-engine test notes
+
+With the development seed enabled, the app creates one agent plus two ICMP assignments:
+
+- `assignment-dev-gateway` for the parent endpoint `endpoint-dev-gateway`
+- `assignment-dev-printer` for the child endpoint `endpoint-dev-printer`, which depends on the gateway
+
+Use `POST /api/v1/agent/results` with the seeded agent credentials to post raw results only.
+
+- To drive `UNKNOWN -> UP`, submit consecutive successful results until the assignment reaches its `recoveryThreshold`.
+- To drive `UP -> DOWN`, submit consecutive failed results until the assignment reaches its `failureThreshold`.
+- To drive child suppression, first drive `assignment-dev-gateway` to `DOWN`, then submit enough failed results for `assignment-dev-printer` to reach its failure threshold; the child should transition to `SUPPRESSED` while the parent remains `DOWN`.
+
+In development, inspect current assignment state and transition history at:
+
+- `GET /internal/dev/state/assignments/assignment-dev-gateway`
+- `GET /internal/dev/state/assignments/assignment-dev-printer`
