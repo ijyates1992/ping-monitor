@@ -29,6 +29,6 @@ The script will:
 - detect `py` first, then fall back to `python`
 - create `src/Agent/.venv` if needed and reuse it on later runs
 - upgrade `pip` and install `requirements.txt`
-- start the agent in the foreground via `python app/main.py`
+- start the agent in the foreground via `python -m app.main`
 
 `SERVER_URL`, `INSTANCE_ID`, and `API_KEY` still need to be configured (for example via `.env`) before startup.
