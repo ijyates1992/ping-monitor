@@ -63,7 +63,6 @@ internal sealed class AgentPackageBuilder : IAgentPackageBuilder
         await writer.WriteAsync(envContents.AsMemory(), cancellationToken);
         await writer.FlushAsync(cancellationToken);
 
-        archive.Dispose();
         _logger.LogInformation("Built agent package for instance {InstanceId} from template {TemplatePath}", instanceId, agentRoot);
         return output.ToArray();
     }
