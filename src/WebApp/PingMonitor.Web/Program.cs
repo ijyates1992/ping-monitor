@@ -21,6 +21,7 @@ builder.Configuration
 builder.Services.Configure<AgentApiOptions>(builder.Configuration.GetSection(AgentApiOptions.SectionName));
 builder.Services.Configure<DevelopmentSeedAgentOptions>(builder.Configuration.GetSection(DevelopmentSeedAgentOptions.SectionName));
 builder.Services.Configure<StartupGateOptions>(builder.Configuration.GetSection(StartupGateOptions.SectionName));
+builder.Services.Configure<AgentProvisioningOptions>(builder.Configuration.GetSection(AgentProvisioningOptions.SectionName));
 
 builder.Services.AddSingleton<IDbContextFactory<PingMonitorDbContext>, DynamicPingMonitorDbContextFactory>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<PingMonitorDbContext>>().CreateDbContext());
@@ -88,6 +89,8 @@ builder.Services.AddSingleton<ILocalRequestEvaluator, LocalRequestEvaluator>();
 builder.Services.AddScoped<IStartupSchemaService, StartupSchemaService>();
 builder.Services.AddScoped<IStartupAdminBootstrapService, StartupAdminBootstrapService>();
 builder.Services.AddScoped<DevelopmentAgentSeeder>();
+builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
+builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 
 var app = builder.Build();
 
