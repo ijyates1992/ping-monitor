@@ -31,37 +31,38 @@ internal sealed class AgentPackageBuilder : IAgentPackageBuilder
         }
 
         await using var output = new MemoryStream();
-        using var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true);
-
-        foreach (var fileName in RootFiles)
+        using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
         {
-            var fullPath = Path.Combine(agentRoot, fileName);
-            if (!File.Exists(fullPath))
+            foreach (var fileName in RootFiles)
             {
-                throw new InvalidOperationException($"Required agent template file '{fileName}' was not found.");
+                var fullPath = Path.Combine(agentRoot, fileName);
+                if (!File.Exists(fullPath))
+                {
+                    throw new InvalidOperationException($"Required agent template file '{fileName}' was not found.");
+                }
+
+                await AddFileAsync(archive, fullPath, fileName, cancellationToken);
             }
 
-            await AddFileAsync(archive, fullPath, fileName, cancellationToken);
-        }
+            var appDirectory = Path.Combine(agentRoot, "app");
+            if (!Directory.Exists(appDirectory))
+            {
+                throw new InvalidOperationException("Required agent app directory was not found.");
+            }
 
-        var appDirectory = Path.Combine(agentRoot, "app");
-        if (!Directory.Exists(appDirectory))
-        {
-            throw new InvalidOperationException("Required agent app directory was not found.");
-        }
+            foreach (var filePath in Directory.EnumerateFiles(appDirectory, "*.py", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal))
+            {
+                var relativePath = Path.GetRelativePath(agentRoot, filePath).Replace('\\', '/');
+                await AddFileAsync(archive, filePath, relativePath, cancellationToken);
+            }
 
-        foreach (var filePath in Directory.EnumerateFiles(appDirectory, "*.py", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal))
-        {
-            var relativePath = Path.GetRelativePath(agentRoot, filePath).Replace('\\', '/');
-            await AddFileAsync(archive, filePath, relativePath, cancellationToken);
+            var envContents = BuildEnvContents(serverUrl, instanceId, apiKey);
+            var envEntry = archive.CreateEntry(".env");
+            await using var envStream = envEntry.Open();
+            await using var writer = new StreamWriter(envStream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            await writer.WriteAsync(envContents.AsMemory(), cancellationToken);
+            await writer.FlushAsync(cancellationToken);
         }
-
-        var envContents = BuildEnvContents(serverUrl, instanceId, apiKey);
-        var envEntry = archive.CreateEntry(".env");
-        await using var envStream = envEntry.Open();
-        await using var writer = new StreamWriter(envStream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        await writer.WriteAsync(envContents.AsMemory(), cancellationToken);
-        await writer.FlushAsync(cancellationToken);
 
         _logger.LogInformation("Built agent package for instance {InstanceId} from template {TemplatePath}", instanceId, agentRoot);
         return output.ToArray();
