@@ -32,3 +32,12 @@ The script will:
 - start the agent in the foreground via `python -m app.main`
 
 `SERVER_URL`, `INSTANCE_ID`, and `API_KEY` still need to be configured (for example via `.env`) before startup.
+
+## Provisioning package download
+
+The web control plane exposes `GET/POST /agents/deploy` to provision a new agent package.
+
+- Enter an agent name and submit the form to download a ZIP package.
+- The downloaded ZIP includes a generated `.env` with `SERVER_URL`, `INSTANCE_ID`, and a newly generated `API_KEY`.
+- The API key is generated server-side and only delivered at package creation time; only the hash is stored by the server.
+- Rotating credentials later requires a dedicated reprovisioning/rotation flow (not included in this phase).
