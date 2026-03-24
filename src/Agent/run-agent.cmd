@@ -66,8 +66,8 @@ if errorlevel 1 (
   goto :fail
 )
 
-echo [INFO] Starting agent (app/main.py)
-python app/main.py
+echo [INFO] Starting agent module (python -m app.main)
+python -m app.main
 if errorlevel 1 (
   echo [ERROR] Agent exited with an error.
   goto :fail
