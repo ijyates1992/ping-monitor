@@ -70,6 +70,12 @@ internal sealed class AgentPackageBuilder : IAgentPackageBuilder
 
     private string ResolveAgentRootPath()
     {
+        var bundledTemplatePath = Path.Combine(_environment.ContentRootPath, "Agent");
+        if (Directory.Exists(bundledTemplatePath))
+        {
+            return bundledTemplatePath;
+        }
+
         return Path.GetFullPath(Path.Combine(_environment.ContentRootPath, "..", "..", "Agent"));
     }
 
