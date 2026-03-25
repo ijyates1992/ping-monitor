@@ -23,5 +23,10 @@ class ResultQueue:
         for item in items:
             self.enqueue(item)
 
+    def requeue_front(self, items: Iterable[ResultItem]) -> None:
+        buffered = list(items)
+        for item in reversed(buffered):
+            self._items.appendleft(item)
+
     def __len__(self) -> int:
         return len(self._items)
