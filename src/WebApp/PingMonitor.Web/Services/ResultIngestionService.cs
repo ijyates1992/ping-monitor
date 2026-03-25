@@ -46,9 +46,13 @@ internal sealed class ResultIngestionService : IResultIngestionService
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        var assignments = await _dbContext.MonitorAssignments
-            .Where(x => x.AgentId == agent.AgentId && normalizedAssignmentIds.Contains(x.AssignmentId))
-            .ToDictionaryAsync(x => x.AssignmentId, StringComparer.Ordinal, cancellationToken);
+        var assignmentsForAgent = await _dbContext.MonitorAssignments
+            .Where(x => x.AgentId == agent.AgentId)
+            .ToListAsync(cancellationToken);
+
+        var assignments = assignmentsForAgent
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId, StringComparer.Ordinal))
+            .ToDictionary(x => x.AssignmentId, StringComparer.Ordinal);
 
         for (var index = 0; index < request.Results.Count; index++)
         {
