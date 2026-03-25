@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.ViewModels.Endpoints;
 
@@ -9,19 +10,30 @@ public sealed class EndpointsController : Controller
 {
     private readonly IEndpointCreationQueryService _endpointCreationQueryService;
     private readonly IEndpointManagementService _endpointManagementService;
+    private readonly IApplicationSettingsService _applicationSettingsService;
 
     public EndpointsController(
         IEndpointCreationQueryService endpointCreationQueryService,
-        IEndpointManagementService endpointManagementService)
+        IEndpointManagementService endpointManagementService,
+        IApplicationSettingsService applicationSettingsService)
     {
         _endpointCreationQueryService = endpointCreationQueryService;
         _endpointManagementService = endpointManagementService;
+        _applicationSettingsService = applicationSettingsService;
     }
 
     [HttpGet("new")]
     public async Task<IActionResult> New(CancellationToken cancellationToken)
     {
-        var model = new CreateEndpointPageViewModel();
+        var defaults = await _applicationSettingsService.GetCurrentAsync(cancellationToken);
+        var model = new CreateEndpointPageViewModel
+        {
+            PingIntervalSeconds = defaults.DefaultPingIntervalSeconds,
+            RetryIntervalSeconds = defaults.DefaultRetryIntervalSeconds,
+            TimeoutMs = defaults.DefaultTimeoutMs,
+            FailureThreshold = defaults.DefaultFailureThreshold,
+            RecoveryThreshold = defaults.DefaultRecoveryThreshold
+        };
         await PopulateOptionsAsync(model, cancellationToken);
         return View("New", model);
     }

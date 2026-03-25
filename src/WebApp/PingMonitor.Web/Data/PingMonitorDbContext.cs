@@ -24,6 +24,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<EndpointState> EndpointStates => Set<EndpointState>();
     public DbSet<StateTransition> StateTransitions => Set<StateTransition>();
     public DbSet<AppSchemaInfo> AppSchemaInfos => Set<AppSchemaInfo>();
+    public DbSet<ApplicationSettings> ApplicationSettings => Set<ApplicationSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -134,5 +135,17 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         stateTransition.Property(x => x.ReasonCode).HasMaxLength(64);
         stateTransition.Property(x => x.DependencyEndpointId).HasMaxLength(64);
         stateTransition.HasIndex(x => new { x.AssignmentId, x.TransitionAtUtc });
+
+        var appSettings = modelBuilder.Entity<ApplicationSettings>();
+        appSettings.ToTable("ApplicationSettings");
+        appSettings.HasKey(x => x.ApplicationSettingsId);
+        appSettings.Property(x => x.ApplicationSettingsId).ValueGeneratedNever();
+        appSettings.Property(x => x.SiteUrl).HasMaxLength(2048).IsRequired();
+        appSettings.Property(x => x.DefaultPingIntervalSeconds).IsRequired();
+        appSettings.Property(x => x.DefaultRetryIntervalSeconds).IsRequired();
+        appSettings.Property(x => x.DefaultTimeoutMs).IsRequired();
+        appSettings.Property(x => x.DefaultFailureThreshold).IsRequired();
+        appSettings.Property(x => x.DefaultRecoveryThreshold).IsRequired();
+        appSettings.Property(x => x.UpdatedAtUtc).IsRequired();
     }
 }

@@ -92,6 +92,7 @@ builder.Services.AddScoped<IStartupAdminBootstrapService, StartupAdminBootstrapS
 builder.Services.AddScoped<DevelopmentAgentSeeder>();
 builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
+builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();
 
