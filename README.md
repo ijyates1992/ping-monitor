@@ -126,7 +126,7 @@ Defines:
 
 ### Dependency
 
-Defines parent/child relationships between endpoints.
+Defines direct parent/child relationships between endpoints (an endpoint may have multiple direct parents).
 
 Used to suppress alerts when a root device fails.
 
@@ -145,7 +145,8 @@ Each endpoint (per agent) has a state:
 
 - Dependencies form a **directed graph (no cycles)**
 - Suppression is evaluated per-agent
-- Child endpoints never alert if a parent is down
+- Child endpoints are eligible for suppression when at least one direct parent is `DOWN` in the same agent scope
+- Only direct parents in `DOWN` suppress; `SUPPRESSED` does not cascade
 - Suppression is a **real state**, not just UI logic
 
 ---

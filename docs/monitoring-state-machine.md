@@ -240,12 +240,12 @@ else if agent not trustworthy:
 else:
     failureReached = consecutiveFailure >= failureThreshold
     recoveryReached = consecutiveSuccess >= recoveryThreshold
-    dependencyDown = parent exists and parent state == DOWN
+    directParentDown = any(direct parent state == DOWN in same agent scope)
 
     if recoveryReached:
         state = UP
 
-    else if failureReached and dependencyDown:
+    else if failureReached and directParentDown:
         state = SUPPRESSED
 
     else if failureReached:
@@ -261,8 +261,13 @@ else:
 
 ### Rule (v1)
 
-- only **direct parent in DOWN** causes suppression  
-- suppressed parents do NOT cascade suppression  
+- an endpoint may have zero, one, or many direct parent dependencies
+- endpoint is eligible for `SUPPRESSED` only when:
+  - failure threshold is reached, and
+  - at least one direct parent is currently `DOWN` in the same agent scope
+- only direct parents in `DOWN` cause suppression
+- direct parents in `SUPPRESSED` do **not** cascade suppression
+- suppression is derived by the server only (never by the agent)
 
 ---
 

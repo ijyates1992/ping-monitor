@@ -70,7 +70,7 @@ curl -i \
       "timeoutMs": 1000,
       "failureThreshold": 3,
       "recoveryThreshold": 2,
-      "dependsOnEndpointId": null,
+      "dependsOnEndpointIds": [],
       "tags": ["dev", "gateway"]
     },
     {
@@ -85,7 +85,7 @@ curl -i \
       "timeoutMs": 1000,
       "failureThreshold": 2,
       "recoveryThreshold": 2,
-      "dependsOnEndpointId": "endpoint-dev-gateway",
+      "dependsOnEndpointIds": ["endpoint-dev-gateway"],
       "tags": ["dev", "printer"]
     }
   ]
