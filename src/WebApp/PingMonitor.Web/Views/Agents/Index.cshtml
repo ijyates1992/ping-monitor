@@ -1,0 +1,145 @@
+@model PingMonitor.Web.ViewModels.Agents.ManageAgentsPageViewModel
+@{
+    static string FormatDate(DateTimeOffset? value) => value.HasValue ? value.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") : "Never";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manage agents</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6f8;
+            --card: #ffffff;
+            --text: #102a43;
+            --muted: #52606d;
+            --border: #d9e2ec;
+            --accent: #0f62fe;
+            --warn: #b54708;
+            --success: #137333;
+            --error-bg: #fee4e2;
+            --error-text: #b42318;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 1120px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .muted { color: var(--muted); }
+        .button-row, .action-row { display: flex; flex-wrap: wrap; gap: .65rem; }
+        .button, .button-secondary, .button-warning { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: .72rem .95rem; border-radius: 10px; font-weight: 600; text-decoration: none; border: 0; font-size: .95rem; }
+        .button { background: var(--accent); color: #fff; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: #fff; }
+        .button-warning { background: var(--warn); color: #fff; }
+        .row-list { display: grid; gap: .85rem; }
+        .agent-row { border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+        .row-header { display: flex; flex-direction: column; gap: .6rem; margin-bottom: .85rem; }
+        .row-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
+        .meta-item span { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .15rem; }
+        .badge { display: inline-flex; min-height: 28px; padding: .25rem .55rem; border-radius: 999px; font-weight: 700; font-size: .83rem; }
+        .enabled { background: #e7f6ec; color: var(--success); }
+        .disabled { background: #fee4e2; color: var(--error-text); }
+        .revoked { background: #fff1eb; color: var(--warn); }
+        .ok { background: #e7f6ec; color: var(--success); }
+        .notice, .error { border-radius: 10px; padding: .75rem; }
+        .notice { border: 1px solid #b7e4c7; background: #ebffee; color: var(--success); }
+        .error { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); }
+        .empty { text-align: center; padding: 1rem; border: 1px dashed var(--border); border-radius: 12px; }
+        form { margin: 0; }
+        @@media (min-width: 760px) {
+            .row-header { flex-direction: row; justify-content: space-between; align-items: start; }
+            .row-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Manage agents</h1>
+            <p class="muted">Operational control for registered agents. Actions here do not delete history or assignments.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/status">Back to status</a>
+                <a class="button" href="/agents/deploy">Deploy new agent</a>
+            </div>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <div class="notice" role="status">@Model.StatusMessage</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="error" role="alert">@Model.ErrorMessage</div>
+        }
+
+        <section class="card">
+            <h2>Registered agents</h2>
+            @if (Model.Agents.Count == 0)
+            {
+                <div class="empty">
+                    <p><strong>No agents are registered yet.</strong></p>
+                    <p class="muted">Use Deploy new agent to create an agent identity and package.</p>
+                </div>
+            }
+            else
+            {
+                <div class="row-list">
+                    @foreach (var agent in Model.Agents)
+                    {
+                        <article class="agent-row">
+                            <div class="row-header">
+                                <div>
+                                    <strong>@agent.Name</strong>
+                                    <div class="muted">Instance: @agent.InstanceId</div>
+                                    <div class="muted">Agent ID: @agent.AgentId</div>
+                                </div>
+                                <div class="action-row">
+                                    <span class="badge @(agent.Enabled ? "enabled" : "disabled")">@(agent.Enabled ? "Enabled" : "Disabled")</span>
+                                    <span class="badge @(agent.ApiKeyRevoked ? "revoked" : "ok")">@(agent.ApiKeyRevoked ? "API key revoked" : "API key active")</span>
+                                </div>
+                            </div>
+
+                            <div class="row-meta">
+                                <div class="meta-item"><span>Assignments</span><div>@agent.AssignmentCount</div></div>
+                                <div class="meta-item"><span>Created</span><div>@FormatDate(agent.CreatedAtUtc)</div></div>
+                                <div class="meta-item"><span>Last seen</span><div>@FormatDate(agent.LastSeenUtc)</div></div>
+                                <div class="meta-item"><span>Last heartbeat</span><div>@FormatDate(agent.LastHeartbeatUtc)</div></div>
+                                <div class="meta-item"><span>Agent version</span><div>@agent.AgentVersion</div></div>
+                                <div class="meta-item"><span>Machine name</span><div>@agent.MachineName</div></div>
+                                <div class="meta-item"><span>Platform</span><div>@agent.Platform</div></div>
+                            </div>
+
+                            <div class="action-row" style="margin-top:.9rem;">
+                                @if (agent.Enabled)
+                                {
+                                    <form method="post" action="/agents/@agent.AgentId/disable">
+                                        @Html.AntiForgeryToken()
+                                        <button class="button-warning" type="submit">Disable agent</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <form method="post" action="/agents/@agent.AgentId/enable">
+                                        @Html.AntiForgeryToken()
+                                        <button class="button" type="submit">Enable agent</button>
+                                    </form>
+                                }
+
+                                <form method="post" action="/agents/@agent.AgentId/rotate-package">
+                                    @Html.AntiForgeryToken()
+                                    <button class="button-secondary" type="submit">Rotate credentials + download package</button>
+                                </form>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+</main>
+</body>
+</html>

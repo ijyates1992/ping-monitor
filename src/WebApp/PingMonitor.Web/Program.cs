@@ -7,6 +7,7 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
+using PingMonitor.Web.Services.Agents;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.Services.Status;
@@ -95,6 +96,7 @@ builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>(
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();
+builder.Services.AddScoped<IAgentManagementQueryService, AgentManagementQueryService>();
 
 var app = builder.Build();
 

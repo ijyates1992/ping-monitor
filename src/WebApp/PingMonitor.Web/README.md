@@ -68,3 +68,15 @@ In normal startup mode, `GET /admin` provides a server-rendered settings page fo
 - default endpoint timing/threshold values used to prefill `GET /endpoints/new`
 
 These values are persisted in the `ApplicationSettings` table and can be updated from `POST /admin`.
+
+## Manage agents page
+
+In normal startup mode, `GET /agents` provides a server-rendered operational page for registered agents.
+
+Per-agent actions include:
+
+- `POST /agents/{id}/enable` to allow future authenticated agent use
+- `POST /agents/{id}/disable` to block future authenticated agent use without deleting assignments or history
+- `POST /agents/{id}/rotate-package` to rotate the agent API credential and download a fresh package
+
+Credential rotation replaces the stored API key hash and returns a ZIP with a new `.env` file. The new package must be redeployed to the agent host for continued connectivity.
