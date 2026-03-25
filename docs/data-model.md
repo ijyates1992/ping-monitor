@@ -439,3 +439,14 @@ This data model enforces:
 - full auditability  
 
 **Raw data is stored. State is derived. Alerts follow state.**
+
+---
+
+## Endpoint creation flow note (control-plane UI)
+
+- Creating a new endpoint in the web UI creates both:
+  - one `Endpoint` record
+  - one initial `MonitorAssignment` record
+- The assignment is always agent-specific and requires selecting a target agent.
+- Dependency selection is optional (`dependsOnEndpointId` may be null).
+- Dependency cycles are not allowed; creation must be blocked if a cycle would be introduced.
