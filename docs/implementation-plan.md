@@ -24,7 +24,7 @@ Agent startup flow, cached configuration handling, and explicit heartbeat/config
 Raw check-result persistence, batch idempotency, and auditable ingestion outcomes are in place.
 
 ## Phase 5: State engine
-Implement server-side assignment-scoped state calculation and suppression rules from the monitoring state machine.
+Implement server-side assignment-scoped state calculation and suppression rules from the monitoring state machine, including multi-dependency evaluation using direct parent `DOWN` status only.
 
 ## Phase 6: Alerting
 Add server-side alert lifecycle handling driven by state transitions.

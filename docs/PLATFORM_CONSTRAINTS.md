@@ -174,7 +174,7 @@ The implementation must follow it exactly.
 ## Dependency constraints
 
 - Dependencies must form a **directed acyclic graph (no cycles)**
-- Only direct parent in `DOWN` state suppresses child
+- Only direct parent dependencies in `DOWN` state may suppress a child (at least one `DOWN` direct parent is sufficient)
 - Suppression must be evaluated server-side only
 
 ---

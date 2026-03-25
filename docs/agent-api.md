@@ -295,7 +295,7 @@ No request body.
       "timeoutMs": 1000,
       "failureThreshold": 3,
       "recoveryThreshold": 2,
-      "dependsOnEndpointId": null,
+      "dependsOnEndpointIds": [],
       "tags": [
         "core",
         "switch"
@@ -313,7 +313,9 @@ No request body.
       "timeoutMs": 1000,
       "failureThreshold": 2,
       "recoveryThreshold": 2,
-      "dependsOnEndpointId": "f5b72b2d-3d4d-4736-91dd-530b4a88c501",
+      "dependsOnEndpointIds": [
+        "f5b72b2d-3d4d-4736-91dd-530b4a88c501"
+      ],
       "tags": [
         "printer"
       ]
@@ -345,7 +347,7 @@ No request body.
 | `timeoutMs` | integer | yes | timeout per check attempt |
 | `failureThreshold` | integer | yes | consecutive failures required |
 | `recoveryThreshold` | integer | yes | consecutive recoveries required |
-| `dependsOnEndpointId` | string or null | yes | dependency reference |
+| `dependsOnEndpointIds` | array of string | yes | direct parent endpoint IDs; empty array means no dependencies |
 | `tags` | array of string | yes | optional descriptive tags |
 
 ### Validation rules
@@ -366,7 +368,7 @@ No request body.
 - the agent must replace or reconcile cached assignments using this response
 - the agent must not invent assignments locally
 - the agent must not apply dependency suppression locally
-- `dependsOnEndpointId` is informational/config metadata only in v1
+- `dependsOnEndpointIds` is informational/config metadata only in v1
 
 ## Refresh rules
 
@@ -693,7 +695,7 @@ The retry interval is an execution hint only. The agent still submits raw result
 
 ## Dependency semantics
 
-Assignments may include `dependsOnEndpointId`.
+Assignments may include `dependsOnEndpointIds`.
 
 In v1:
 

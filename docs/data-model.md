@@ -105,7 +105,7 @@ Represents a logical target to monitor.
 
 #### Relationships
 
-- `dependsOnEndpointId` (nullable)
+- dependencies are stored in `EndpointDependency` (0..many rows per endpoint)
 
 #### Metadata
 
@@ -150,6 +150,31 @@ Defines what an agent monitors and how.
 
 - `createdAtUtc`
 - `updatedAtUtc`
+
+---
+
+### EndpointDependency
+
+Represents one explicit direct dependency edge between two endpoints.
+
+#### Purpose
+
+- model endpoint dependency relationships explicitly
+- allow multiple direct parent dependencies per endpoint
+- keep dependency traversal relational and auditable
+
+#### Key fields
+
+- `endpointDependencyId`
+- `endpointId`
+- `dependsOnEndpointId`
+- `createdAtUtc`
+
+#### Constraints
+
+- (`endpointId`, `dependsOnEndpointId`) must be unique
+- self-reference is not allowed (`endpointId != dependsOnEndpointId`)
+- dependency graph must remain acyclic
 
 ---
 
@@ -321,7 +346,8 @@ Represents an alert lifecycle.
 
 - Agent 1 → many MonitorAssignments  
 - Endpoint 1 → many MonitorAssignments  
-- Endpoint 1 → optional parent Endpoint  
+- Endpoint 1 → many EndpointDependency (as child)  
+- Endpoint 1 → many EndpointDependency (as parent)  
 
 - MonitorAssignment 1 → many CheckResults  
 - MonitorAssignment 1 → 1 EndpointState  
@@ -335,7 +361,7 @@ Represents an alert lifecycle.
 Agent
   └── MonitorAssignment
         ├── Endpoint
-        │     └── (dependsOn → Endpoint)
+        │     └── EndpointDependency (Endpoint → DependsOnEndpoint)
         ├── CheckResult (many)
         ├── EndpointState (1)
         ├── StateTransition (many)
@@ -379,8 +405,10 @@ depending on the agent.
 - dependencies are defined at the Endpoint level  
 - evaluation occurs at assignment level  
 - dependency lookup must use:
+  - all direct parent endpoints from `EndpointDependency`
   - same agent scope  
-  - corresponding assignment  
+  - corresponding parent assignments  
+- if no parent assignment exists in the same agent scope, that parent does not suppress in that scope
 
 ---
 
@@ -445,7 +473,6 @@ The model must support:
 
 ## Non-goals (v1)
 
-- multi-parent dependencies  
 - cross-agent correlation  
 - distributed consensus  
 - automatic topology discovery  
@@ -471,7 +498,7 @@ This data model enforces:
   - one `Endpoint` record
   - one initial `MonitorAssignment` record
 - The assignment is always agent-specific and requires selecting a target agent.
-- Dependency selection is optional (`dependsOnEndpointId` may be null).
+- Dependency selection is optional (zero `EndpointDependency` rows is valid).
 - Dependency cycles are not allowed; creation must be blocked if a cycle would be introduced.
 
 ## Endpoint management note (control-plane UI)
@@ -479,4 +506,5 @@ This data model enforces:
 - Manage Endpoints (`/endpoints`) edits both shared `Endpoint` fields and assignment-scoped `MonitorAssignment` fields.
 - Assignment state remains per `MonitorAssignment`; endpoint edits do not change this scoping rule.
 - Dependency updates block self-reference and cycle creation to preserve a directed acyclic dependency graph.
+- Dependency updates may add or remove multiple direct parents for the same endpoint.
 - Reassignment updates the existing `MonitorAssignment.agentId` explicitly; this flow does not create duplicate assignments.
