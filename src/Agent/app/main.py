@@ -5,6 +5,8 @@ import platform
 import time
 from datetime import UTC, datetime
 
+import httpx
+
 from app.api_client import AgentApiClient
 from app.checks import CheckRunner
 from app.config import load_config
@@ -59,13 +61,17 @@ def main() -> None:
             if now - last_result_batch >= result_batch_interval_seconds:
                 batch = queue.dequeue_batch(max_result_batch_size)
                 if batch:
-                    client.submit_results(
-                        ResultsRequest(
-                            sent_at_utc=_utc_now(),
-                            batch_id=f"results-{config.instance_id}-{int(now)}",
-                            results=batch,
+                    try:
+                        client.submit_results(
+                            ResultsRequest(
+                                sent_at_utc=_utc_now(),
+                                batch_id=f"results-{config.instance_id}-{int(now)}",
+                                results=batch,
+                            )
                         )
-                    )
+                    except httpx.HTTPError as ex:
+                        logging.error("Result submission failed and will be retried: %s", _format_http_error(ex))
+                        queue.requeue_front(batch)
                 last_result_batch = now
 
             if now - last_heartbeat >= heartbeat_interval_seconds:
@@ -94,6 +100,14 @@ def main() -> None:
 
 def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _format_http_error(error: httpx.HTTPError) -> str:
+    if isinstance(error, httpx.HTTPStatusError):
+        response_body = error.response.text.strip()
+        if response_body:
+            return f"{error}; response={response_body}"
+    return str(error)
 
 
 if __name__ == "__main__":
