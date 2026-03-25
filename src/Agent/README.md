@@ -11,6 +11,7 @@ This directory contains the phase 1 outbound-only Python agent skeleton.
 - executes real ICMP checks using the system `ping` command
 - uses each assignment's configured `target` and `timeoutMs` when running ICMP
 - keeps scheduling behaviour intentionally minimal
+- remains running when the server currently returns zero assignments, continues heartbeat/config refresh, and automatically starts monitoring when assignments are later added (no restart required)
 
 ## Out of scope in phase 1
 
