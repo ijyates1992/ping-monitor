@@ -12,7 +12,7 @@ public sealed class CreateEndpointCommand
     public string EndpointName { get; init; } = string.Empty;
     public string Target { get; init; } = string.Empty;
     public string AgentId { get; init; } = string.Empty;
-    public string? DependsOnEndpointId { get; init; }
+    public IReadOnlyList<string> DependsOnEndpointIds { get; init; } = [];
     public int PingIntervalSeconds { get; init; }
     public int RetryIntervalSeconds { get; init; }
     public int TimeoutMs { get; init; }
@@ -29,7 +29,7 @@ public sealed class UpdateEndpointCommand
     public string EndpointName { get; init; } = string.Empty;
     public string Target { get; init; } = string.Empty;
     public string AgentId { get; init; } = string.Empty;
-    public string? DependsOnEndpointId { get; init; }
+    public IReadOnlyList<string> DependsOnEndpointIds { get; init; } = [];
     public bool EndpointEnabled { get; init; }
     public bool AssignmentEnabled { get; init; }
     public int PingIntervalSeconds { get; init; }
@@ -46,7 +46,7 @@ public sealed class EditEndpointModel
     public string EndpointName { get; init; } = string.Empty;
     public string Target { get; init; } = string.Empty;
     public string AgentId { get; init; } = string.Empty;
-    public string? DependsOnEndpointId { get; init; }
+    public IReadOnlyList<string> DependsOnEndpointIds { get; init; } = [];
     public bool EndpointEnabled { get; init; }
     public bool AssignmentEnabled { get; init; }
     public int PingIntervalSeconds { get; init; }

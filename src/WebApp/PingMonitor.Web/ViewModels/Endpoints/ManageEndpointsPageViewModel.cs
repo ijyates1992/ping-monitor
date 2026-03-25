@@ -14,7 +14,7 @@ public sealed class ManageEndpointRowViewModel
     public string EndpointName { get; init; } = string.Empty;
     public string Target { get; init; } = string.Empty;
     public string AgentDisplay { get; init; } = string.Empty;
-    public string? ParentEndpointName { get; init; }
+    public IReadOnlyList<string> DependencyEndpointNames { get; init; } = [];
     public bool EndpointEnabled { get; init; }
     public bool AssignmentEnabled { get; init; }
     public int PingIntervalSeconds { get; init; }
@@ -45,8 +45,8 @@ public sealed class EditEndpointPageViewModel
     [Display(Name = "Agent")]
     public string AgentId { get; set; } = string.Empty;
 
-    [Display(Name = "Depends on endpoint")]
-    public string? DependsOnEndpointId { get; set; }
+    [Display(Name = "Depends on endpoints")]
+    public List<string> DependsOnEndpointIds { get; set; } = [];
 
     [Display(Name = "Endpoint enabled")]
     public bool EndpointEnabled { get; set; }

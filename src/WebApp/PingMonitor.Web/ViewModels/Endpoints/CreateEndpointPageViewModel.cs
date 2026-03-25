@@ -16,8 +16,8 @@ public sealed class CreateEndpointPageViewModel
     [Display(Name = "Agent")]
     public string AgentId { get; set; } = string.Empty;
 
-    [Display(Name = "Depends on endpoint")]
-    public string? DependsOnEndpointId { get; set; }
+    [Display(Name = "Depends on endpoints")]
+    public List<string> DependsOnEndpointIds { get; set; } = [];
 
     [Range(1, int.MaxValue, ErrorMessage = "Ping interval must be at least 1 second.")]
     [Display(Name = "Ping interval (seconds)")]

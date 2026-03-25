@@ -18,6 +18,7 @@
         .checkbox { display:flex; align-items:center; gap:.55rem; }
         .checkbox input { width:22px; min-height:22px; margin:0; }
         .checkbox label { margin:0; }
+        .checkbox-list { display: grid; gap: .5rem; max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; padding: .6rem; }
         .errors { border:1px solid #fecdca; background:#fef3f2; border-radius:10px; padding:.8rem; color:var(--danger); }
         .field-error { color:var(--danger); font-size:.9rem; margin-top:.25rem; }
         .actions { display:flex; gap:.75rem; flex-wrap:wrap; }
@@ -71,15 +72,17 @@
                         <div class="field-error"><span asp-validation-for="AgentId"></span></div>
                     </div>
                     <div>
-                        <label asp-for="DependsOnEndpointId"></label>
-                        <select asp-for="DependsOnEndpointId">
-                            <option value="">None</option>
+                        <label asp-for="DependsOnEndpointIds"></label>
+                        <div class="checkbox-list">
                             @foreach (var endpoint in Model.AvailableDependencies)
                             {
-                                <option value="@endpoint.EndpointId">@endpoint.EndpointName</option>
+                                <label class="checkbox">
+                                    <input type="checkbox" name="DependsOnEndpointIds" value="@endpoint.EndpointId" checked="@Model.DependsOnEndpointIds.Contains(endpoint.EndpointId)" />
+                                    <span>@endpoint.EndpointName</span>
+                                </label>
                             }
-                        </select>
-                        <div class="field-error"><span asp-validation-for="DependsOnEndpointId"></span></div>
+                        </div>
+                        <div class="field-error"><span asp-validation-for="DependsOnEndpointIds"></span></div>
                     </div>
                     <div class="checkbox">
                         <input asp-for="EndpointEnabled" />

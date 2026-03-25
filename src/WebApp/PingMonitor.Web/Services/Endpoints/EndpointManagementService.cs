@@ -32,7 +32,6 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             Name = command.EndpointName.Trim(),
             Target = command.Target.Trim(),
             Enabled = command.EndpointEnabled,
-            DependsOnEndpointId = NormalizeDependency(command.DependsOnEndpointId),
             CreatedAtUtc = now,
             Tags = []
         };
@@ -55,6 +54,17 @@ internal sealed class EndpointManagementService : IEndpointManagementService
 
         _dbContext.Endpoints.Add(endpoint);
         _dbContext.MonitorAssignments.Add(assignment);
+        foreach (var dependencyEndpointId in NormalizeDependencies(command.DependsOnEndpointIds))
+        {
+            _dbContext.EndpointDependencies.Add(new EndpointDependency
+            {
+                EndpointDependencyId = Guid.NewGuid().ToString(),
+                EndpointId = endpointId,
+                DependsOnEndpointId = dependencyEndpointId,
+                CreatedAtUtc = now
+            });
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return CreateEndpointResult.Succeeded(endpointId, assignmentId);
@@ -68,7 +78,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             return null;
         }
 
-        return await (
+        var model = await (
             from assignment in _dbContext.MonitorAssignments.AsNoTracking()
             join endpoint in _dbContext.Endpoints.AsNoTracking() on assignment.EndpointId equals endpoint.EndpointId
             where assignment.AssignmentId == normalizedAssignmentId
@@ -79,7 +89,6 @@ internal sealed class EndpointManagementService : IEndpointManagementService
                 EndpointName = endpoint.Name,
                 Target = endpoint.Target,
                 AgentId = assignment.AgentId,
-                DependsOnEndpointId = endpoint.DependsOnEndpointId,
                 EndpointEnabled = endpoint.Enabled,
                 AssignmentEnabled = assignment.Enabled,
                 PingIntervalSeconds = assignment.PingIntervalSeconds,
@@ -88,6 +97,34 @@ internal sealed class EndpointManagementService : IEndpointManagementService
                 FailureThreshold = assignment.FailureThreshold,
                 RecoveryThreshold = assignment.RecoveryThreshold
             }).SingleOrDefaultAsync(cancellationToken);
+
+        if (model is null)
+        {
+            return null;
+        }
+
+        var dependencyIds = await _dbContext.EndpointDependencies.AsNoTracking()
+            .Where(x => x.EndpointId == model.EndpointId)
+            .OrderBy(x => x.DependsOnEndpointId)
+            .Select(x => x.DependsOnEndpointId)
+            .ToArrayAsync(cancellationToken);
+
+        return new EditEndpointModel
+        {
+            AssignmentId = model.AssignmentId,
+            EndpointId = model.EndpointId,
+            EndpointName = model.EndpointName,
+            Target = model.Target,
+            AgentId = model.AgentId,
+            DependsOnEndpointIds = dependencyIds,
+            EndpointEnabled = model.EndpointEnabled,
+            AssignmentEnabled = model.AssignmentEnabled,
+            PingIntervalSeconds = model.PingIntervalSeconds,
+            RetryIntervalSeconds = model.RetryIntervalSeconds,
+            TimeoutMs = model.TimeoutMs,
+            FailureThreshold = model.FailureThreshold,
+            RecoveryThreshold = model.RecoveryThreshold
+        };
     }
 
     public async Task<UpdateEndpointResult> UpdateEndpointWithAssignmentAsync(UpdateEndpointCommand command, CancellationToken cancellationToken)
@@ -106,7 +143,6 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         endpoint.Name = command.EndpointName.Trim();
         endpoint.Target = command.Target.Trim();
         endpoint.Enabled = command.EndpointEnabled;
-        endpoint.DependsOnEndpointId = NormalizeDependency(command.DependsOnEndpointId);
 
         assignment.AgentId = command.AgentId.Trim();
         assignment.Enabled = command.AssignmentEnabled;
@@ -116,6 +152,33 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         assignment.FailureThreshold = command.FailureThreshold;
         assignment.RecoveryThreshold = command.RecoveryThreshold;
         assignment.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        var dependencyIds = NormalizeDependencies(command.DependsOnEndpointIds);
+        var existingDependencies = await _dbContext.EndpointDependencies
+            .Where(x => x.EndpointId == endpoint.EndpointId)
+            .ToListAsync(cancellationToken);
+
+        var dependenciesToRemove = existingDependencies
+            .Where(x => !dependencyIds.Contains(x.DependsOnEndpointId, StringComparer.Ordinal))
+            .ToArray();
+        if (dependenciesToRemove.Length > 0)
+        {
+            _dbContext.EndpointDependencies.RemoveRange(dependenciesToRemove);
+        }
+
+        foreach (var dependencyId in dependencyIds)
+        {
+            if (existingDependencies.All(x => !string.Equals(x.DependsOnEndpointId, dependencyId, StringComparison.Ordinal)))
+            {
+                _dbContext.EndpointDependencies.Add(new EndpointDependency
+                {
+                    EndpointDependencyId = Guid.NewGuid().ToString(),
+                    EndpointId = endpoint.EndpointId,
+                    DependsOnEndpointId = dependencyId,
+                    CreatedAtUtc = DateTimeOffset.UtcNow
+                });
+            }
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -142,7 +205,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             return errors;
         }
 
-        await ValidateAgentAndDependencyAsync(command.AgentId, command.DependsOnEndpointId, null, errors, cancellationToken);
+        await ValidateAgentAndDependenciesAsync(command.AgentId, command.DependsOnEndpointIds, null, errors, cancellationToken);
 
         var normalizedEndpointName = command.EndpointName.Trim();
         var endpointNameExists = await _dbContext.Endpoints.AsNoTracking()
@@ -213,7 +276,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             return errors;
         }
 
-        await ValidateAgentAndDependencyAsync(command.AgentId, command.DependsOnEndpointId, normalizedEndpointId, errors, cancellationToken);
+        await ValidateAgentAndDependenciesAsync(command.AgentId, command.DependsOnEndpointIds, normalizedEndpointId, errors, cancellationToken);
 
         var normalizedEndpointName = command.EndpointName.Trim();
         var duplicateNameExists = await _dbContext.Endpoints.AsNoTracking()
@@ -235,9 +298,9 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         return errors;
     }
 
-    private async Task ValidateAgentAndDependencyAsync(
+    private async Task ValidateAgentAndDependenciesAsync(
         string agentId,
-        string? dependsOnEndpointId,
+        IReadOnlyList<string> dependsOnEndpointIds,
         string? currentEndpointId,
         ICollection<EndpointValidationError> errors,
         CancellationToken cancellationToken)
@@ -251,33 +314,44 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.AgentId), "Selected agent is not available."));
         }
 
-        var dependencyId = NormalizeDependency(dependsOnEndpointId);
-        if (dependencyId is null)
+        var normalizedDependencies = NormalizeDependencies(dependsOnEndpointIds);
+
+        var dependencyIds = normalizedDependencies.ToArray();
+        if (dependencyIds.Length == 0)
         {
             return;
         }
 
-        var dependencyExists = await _dbContext.Endpoints.AsNoTracking()
-            .AnyAsync(x => x.EndpointId == dependencyId, cancellationToken);
+        var existingDependencyIds = await _dbContext.Endpoints.AsNoTracking()
+            .Where(x => dependencyIds.Contains(x.EndpointId))
+            .Select(x => x.EndpointId)
+            .ToArrayAsync(cancellationToken);
 
-        if (!dependencyExists)
+        foreach (var dependencyId in dependencyIds)
         {
-            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointId), "Selected dependency endpoint does not exist."));
+            if (!existingDependencyIds.Contains(dependencyId, StringComparer.Ordinal))
+            {
+                errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointIds), $"Dependency endpoint '{dependencyId}' does not exist."));
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(currentEndpointId))
+        {
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(currentEndpointId) && string.Equals(dependencyId, currentEndpointId, StringComparison.Ordinal))
+        foreach (var dependencyId in dependencyIds)
         {
-            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointId), "Dependency cannot reference the endpoint itself."));
-            return;
-        }
+            if (string.Equals(dependencyId, currentEndpointId, StringComparison.Ordinal))
+            {
+                errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointIds), "Dependency cannot reference the endpoint itself."));
+                continue;
+            }
 
-        if (!string.IsNullOrWhiteSpace(currentEndpointId))
-        {
             var hasCycle = await WouldCreateCycleAsync(currentEndpointId, dependencyId, cancellationToken);
             if (hasCycle)
             {
-                errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointId), "Selected dependency creates a circular dependency."));
+                errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointIds), "Selected dependency creates a circular dependency."));
             }
         }
     }
@@ -285,10 +359,12 @@ internal sealed class EndpointManagementService : IEndpointManagementService
     private async Task<bool> WouldCreateCycleAsync(string endpointId, string dependencyEndpointId, CancellationToken cancellationToken)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
-        var currentId = dependencyEndpointId;
+        var stack = new Stack<string>();
+        stack.Push(dependencyEndpointId);
 
-        while (!string.IsNullOrWhiteSpace(currentId))
+        while (stack.Count > 0)
         {
+            var currentId = stack.Pop();
             if (string.Equals(currentId, endpointId, StringComparison.Ordinal))
             {
                 return true;
@@ -296,13 +372,18 @@ internal sealed class EndpointManagementService : IEndpointManagementService
 
             if (!visited.Add(currentId))
             {
-                return true;
+                continue;
             }
 
-            currentId = await _dbContext.Endpoints.AsNoTracking()
+            var nextDependencies = await _dbContext.EndpointDependencies.AsNoTracking()
                 .Where(x => x.EndpointId == currentId)
                 .Select(x => x.DependsOnEndpointId)
-                .SingleOrDefaultAsync(cancellationToken);
+                .ToArrayAsync(cancellationToken);
+
+            foreach (var nextDependencyId in nextDependencies)
+            {
+                stack.Push(nextDependencyId);
+            }
         }
 
         return false;
@@ -341,9 +422,19 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         ValidatePositive(nameof(UpdateEndpointCommand.RecoveryThreshold), recoveryThreshold, "Recovery threshold must be at least 1.", errors);
     }
 
-    private static string? NormalizeDependency(string? dependencyId)
+    private static HashSet<string> NormalizeDependencies(IReadOnlyList<string> dependencyIds)
     {
-        return string.IsNullOrWhiteSpace(dependencyId) ? null : dependencyId.Trim();
+        var normalized = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var dependencyId in dependencyIds)
+        {
+            var value = NormalizeRequired(dependencyId);
+            if (value is not null)
+            {
+                normalized.Add(value);
+            }
+        }
+
+        return normalized;
     }
 
     private static string? NormalizeRequired(string? value)

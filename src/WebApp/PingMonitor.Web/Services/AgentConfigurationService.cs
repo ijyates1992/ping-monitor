@@ -30,6 +30,15 @@ internal sealed class AgentConfigurationService : IAgentConfigurationService
             .OrderBy(x => x.Endpoint.Name)
             .ToListAsync(cancellationToken);
 
+        var endpointIds = assignments.Select(x => x.Endpoint.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
+        var dependencyLookup = await _dbContext.EndpointDependencies.AsNoTracking()
+            .Where(x => endpointIds.Contains(x.EndpointId))
+            .GroupBy(x => x.EndpointId)
+            .ToDictionaryAsync(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).OrderBy(x => x).ToArray(),
+                cancellationToken);
+
         var responseAssignments = assignments
             .Select(x => new MonitorAssignmentDto(
                 AssignmentId: x.Assignment.AssignmentId,
@@ -43,7 +52,7 @@ internal sealed class AgentConfigurationService : IAgentConfigurationService
                 TimeoutMs: x.Assignment.TimeoutMs,
                 FailureThreshold: x.Assignment.FailureThreshold,
                 RecoveryThreshold: x.Assignment.RecoveryThreshold,
-                DependsOnEndpointId: x.Endpoint.DependsOnEndpointId,
+                DependsOnEndpointIds: dependencyLookup.GetValueOrDefault(x.Endpoint.EndpointId, Array.Empty<string>()),
                 Tags: x.Endpoint.Tags))
             .ToArray();
 

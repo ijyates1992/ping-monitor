@@ -52,8 +52,8 @@ public sealed class EndpointStatusRowViewModel
     public string CheckType { get; init; } = string.Empty;
     public bool AssignmentEnabled { get; init; }
     public bool EndpointEnabled { get; init; }
-    public string? ParentEndpointId { get; init; }
-    public string? ParentEndpointName { get; init; }
+    public IReadOnlyList<string> ParentEndpointIds { get; init; } = [];
+    public IReadOnlyList<string> ParentEndpointNames { get; init; } = [];
     public string? SuppressedByEndpointId { get; init; }
     public string? SuppressedByEndpointName { get; init; }
 }

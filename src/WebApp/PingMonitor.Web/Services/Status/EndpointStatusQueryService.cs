@@ -31,8 +31,6 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             join assignmentAgent in _dbContext.Agents.AsNoTracking() on assignment.AgentId equals assignmentAgent.AgentId
             join endpointState in _dbContext.EndpointStates.AsNoTracking() on assignment.AssignmentId equals endpointState.AssignmentId into endpointStateJoin
             from endpointState in endpointStateJoin.DefaultIfEmpty()
-            join parentEndpoint in _dbContext.Endpoints.AsNoTracking() on endpoint.DependsOnEndpointId equals parentEndpoint.EndpointId into parentEndpointJoin
-            from parentEndpoint in parentEndpointJoin.DefaultIfEmpty()
             join suppressedByEndpoint in _dbContext.Endpoints.AsNoTracking() on endpointState!.SuppressedByEndpointId equals suppressedByEndpoint.EndpointId into suppressedByEndpointJoin
             from suppressedByEndpoint in suppressedByEndpointJoin.DefaultIfEmpty()
             select new EndpointStatusRowViewModel
@@ -52,8 +50,6 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 CheckType = assignment.CheckType.ToString(),
                 AssignmentEnabled = assignment.Enabled,
                 EndpointEnabled = endpoint.Enabled,
-                ParentEndpointId = endpoint.DependsOnEndpointId,
-                ParentEndpointName = parentEndpoint != null ? parentEndpoint.Name : null,
                 SuppressedByEndpointId = endpointState != null ? endpointState.SuppressedByEndpointId : null,
                 SuppressedByEndpointName = suppressedByEndpoint != null ? suppressedByEndpoint.Name : null
             };
@@ -86,16 +82,54 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             .ThenBy(row => row.AgentInstanceId)
             .ToArrayAsync(cancellationToken);
 
+        var endpointIds = rows.Select(x => x.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
+        var endpointNames = await _dbContext.Endpoints.AsNoTracking()
+            .ToDictionaryAsync(x => x.EndpointId, x => x.Name, cancellationToken);
+        var dependencyLookup = await _dbContext.EndpointDependencies.AsNoTracking()
+            .Where(x => endpointIds.Contains(x.EndpointId))
+            .GroupBy(x => x.EndpointId)
+            .ToDictionaryAsync(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).OrderBy(x => x).ToArray(),
+                cancellationToken);
+
+        var projectedRows = rows.Select(row =>
+        {
+            var parentIds = dependencyLookup.GetValueOrDefault(row.EndpointId, Array.Empty<string>());
+            return new EndpointStatusRowViewModel
+            {
+                AssignmentId = row.AssignmentId,
+                EndpointId = row.EndpointId,
+                EndpointName = row.EndpointName,
+                Target = row.Target,
+                AgentId = row.AgentId,
+                AgentInstanceId = row.AgentInstanceId,
+                AgentName = row.AgentName,
+                CurrentState = row.CurrentState,
+                LastCheckUtc = row.LastCheckUtc,
+                LastStateChangeUtc = row.LastStateChangeUtc,
+                ConsecutiveFailureCount = row.ConsecutiveFailureCount,
+                ConsecutiveSuccessCount = row.ConsecutiveSuccessCount,
+                CheckType = row.CheckType,
+                AssignmentEnabled = row.AssignmentEnabled,
+                EndpointEnabled = row.EndpointEnabled,
+                ParentEndpointIds = parentIds,
+                ParentEndpointNames = parentIds.Select(x => endpointNames.GetValueOrDefault(x, x)).OrderBy(x => x).ToArray(),
+                SuppressedByEndpointId = row.SuppressedByEndpointId,
+                SuppressedByEndpointName = row.SuppressedByEndpointName
+            };
+        }).ToArray();
+
         return new EndpointStatusPageViewModel
         {
             Summary = new EndpointStatusSummaryViewModel
             {
-                TotalAssignments = rows.Length,
-                UnknownCount = rows.Count(row => row.CurrentState == EndpointStateKind.Unknown),
-                UpCount = rows.Count(row => row.CurrentState == EndpointStateKind.Up),
-                DegradedCount = rows.Count(row => row.CurrentState == EndpointStateKind.Degraded),
-                DownCount = rows.Count(row => row.CurrentState == EndpointStateKind.Down),
-                SuppressedCount = rows.Count(row => row.CurrentState == EndpointStateKind.Suppressed)
+                TotalAssignments = projectedRows.Length,
+                UnknownCount = projectedRows.Count(row => row.CurrentState == EndpointStateKind.Unknown),
+                UpCount = projectedRows.Count(row => row.CurrentState == EndpointStateKind.Up),
+                DegradedCount = projectedRows.Count(row => row.CurrentState == EndpointStateKind.Degraded),
+                DownCount = projectedRows.Count(row => row.CurrentState == EndpointStateKind.Down),
+                SuppressedCount = projectedRows.Count(row => row.CurrentState == EndpointStateKind.Suppressed)
             },
             Filters = new EndpointStatusFiltersViewModel
             {
@@ -104,7 +138,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 Search = normalizedSearch,
                 AvailableAgents = availableAgents
             },
-            Rows = rows
+            Rows = projectedRows
         };
     }
 
