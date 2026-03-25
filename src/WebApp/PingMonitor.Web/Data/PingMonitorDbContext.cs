@@ -18,6 +18,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
 
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<EndpointModel> Endpoints => Set<EndpointModel>();
+    public DbSet<EndpointDependency> EndpointDependencies => Set<EndpointDependency>();
     public DbSet<MonitorAssignment> MonitorAssignments => Set<MonitorAssignment>();
     public DbSet<CheckResult> CheckResults => Set<CheckResult>();
     public DbSet<ResultBatch> ResultBatches => Set<ResultBatch>();
@@ -70,11 +71,19 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         endpoint.Property(x => x.EndpointId).HasMaxLength(64);
         endpoint.Property(x => x.Name).HasMaxLength(255).IsRequired();
         endpoint.Property(x => x.Target).HasMaxLength(255).IsRequired();
-        endpoint.Property(x => x.DependsOnEndpointId).HasMaxLength(64);
         endpoint.Property(x => x.Notes).HasMaxLength(2048);
         endpoint.Property(x => x.CreatedAtUtc).IsRequired();
         endpoint.Property(x => x.Tags).HasConversion(stringListConverter).Metadata.SetValueComparer(stringListComparer);
         endpoint.Property(x => x.Tags).IsRequired();
+
+        var endpointDependency = modelBuilder.Entity<EndpointDependency>();
+        endpointDependency.ToTable("EndpointDependencies");
+        endpointDependency.HasKey(x => x.EndpointDependencyId);
+        endpointDependency.Property(x => x.EndpointDependencyId).HasMaxLength(64);
+        endpointDependency.Property(x => x.EndpointId).HasMaxLength(64).IsRequired();
+        endpointDependency.Property(x => x.DependsOnEndpointId).HasMaxLength(64).IsRequired();
+        endpointDependency.Property(x => x.CreatedAtUtc).IsRequired();
+        endpointDependency.HasIndex(x => new { x.EndpointId, x.DependsOnEndpointId }).IsUnique();
 
         var assignment = modelBuilder.Entity<MonitorAssignment>();
         assignment.ToTable("MonitorAssignments");

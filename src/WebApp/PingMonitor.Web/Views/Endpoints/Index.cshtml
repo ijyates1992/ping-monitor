@@ -79,7 +79,7 @@
                             <div class="row-meta">
                                 <div class="meta-item"><span>Assignment ID</span><div>@row.AssignmentId</div></div>
                                 <div class="meta-item"><span>Agent / instance</span><div>@row.AgentDisplay</div></div>
-                                <div class="meta-item"><span>Dependency parent</span><div>@(string.IsNullOrWhiteSpace(row.ParentEndpointName) ? "None" : row.ParentEndpointName)</div></div>
+                                <div class="meta-item"><span>Dependency parents</span><div>@(row.DependencyEndpointNames.Count == 0 ? "None" : string.Join(", ", row.DependencyEndpointNames))</div></div>
                                 <div class="meta-item"><span>Endpoint enabled</span><div>@(row.EndpointEnabled ? "Enabled" : "Disabled")</div></div>
                                 <div class="meta-item"><span>Assignment enabled</span><div>@(row.AssignmentEnabled ? "Enabled" : "Disabled")</div></div>
                                 <div class="meta-item"><span>Ping interval</span><div>@row.PingIntervalSeconds s</div></div>

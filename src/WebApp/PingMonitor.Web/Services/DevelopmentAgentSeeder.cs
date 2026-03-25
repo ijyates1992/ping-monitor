@@ -74,7 +74,6 @@ internal sealed class DevelopmentAgentSeeder
             name: "Dev Gateway",
             target: "192.0.2.1",
             enabled: true,
-            dependsOnEndpointId: null,
             tags: ["dev", "gateway"],
             notes: "Development-only seeded endpoint for local agent API testing.",
             now,
@@ -85,7 +84,6 @@ internal sealed class DevelopmentAgentSeeder
             name: "Dev Printer",
             target: "192.0.2.55",
             enabled: true,
-            dependsOnEndpointId: gatewayEndpoint.EndpointId,
             tags: ["dev", "printer"],
             notes: "Development-only seeded endpoint for local agent API testing.",
             now,
@@ -93,6 +91,7 @@ internal sealed class DevelopmentAgentSeeder
 
         await EnsureAssignmentAsync(agent.AgentId, gatewayEndpoint.EndpointId, "assignment-dev-gateway", now, cancellationToken);
         await EnsureAssignmentAsync(agent.AgentId, printerEndpoint.EndpointId, "assignment-dev-printer", now, cancellationToken);
+        await EnsureDependenciesAsync(printerEndpoint.EndpointId, [gatewayEndpoint.EndpointId], now, cancellationToken);
         await EnsureStateAsync(agent.AgentId, gatewayEndpoint.EndpointId, "assignment-dev-gateway", cancellationToken);
         await EnsureStateAsync(agent.AgentId, printerEndpoint.EndpointId, "assignment-dev-printer", cancellationToken);
     }
@@ -102,7 +101,6 @@ internal sealed class DevelopmentAgentSeeder
         string name,
         string target,
         bool enabled,
-        string? dependsOnEndpointId,
         List<string> tags,
         string notes,
         DateTimeOffset now,
@@ -123,10 +121,38 @@ internal sealed class DevelopmentAgentSeeder
         endpoint.Name = name;
         endpoint.Target = target;
         endpoint.Enabled = enabled;
-        endpoint.DependsOnEndpointId = dependsOnEndpointId;
         endpoint.Tags = tags;
         endpoint.Notes = notes;
         return endpoint;
+    }
+
+    private async Task EnsureDependenciesAsync(string endpointId, IReadOnlyList<string> dependsOnEndpointIds, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.EndpointDependencies
+            .Where(x => x.EndpointId == endpointId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var link in existing)
+        {
+            if (!dependsOnEndpointIds.Contains(link.DependsOnEndpointId, StringComparer.Ordinal))
+            {
+                _dbContext.EndpointDependencies.Remove(link);
+            }
+        }
+
+        foreach (var dependsOnEndpointId in dependsOnEndpointIds)
+        {
+            if (existing.All(x => !string.Equals(x.DependsOnEndpointId, dependsOnEndpointId, StringComparison.Ordinal)))
+            {
+                _dbContext.EndpointDependencies.Add(new EndpointDependency
+                {
+                    EndpointDependencyId = Guid.NewGuid().ToString(),
+                    EndpointId = endpointId,
+                    DependsOnEndpointId = dependsOnEndpointId,
+                    CreatedAtUtc = now
+                });
+            }
+        }
     }
 
     private async Task EnsureAssignmentAsync(string agentId, string endpointId, string assignmentId, DateTimeOffset now, CancellationToken cancellationToken)

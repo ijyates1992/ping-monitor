@@ -12,5 +12,5 @@ public sealed record MonitorAssignmentDto(
     int TimeoutMs,
     int FailureThreshold,
     int RecoveryThreshold,
-    string? DependsOnEndpointId,
+    IReadOnlyList<string> DependsOnEndpointIds,
     IReadOnlyList<string> Tags);

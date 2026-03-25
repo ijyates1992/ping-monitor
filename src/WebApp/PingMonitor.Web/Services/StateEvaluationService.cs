@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
-using EndpointModel = PingMonitor.Web.Models.Endpoint;
 
 namespace PingMonitor.Web.Services;
 
@@ -112,7 +111,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             }
         }
 
-        var parentContext = await GetParentContextAsync(assignment, endpoint, cancellationToken);
+        var parentContext = await GetParentContextAsync(assignment, endpoint.EndpointId, cancellationToken);
         var previousState = state.CurrentState;
         var nextState = DetermineNextState(assignment, state, agent, parentContext);
         var reasonCode = GetReasonCode(previousState, nextState, parentContext.DependencyDown);
@@ -158,39 +157,57 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 
     private async Task<ParentStateContext> GetParentContextAsync(
         MonitorAssignment assignment,
-        EndpointModel endpoint,
+        string endpointId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(endpoint.DependsOnEndpointId))
+        var directParentEndpointIds = await _dbContext.EndpointDependencies.AsNoTracking()
+            .Where(x => x.EndpointId == endpointId)
+            .Select(x => x.DependsOnEndpointId)
+            .ToArrayAsync(cancellationToken);
+
+        if (directParentEndpointIds.Length == 0)
         {
             return ParentStateContext.None;
         }
 
-        var parentAssignment = await _dbContext.MonitorAssignments
-            .SingleOrDefaultAsync(
-                x => x.AgentId == assignment.AgentId && x.EndpointId == endpoint.DependsOnEndpointId,
-                cancellationToken);
+        var parentAssignments = await _dbContext.MonitorAssignments.AsNoTracking()
+            .Where(x => x.AgentId == assignment.AgentId && directParentEndpointIds.Contains(x.EndpointId))
+            .ToDictionaryAsync(x => x.EndpointId, x => x.AssignmentId, cancellationToken);
 
-        if (parentAssignment is null)
+        if (parentAssignments.Count == 0)
         {
-            return new ParentStateContext(endpoint.DependsOnEndpointId, false);
+            return new ParentStateContext(null, false);
         }
 
-        var parentState = await _dbContext.EndpointStates
-            .SingleOrDefaultAsync(x => x.AssignmentId == parentAssignment.AssignmentId, cancellationToken);
+        var parentStates = await _dbContext.EndpointStates.AsNoTracking()
+            .Where(x => parentAssignments.Values.Contains(x.AssignmentId))
+            .Select(x => new { x.AssignmentId, x.CurrentState })
+            .ToArrayAsync(cancellationToken);
 
-        return new ParentStateContext(
-            endpoint.DependsOnEndpointId,
-            parentState?.CurrentState == EndpointStateKind.Down);
+        foreach (var parentEndpointId in directParentEndpointIds)
+        {
+            if (!parentAssignments.TryGetValue(parentEndpointId, out var parentAssignmentId))
+            {
+                continue;
+            }
+
+            if (parentStates.Any(x => x.AssignmentId == parentAssignmentId && x.CurrentState == EndpointStateKind.Down))
+            {
+                return new ParentStateContext(parentEndpointId, true);
+            }
+        }
+
+        return new ParentStateContext(null, false);
     }
 
     private async Task<IReadOnlyCollection<string>> GetDirectChildAssignmentIdsAsync(
         MonitorAssignment assignment,
         CancellationToken cancellationToken)
     {
-        var childEndpointIds = await _dbContext.Endpoints
+        var childEndpointIds = await _dbContext.EndpointDependencies.AsNoTracking()
             .Where(x => x.DependsOnEndpointId == assignment.EndpointId)
             .Select(x => x.EndpointId)
+            .Distinct()
             .ToArrayAsync(cancellationToken);
 
         if (childEndpointIds.Length == 0)

@@ -22,31 +22,58 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
             join agent in _dbContext.Agents.AsNoTracking() on assignment.AgentId equals agent.AgentId
             join state in _dbContext.EndpointStates.AsNoTracking() on assignment.AssignmentId equals state.AssignmentId into stateJoin
             from state in stateJoin.DefaultIfEmpty()
-            join parent in _dbContext.Endpoints.AsNoTracking() on endpoint.DependsOnEndpointId equals parent.EndpointId into parentJoin
-            from parent in parentJoin.DefaultIfEmpty()
             orderby endpoint.Name, agent.InstanceId
-            select new ManageEndpointRowViewModel
+            select new
             {
-                AssignmentId = assignment.AssignmentId,
+                assignment.AssignmentId,
+                endpoint.EndpointId,
                 EndpointName = endpoint.Name,
-                Target = endpoint.Target,
+                endpoint.Target,
                 AgentDisplay = string.IsNullOrWhiteSpace(agent.Name)
                     ? agent.InstanceId
                     : $"{agent.Name} ({agent.InstanceId})",
-                ParentEndpointName = parent != null ? parent.Name : null,
-                EndpointEnabled = endpoint.Enabled,
+                endpoint.Enabled,
                 AssignmentEnabled = assignment.Enabled,
-                PingIntervalSeconds = assignment.PingIntervalSeconds,
-                RetryIntervalSeconds = assignment.RetryIntervalSeconds,
-                TimeoutMs = assignment.TimeoutMs,
-                FailureThreshold = assignment.FailureThreshold,
-                RecoveryThreshold = assignment.RecoveryThreshold,
+                assignment.PingIntervalSeconds,
+                assignment.RetryIntervalSeconds,
+                assignment.TimeoutMs,
+                assignment.FailureThreshold,
+                assignment.RecoveryThreshold,
                 CurrentState = state != null ? state.CurrentState : EndpointStateKind.Unknown
             }).ToArrayAsync(cancellationToken);
 
+        var endpointIds = rows.Select(x => x.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
+        var endpointNames = await _dbContext.Endpoints.AsNoTracking()
+            .ToDictionaryAsync(x => x.EndpointId, x => x.Name, cancellationToken);
+        var dependencyLookup = await _dbContext.EndpointDependencies.AsNoTracking()
+            .Where(x => endpointIds.Contains(x.EndpointId))
+            .GroupBy(x => x.EndpointId)
+            .ToDictionaryAsync(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).ToArray(),
+                cancellationToken);
+
         return new ManageEndpointsPageViewModel
         {
-            Rows = rows
+            Rows = rows.Select(row => new ManageEndpointRowViewModel
+            {
+                AssignmentId = row.AssignmentId,
+                EndpointName = row.EndpointName,
+                Target = row.Target,
+                AgentDisplay = row.AgentDisplay,
+                DependencyEndpointNames = dependencyLookup.GetValueOrDefault(row.EndpointId, Array.Empty<string>())
+                    .Select(endpointId => endpointNames.GetValueOrDefault(endpointId, endpointId))
+                    .OrderBy(x => x)
+                    .ToArray(),
+                EndpointEnabled = row.Enabled,
+                AssignmentEnabled = row.AssignmentEnabled,
+                PingIntervalSeconds = row.PingIntervalSeconds,
+                RetryIntervalSeconds = row.RetryIntervalSeconds,
+                TimeoutMs = row.TimeoutMs,
+                FailureThreshold = row.FailureThreshold,
+                RecoveryThreshold = row.RecoveryThreshold,
+                CurrentState = row.CurrentState
+            }).ToArray()
         };
     }
 

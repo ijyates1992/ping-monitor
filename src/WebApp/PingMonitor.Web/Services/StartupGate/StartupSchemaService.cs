@@ -17,6 +17,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "AspNetUsers",
         "Agents",
         "Endpoints",
+        "EndpointDependencies",
         "MonitorAssignments",
         "CheckResults",
         "ResultBatches",
@@ -185,8 +186,54 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+        const string createEndpointDependenciesSql = """
+            CREATE TABLE IF NOT EXISTS `EndpointDependencies` (
+                `EndpointDependencyId` varchar(64) NOT NULL,
+                `EndpointId` varchar(64) NOT NULL,
+                `DependsOnEndpointId` varchar(64) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`EndpointDependencyId`),
+                UNIQUE KEY `UX_EndpointDependencies_EndpointId_DependsOnEndpointId` (`EndpointId`, `DependsOnEndpointId`)
+            );
+            """;
+
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
+        await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
+    }
+
+    private static async Task MigrateLegacyEndpointDependenciesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var hasColumnCommand = connection.CreateCommand();
+        hasColumnCommand.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'Endpoints'
+              AND column_name = 'DependsOnEndpointId';
+            """;
+
+        var hasLegacyColumn = Convert.ToInt32(await hasColumnCommand.ExecuteScalarAsync(cancellationToken)) > 0;
+        if (!hasLegacyColumn)
+        {
+            return;
+        }
+
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            INSERT IGNORE INTO `EndpointDependencies` (`EndpointDependencyId`, `EndpointId`, `DependsOnEndpointId`, `CreatedAtUtc`)
+            SELECT UUID(), `EndpointId`, `DependsOnEndpointId`, UTC_TIMESTAMP(6)
+            FROM `Endpoints`
+            WHERE `DependsOnEndpointId` IS NOT NULL AND `DependsOnEndpointId` <> '';
+            """,
+            cancellationToken);
     }
 }

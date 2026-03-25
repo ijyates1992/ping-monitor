@@ -130,6 +130,8 @@ Defines direct parent/child relationships between endpoints (an endpoint may hav
 
 Used to suppress alerts when a root device fails.
 
+Suppression rule (server-side only): if an endpoint is failing and at least one direct parent is `DOWN`, the endpoint state becomes `SUPPRESSED`. Direct parents in `SUPPRESSED` do not cascade suppression.
+
 ### State
 
 Each endpoint (per agent) has a state:
