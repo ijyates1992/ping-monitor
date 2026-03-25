@@ -10,7 +10,7 @@ import httpx
 from app.api_client import AgentApiClient
 from app.checks import CheckRunner
 from app.config import load_config
-from app.models import HeartbeatRequest, HelloRequest, ResultsRequest
+from app.models import ConfigResponse, HeartbeatRequest, HelloRequest, ResultsRequest
 from app.result_queue import ResultQueue
 from app.scheduler import AssignmentScheduler
 
@@ -18,6 +18,7 @@ from app.scheduler import AssignmentScheduler
 def main() -> None:
     config = load_config()
     logging.basicConfig(level=config.log_level)
+    logging.info("Starting agent instance %s", config.instance_id)
 
     client = AgentApiClient(config)
     queue = ResultQueue()
@@ -35,12 +36,26 @@ def main() -> None:
     )
 
     current_config = client.fetch_config()
-    logging.info("Agent %s connected with config version %s", hello_response.agent_id, current_config.config_version)
+    logging.info(
+        "Agent %s connected with config version %s containing %d assignments",
+        hello_response.agent_id,
+        current_config.config_version,
+        len(current_config.assignments),
+    )
 
     config_refresh_seconds = max(1, hello_response.config_refresh_seconds)
     heartbeat_interval_seconds = max(1, hello_response.heartbeat_interval_seconds)
     result_batch_interval_seconds = max(1, hello_response.result_batch_interval_seconds)
     max_result_batch_size = max(1, hello_response.max_result_batch_size)
+    logging.info(
+        "Agent loop intervals: config_refresh=%ss heartbeat=%ss result_batch=%ss",
+        config_refresh_seconds,
+        heartbeat_interval_seconds,
+        result_batch_interval_seconds,
+    )
+
+    previous_active_assignments = -1
+    previous_total_assignments = -1
 
     last_config_refresh = 0.0
     last_heartbeat = 0.0
@@ -51,13 +66,28 @@ def main() -> None:
             now = time.monotonic()
 
             if now - last_config_refresh >= config_refresh_seconds:
-                current_config = client.fetch_config()
-                logging.info("Fetched config version %s with %d assignments", current_config.config_version, len(current_config.assignments))
+                current_config = _try_refresh_config(client, current_config, "scheduled")
                 last_config_refresh = now
 
-            results = scheduler.run_once(current_config.assignments)
-            queue.extend(results)
+            active_assignments = len([assignment for assignment in current_config.assignments if assignment.enabled])
+            if len(current_config.assignments) != previous_total_assignments or active_assignments != previous_active_assignments:
+                logging.info(
+                    "Assignment counts changed: total=%d active=%d",
+                    len(current_config.assignments),
+                    active_assignments,
+                )
+                if active_assignments == 0:
+                    logging.info("No active assignments currently configured. Agent will keep heartbeating and polling for config.")
+                elif previous_active_assignments == 0:
+                    logging.info("Assignments are now active. Agent will begin executing checks automatically.")
+                previous_total_assignments = len(current_config.assignments)
+                previous_active_assignments = active_assignments
 
+            if active_assignments > 0:
+                results = scheduler.run_once(current_config.assignments)
+                if results:
+                    logging.info("Executed %d checks in this cycle", len(results))
+                queue.extend(results)
             if now - last_result_batch >= result_batch_interval_seconds:
                 batch = queue.dequeue_batch(max_result_batch_size)
                 if batch:
@@ -72,24 +102,33 @@ def main() -> None:
                     except httpx.HTTPError as ex:
                         logging.error("Result submission failed and will be retried: %s", _format_http_error(ex))
                         queue.requeue_front(batch)
+                else:
+                    logging.debug("No queued results to submit in this cycle.")
                 last_result_batch = now
 
             if now - last_heartbeat >= heartbeat_interval_seconds:
-                heartbeat_response = client.send_heartbeat(
-                    HeartbeatRequest(
-                        agent_version="0.1.0",
-                        sent_at_utc=_utc_now(),
-                        config_version=current_config.config_version,
-                        active_assignments=len([assignment for assignment in current_config.assignments if assignment.enabled]),
-                        queued_result_count=len(queue),
-                        status="online",
+                try:
+                    heartbeat_response = client.send_heartbeat(
+                        HeartbeatRequest(
+                            agent_version="0.1.0",
+                            sent_at_utc=_utc_now(),
+                            config_version=current_config.config_version,
+                            active_assignments=active_assignments,
+                            queued_result_count=len(queue),
+                            status="online",
+                        )
                     )
-                )
+                    logging.info(
+                        "Heartbeat sent: active_assignments=%d queued_results=%d",
+                        active_assignments,
+                        len(queue),
+                    )
+                    if heartbeat_response.config_changed:
+                        current_config = _try_refresh_config(client, current_config, "heartbeat-config-changed")
+                        last_config_refresh = now
+                except httpx.HTTPError as ex:
+                    logging.error("Heartbeat failed: %s", _format_http_error(ex))
                 last_heartbeat = now
-                if heartbeat_response.config_changed:
-                    current_config = client.fetch_config()
-                    logging.info("Server reported config change. Updated to version %s", current_config.config_version)
-                    last_config_refresh = now
 
             time.sleep(1)
     except KeyboardInterrupt:
@@ -108,6 +147,26 @@ def _format_http_error(error: httpx.HTTPError) -> str:
         if response_body:
             return f"{error}; response={response_body}"
     return str(error)
+
+
+def _try_refresh_config(client: AgentApiClient, current_config: ConfigResponse, reason: str) -> ConfigResponse:
+    try:
+        updated_config = client.fetch_config()
+        logging.info(
+            "Fetched config (%s): version=%s assignments=%d",
+            reason,
+            updated_config.config_version,
+            len(updated_config.assignments),
+        )
+        return updated_config
+    except httpx.HTTPError as ex:
+        logging.error(
+            "Config refresh failed (%s). Continuing with previous config version %s: %s",
+            reason,
+            current_config.config_version,
+            _format_http_error(ex),
+        )
+        return current_config
 
 
 if __name__ == "__main__":
