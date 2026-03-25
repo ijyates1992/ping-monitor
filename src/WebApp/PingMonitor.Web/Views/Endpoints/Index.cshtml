@@ -1,0 +1,102 @@
+@model PingMonitor.Web.ViewModels.Endpoints.ManageEndpointsPageViewModel
+@using PingMonitor.Web.Models
+@{
+    static string StateClass(EndpointStateKind state) => state switch
+    {
+        EndpointStateKind.Up => "state-up",
+        EndpointStateKind.Down => "state-down",
+        EndpointStateKind.Suppressed => "state-suppressed",
+        EndpointStateKind.Degraded => "state-degraded",
+        _ => "state-unknown"
+    };
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manage endpoints</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --up:#137333; --down:#b42318; --suppressed:#7a2e0e; --unknown:#475467; --degraded:#b54708; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 1180px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .row-list { display: grid; gap: .9rem; }
+        .row { border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+        .row-header { display:flex; flex-direction:column; gap:.75rem; margin-bottom:.8rem; }
+        .row-meta { display:grid; gap:.75rem; grid-template-columns: repeat(2, minmax(0,1fr)); }
+        .meta-item span { display:block; font-size:.85rem; color:var(--muted); margin-bottom:.2rem; }
+        .button-row { display:flex; gap:.75rem; flex-wrap:wrap; }
+        .button,.button-secondary { display:inline-flex; align-items:center; justify-content:center; min-height:48px; padding:.8rem 1rem; border-radius:10px; font-weight:600; text-decoration:none; }
+        .button { border:0; background:var(--accent); color:#fff; }
+        .button-secondary { border:1px solid var(--border); color:var(--text); background:#fff; }
+        .badge { display:inline-flex; align-items:center; justify-content:center; min-height:32px; padding:.3rem .65rem; border-radius:999px; font-size:.9rem; font-weight:700; letter-spacing:.02em; }
+        .state-up { color: var(--up); background: #e7f6ec; }
+        .state-down { color: var(--down); background: #fee4e2; }
+        .state-suppressed { color: var(--suppressed); background: #fff1eb; }
+        .state-unknown { color: var(--unknown); background: #eaecf0; }
+        .state-degraded { color: var(--degraded); background: #fff7e6; }
+        .muted { color: var(--muted); }
+        @@media (min-width: 720px) {
+            .row-header { flex-direction: row; justify-content: space-between; align-items: start; }
+            .row-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Manage endpoints</h1>
+            <p class="muted">Edit endpoint and assignment records without changing assignment-scoped state behavior.</p>
+            <div class="button-row">
+                <a class="button" href="/endpoints/new">Add new endpoint</a>
+                <a class="button-secondary" href="/status">View status</a>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Assignments</h2>
+            @if (Model.Rows.Count == 0)
+            {
+                <p class="muted">No endpoint assignments are available.</p>
+            }
+            else
+            {
+                <div class="row-list">
+                    @foreach (var row in Model.Rows)
+                    {
+                        <article class="row">
+                            <div class="row-header">
+                                <div>
+                                    <div><strong>@row.EndpointName</strong></div>
+                                    <div class="muted">@row.Target</div>
+                                </div>
+                                <div class="badge @StateClass(row.CurrentState)">@row.CurrentState</div>
+                            </div>
+                            <div class="row-meta">
+                                <div class="meta-item"><span>Assignment ID</span><div>@row.AssignmentId</div></div>
+                                <div class="meta-item"><span>Agent / instance</span><div>@row.AgentDisplay</div></div>
+                                <div class="meta-item"><span>Dependency parent</span><div>@(string.IsNullOrWhiteSpace(row.ParentEndpointName) ? "None" : row.ParentEndpointName)</div></div>
+                                <div class="meta-item"><span>Endpoint enabled</span><div>@(row.EndpointEnabled ? "Enabled" : "Disabled")</div></div>
+                                <div class="meta-item"><span>Assignment enabled</span><div>@(row.AssignmentEnabled ? "Enabled" : "Disabled")</div></div>
+                                <div class="meta-item"><span>Ping interval</span><div>@row.PingIntervalSeconds s</div></div>
+                                <div class="meta-item"><span>Retry interval</span><div>@row.RetryIntervalSeconds s</div></div>
+                                <div class="meta-item"><span>Timeout</span><div>@row.TimeoutMs ms</div></div>
+                                <div class="meta-item"><span>Failure threshold</span><div>@row.FailureThreshold</div></div>
+                                <div class="meta-item"><span>Recovery threshold</span><div>@row.RecoveryThreshold</div></div>
+                            </div>
+                            <div class="button-row" style="margin-top:.85rem;">
+                                <a class="button-secondary" href="/endpoints/@row.AssignmentId/edit">Edit assignment</a>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+</main>
+</body>
+</html>

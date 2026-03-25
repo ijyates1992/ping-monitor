@@ -16,7 +16,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
 
     public async Task<CreateEndpointResult> CreateEndpointWithAssignmentAsync(CreateEndpointCommand command, CancellationToken cancellationToken)
     {
-        var validationErrors = await ValidateAsync(command, cancellationToken);
+        var validationErrors = await ValidateCreateAsync(command, cancellationToken);
         if (validationErrors.Count > 0)
         {
             return CreateEndpointResult.Failed(validationErrors.ToArray());
@@ -25,13 +25,6 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         var now = DateTimeOffset.UtcNow;
         var endpointId = Guid.NewGuid().ToString();
         var assignmentId = Guid.NewGuid().ToString();
-        var dependencyId = NormalizeDependency(command.DependsOnEndpointId);
-
-        if (string.Equals(dependencyId, endpointId, StringComparison.Ordinal))
-        {
-            return CreateEndpointResult.Failed(
-                new CreateEndpointValidationError(nameof(CreateEndpointCommand.DependsOnEndpointId), "Dependency cannot reference the new endpoint itself."));
-        }
 
         var endpoint = new EndpointModel
         {
@@ -39,7 +32,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             Name = command.EndpointName.Trim(),
             Target = command.Target.Trim(),
             Enabled = command.EndpointEnabled,
-            DependsOnEndpointId = dependencyId,
+            DependsOnEndpointId = NormalizeDependency(command.DependsOnEndpointId),
             CreatedAtUtc = now,
             Tags = []
         };
@@ -67,63 +60,89 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         return CreateEndpointResult.Succeeded(endpointId, assignmentId);
     }
 
-    private async Task<List<CreateEndpointValidationError>> ValidateAsync(CreateEndpointCommand command, CancellationToken cancellationToken)
+    public async Task<EditEndpointModel?> GetEditModelAsync(string assignmentId, CancellationToken cancellationToken)
     {
-        var errors = new List<CreateEndpointValidationError>();
-
-        if (string.IsNullOrWhiteSpace(command.EndpointName))
+        var normalizedAssignmentId = NormalizeRequired(assignmentId);
+        if (normalizedAssignmentId is null)
         {
-            errors.Add(new CreateEndpointValidationError(nameof(CreateEndpointCommand.EndpointName), "Endpoint name is required."));
+            return null;
         }
 
-        if (string.IsNullOrWhiteSpace(command.Target))
+        return await (
+            from assignment in _dbContext.MonitorAssignments.AsNoTracking()
+            join endpoint in _dbContext.Endpoints.AsNoTracking() on assignment.EndpointId equals endpoint.EndpointId
+            where assignment.AssignmentId == normalizedAssignmentId
+            select new EditEndpointModel
+            {
+                AssignmentId = assignment.AssignmentId,
+                EndpointId = endpoint.EndpointId,
+                EndpointName = endpoint.Name,
+                Target = endpoint.Target,
+                AgentId = assignment.AgentId,
+                DependsOnEndpointId = endpoint.DependsOnEndpointId,
+                EndpointEnabled = endpoint.Enabled,
+                AssignmentEnabled = assignment.Enabled,
+                PingIntervalSeconds = assignment.PingIntervalSeconds,
+                RetryIntervalSeconds = assignment.RetryIntervalSeconds,
+                TimeoutMs = assignment.TimeoutMs,
+                FailureThreshold = assignment.FailureThreshold,
+                RecoveryThreshold = assignment.RecoveryThreshold
+            }).SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<UpdateEndpointResult> UpdateEndpointWithAssignmentAsync(UpdateEndpointCommand command, CancellationToken cancellationToken)
+    {
+        var validationErrors = await ValidateUpdateAsync(command, cancellationToken);
+        if (validationErrors.Count > 0)
         {
-            errors.Add(new CreateEndpointValidationError(nameof(CreateEndpointCommand.Target), "Target is required."));
+            return UpdateEndpointResult.Failed(validationErrors.ToArray());
         }
 
-        if (string.IsNullOrWhiteSpace(command.AgentId))
-        {
-            errors.Add(new CreateEndpointValidationError(nameof(CreateEndpointCommand.AgentId), "Agent is required."));
-        }
+        var assignment = await _dbContext.MonitorAssignments
+            .SingleAsync(x => x.AssignmentId == command.AssignmentId.Trim(), cancellationToken);
+        var endpoint = await _dbContext.Endpoints
+            .SingleAsync(x => x.EndpointId == command.EndpointId.Trim(), cancellationToken);
 
-        ValidatePositive(nameof(CreateEndpointCommand.PingIntervalSeconds), command.PingIntervalSeconds, "Ping interval must be at least 1 second.", errors);
-        ValidatePositive(nameof(CreateEndpointCommand.RetryIntervalSeconds), command.RetryIntervalSeconds, "Retry interval must be at least 1 second.", errors);
-        ValidatePositive(nameof(CreateEndpointCommand.TimeoutMs), command.TimeoutMs, "Timeout must be at least 1 millisecond.", errors);
-        ValidatePositive(nameof(CreateEndpointCommand.FailureThreshold), command.FailureThreshold, "Failure threshold must be at least 1.", errors);
-        ValidatePositive(nameof(CreateEndpointCommand.RecoveryThreshold), command.RecoveryThreshold, "Recovery threshold must be at least 1.", errors);
+        endpoint.Name = command.EndpointName.Trim();
+        endpoint.Target = command.Target.Trim();
+        endpoint.Enabled = command.EndpointEnabled;
+        endpoint.DependsOnEndpointId = NormalizeDependency(command.DependsOnEndpointId);
+
+        assignment.AgentId = command.AgentId.Trim();
+        assignment.Enabled = command.AssignmentEnabled;
+        assignment.PingIntervalSeconds = command.PingIntervalSeconds;
+        assignment.RetryIntervalSeconds = command.RetryIntervalSeconds;
+        assignment.TimeoutMs = command.TimeoutMs;
+        assignment.FailureThreshold = command.FailureThreshold;
+        assignment.RecoveryThreshold = command.RecoveryThreshold;
+        assignment.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return UpdateEndpointResult.Succeeded();
+    }
+
+    private async Task<List<EndpointValidationError>> ValidateCreateAsync(CreateEndpointCommand command, CancellationToken cancellationToken)
+    {
+        var errors = new List<EndpointValidationError>();
+
+        ValidateCommon(
+            command.EndpointName,
+            command.Target,
+            command.AgentId,
+            command.PingIntervalSeconds,
+            command.RetryIntervalSeconds,
+            command.TimeoutMs,
+            command.FailureThreshold,
+            command.RecoveryThreshold,
+            errors);
 
         if (errors.Count > 0)
         {
             return errors;
         }
 
-        var normalizedAgentId = command.AgentId.Trim();
-        var agentExists = await _dbContext.Agents.AsNoTracking()
-            .AnyAsync(x => x.AgentId == normalizedAgentId && x.Enabled && !x.ApiKeyRevoked, cancellationToken);
-        if (!agentExists)
-        {
-            errors.Add(new CreateEndpointValidationError(nameof(CreateEndpointCommand.AgentId), "Selected agent is not available."));
-        }
-
-        var dependencyId = NormalizeDependency(command.DependsOnEndpointId);
-        if (dependencyId is not null)
-        {
-            var dependencyExists = await _dbContext.Endpoints.AsNoTracking()
-                .AnyAsync(x => x.EndpointId == dependencyId, cancellationToken);
-
-            if (!dependencyExists)
-            {
-                errors.Add(new CreateEndpointValidationError(nameof(CreateEndpointCommand.DependsOnEndpointId), "Selected dependency endpoint does not exist."));
-            }
-            else
-            {
-                var hasCycle = await WouldCreateCycleAsync(dependencyId, cancellationToken);
-                if (hasCycle)
-                {
-                    errors.Add(new CreateEndpointValidationError(nameof(CreateEndpointCommand.DependsOnEndpointId), "Selected dependency creates a circular dependency."));
-                }
-            }
-        }
+        await ValidateAgentAndDependencyAsync(command.AgentId, command.DependsOnEndpointId, null, errors, cancellationToken);
 
         var normalizedEndpointName = command.EndpointName.Trim();
         var endpointNameExists = await _dbContext.Endpoints.AsNoTracking()
@@ -131,19 +150,150 @@ internal sealed class EndpointManagementService : IEndpointManagementService
 
         if (endpointNameExists)
         {
-            errors.Add(new CreateEndpointValidationError(nameof(CreateEndpointCommand.EndpointName), "An endpoint with this name already exists."));
+            errors.Add(new EndpointValidationError(nameof(CreateEndpointCommand.EndpointName), "An endpoint with this name already exists."));
         }
 
         return errors;
     }
 
-    private async Task<bool> WouldCreateCycleAsync(string dependencyEndpointId, CancellationToken cancellationToken)
+    private async Task<List<EndpointValidationError>> ValidateUpdateAsync(UpdateEndpointCommand command, CancellationToken cancellationToken)
+    {
+        var errors = new List<EndpointValidationError>();
+
+        var normalizedAssignmentId = NormalizeRequired(command.AssignmentId);
+        var normalizedEndpointId = NormalizeRequired(command.EndpointId);
+
+        if (normalizedAssignmentId is null)
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.AssignmentId), "Assignment ID is required."));
+        }
+
+        if (normalizedEndpointId is null)
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.EndpointId), "Endpoint ID is required."));
+        }
+
+        ValidateCommon(
+            command.EndpointName,
+            command.Target,
+            command.AgentId,
+            command.PingIntervalSeconds,
+            command.RetryIntervalSeconds,
+            command.TimeoutMs,
+            command.FailureThreshold,
+            command.RecoveryThreshold,
+            errors);
+
+        if (errors.Count > 0)
+        {
+            return errors;
+        }
+
+        var assignment = await _dbContext.MonitorAssignments.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.AssignmentId == normalizedAssignmentId, cancellationToken);
+
+        if (assignment is null)
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.AssignmentId), "Assignment was not found."));
+            return errors;
+        }
+
+        if (!string.Equals(assignment.EndpointId, normalizedEndpointId, StringComparison.Ordinal))
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.EndpointId), "Endpoint does not match assignment."));
+            return errors;
+        }
+
+        var endpointExists = await _dbContext.Endpoints.AsNoTracking()
+            .AnyAsync(x => x.EndpointId == normalizedEndpointId, cancellationToken);
+
+        if (!endpointExists)
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.EndpointId), "Endpoint was not found."));
+            return errors;
+        }
+
+        await ValidateAgentAndDependencyAsync(command.AgentId, command.DependsOnEndpointId, normalizedEndpointId, errors, cancellationToken);
+
+        var normalizedEndpointName = command.EndpointName.Trim();
+        var duplicateNameExists = await _dbContext.Endpoints.AsNoTracking()
+            .AnyAsync(x => x.Name == normalizedEndpointName && x.EndpointId != normalizedEndpointId, cancellationToken);
+
+        if (duplicateNameExists)
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.EndpointName), "An endpoint with this name already exists."));
+        }
+
+        var duplicateAssignmentExists = await _dbContext.MonitorAssignments.AsNoTracking()
+            .AnyAsync(x => x.AssignmentId != normalizedAssignmentId && x.AgentId == command.AgentId.Trim() && x.EndpointId == normalizedEndpointId, cancellationToken);
+
+        if (duplicateAssignmentExists)
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.AgentId), "This agent is already assigned to the endpoint."));
+        }
+
+        return errors;
+    }
+
+    private async Task ValidateAgentAndDependencyAsync(
+        string agentId,
+        string? dependsOnEndpointId,
+        string? currentEndpointId,
+        ICollection<EndpointValidationError> errors,
+        CancellationToken cancellationToken)
+    {
+        var normalizedAgentId = agentId.Trim();
+        var agentExists = await _dbContext.Agents.AsNoTracking()
+            .AnyAsync(x => x.AgentId == normalizedAgentId && x.Enabled && !x.ApiKeyRevoked, cancellationToken);
+
+        if (!agentExists)
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.AgentId), "Selected agent is not available."));
+        }
+
+        var dependencyId = NormalizeDependency(dependsOnEndpointId);
+        if (dependencyId is null)
+        {
+            return;
+        }
+
+        var dependencyExists = await _dbContext.Endpoints.AsNoTracking()
+            .AnyAsync(x => x.EndpointId == dependencyId, cancellationToken);
+
+        if (!dependencyExists)
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointId), "Selected dependency endpoint does not exist."));
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentEndpointId) && string.Equals(dependencyId, currentEndpointId, StringComparison.Ordinal))
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointId), "Dependency cannot reference the endpoint itself."));
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentEndpointId))
+        {
+            var hasCycle = await WouldCreateCycleAsync(currentEndpointId, dependencyId, cancellationToken);
+            if (hasCycle)
+            {
+                errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointId), "Selected dependency creates a circular dependency."));
+            }
+        }
+    }
+
+    private async Task<bool> WouldCreateCycleAsync(string endpointId, string dependencyEndpointId, CancellationToken cancellationToken)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var currentId = dependencyEndpointId;
 
         while (!string.IsNullOrWhiteSpace(currentId))
         {
+            if (string.Equals(currentId, endpointId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
             if (!visited.Add(currentId))
             {
                 return true;
@@ -158,16 +308,54 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         return false;
     }
 
+    private static void ValidateCommon(
+        string endpointName,
+        string target,
+        string agentId,
+        int pingIntervalSeconds,
+        int retryIntervalSeconds,
+        int timeoutMs,
+        int failureThreshold,
+        int recoveryThreshold,
+        ICollection<EndpointValidationError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(endpointName))
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.EndpointName), "Endpoint name is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.Target), "Target is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(agentId))
+        {
+            errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.AgentId), "Agent is required."));
+        }
+
+        ValidatePositive(nameof(UpdateEndpointCommand.PingIntervalSeconds), pingIntervalSeconds, "Ping interval must be at least 1 second.", errors);
+        ValidatePositive(nameof(UpdateEndpointCommand.RetryIntervalSeconds), retryIntervalSeconds, "Retry interval must be at least 1 second.", errors);
+        ValidatePositive(nameof(UpdateEndpointCommand.TimeoutMs), timeoutMs, "Timeout must be at least 1 millisecond.", errors);
+        ValidatePositive(nameof(UpdateEndpointCommand.FailureThreshold), failureThreshold, "Failure threshold must be at least 1.", errors);
+        ValidatePositive(nameof(UpdateEndpointCommand.RecoveryThreshold), recoveryThreshold, "Recovery threshold must be at least 1.", errors);
+    }
+
     private static string? NormalizeDependency(string? dependencyId)
     {
         return string.IsNullOrWhiteSpace(dependencyId) ? null : dependencyId.Trim();
     }
 
-    private static void ValidatePositive(string field, int value, string message, ICollection<CreateEndpointValidationError> errors)
+    private static string? NormalizeRequired(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static void ValidatePositive(string field, int value, string message, ICollection<EndpointValidationError> errors)
     {
         if (value < 1)
         {
-            errors.Add(new CreateEndpointValidationError(field, message));
+            errors.Add(new EndpointValidationError(field, message));
         }
     }
 }

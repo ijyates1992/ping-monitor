@@ -95,6 +95,7 @@ builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
+builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();
 builder.Services.AddScoped<IAgentManagementQueryService, AgentManagementQueryService>();
 

@@ -473,3 +473,10 @@ This data model enforces:
 - The assignment is always agent-specific and requires selecting a target agent.
 - Dependency selection is optional (`dependsOnEndpointId` may be null).
 - Dependency cycles are not allowed; creation must be blocked if a cycle would be introduced.
+
+## Endpoint management note (control-plane UI)
+
+- Manage Endpoints (`/endpoints`) edits both shared `Endpoint` fields and assignment-scoped `MonitorAssignment` fields.
+- Assignment state remains per `MonitorAssignment`; endpoint edits do not change this scoping rule.
+- Dependency updates block self-reference and cycle creation to preserve a directed acyclic dependency graph.
+- Reassignment updates the existing `MonitorAssignment.agentId` explicitly; this flow does not create duplicate assignments.
