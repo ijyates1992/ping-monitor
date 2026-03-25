@@ -1,0 +1,134 @@
+@model PingMonitor.Web.ViewModels.Endpoints.EditEndpointPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Edit endpoint assignment</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --danger:#b42318; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 760px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .field-grid { display:grid; gap:.85rem; }
+        label { display:block; font-weight:600; margin-bottom:.35rem; }
+        input, select { width:100%; min-height:48px; padding:.8rem; border:1px solid var(--border); border-radius:10px; font-size:1rem; }
+        .checkbox { display:flex; align-items:center; gap:.55rem; }
+        .checkbox input { width:22px; min-height:22px; margin:0; }
+        .checkbox label { margin:0; }
+        .errors { border:1px solid #fecdca; background:#fef3f2; border-radius:10px; padding:.8rem; color:var(--danger); }
+        .field-error { color:var(--danger); font-size:.9rem; margin-top:.25rem; }
+        .actions { display:flex; gap:.75rem; flex-wrap:wrap; }
+        .button,.button-secondary { display:inline-flex; align-items:center; justify-content:center; min-height:48px; padding:.8rem 1rem; border-radius:10px; font-weight:600; text-decoration:none; }
+        .button { border:0; background:var(--accent); color:white; }
+        .button-secondary { border:1px solid var(--border); color:var(--text); background:white; }
+        .muted { color: var(--muted); }
+        @@media (min-width: 720px) { .field-grid.two-col { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Edit endpoint assignment</h1>
+            <p class="muted">Assignment ID: @Model.AssignmentId</p>
+        </section>
+
+        <form method="post" action="/endpoints/@Model.AssignmentId/edit" class="stack">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="AssignmentId" />
+            <input type="hidden" asp-for="EndpointId" />
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="errors" asp-validation-summary="ModelOnly"></div>
+            }
+
+            <section class="card">
+                <h2>Endpoint details</h2>
+                <div class="field-grid">
+                    <div>
+                        <label asp-for="EndpointName"></label>
+                        <input asp-for="EndpointName" />
+                        <div class="field-error"><span asp-validation-for="EndpointName"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="Target"></label>
+                        <input asp-for="Target" />
+                        <div class="field-error"><span asp-validation-for="Target"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="AgentId"></label>
+                        <select asp-for="AgentId">
+                            <option value="">Select an agent</option>
+                            @foreach (var agent in Model.AvailableAgents)
+                            {
+                                <option value="@agent.AgentId">@agent.DisplayName</option>
+                            }
+                        </select>
+                        <div class="field-error"><span asp-validation-for="AgentId"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DependsOnEndpointId"></label>
+                        <select asp-for="DependsOnEndpointId">
+                            <option value="">None</option>
+                            @foreach (var endpoint in Model.AvailableDependencies)
+                            {
+                                <option value="@endpoint.EndpointId">@endpoint.EndpointName</option>
+                            }
+                        </select>
+                        <div class="field-error"><span asp-validation-for="DependsOnEndpointId"></span></div>
+                    </div>
+                    <div class="checkbox">
+                        <input asp-for="EndpointEnabled" />
+                        <label asp-for="EndpointEnabled"></label>
+                    </div>
+                    <div class="checkbox">
+                        <input asp-for="AssignmentEnabled" />
+                        <label asp-for="AssignmentEnabled"></label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Monitoring settings</h2>
+                <div class="field-grid two-col">
+                    <div>
+                        <label asp-for="PingIntervalSeconds"></label>
+                        <input asp-for="PingIntervalSeconds" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="PingIntervalSeconds"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="RetryIntervalSeconds"></label>
+                        <input asp-for="RetryIntervalSeconds" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="RetryIntervalSeconds"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="TimeoutMs"></label>
+                        <input asp-for="TimeoutMs" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="TimeoutMs"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="FailureThreshold"></label>
+                        <input asp-for="FailureThreshold" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="FailureThreshold"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="RecoveryThreshold"></label>
+                        <input asp-for="RecoveryThreshold" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="RecoveryThreshold"></span></div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="actions">
+                <button class="button" type="submit">Save changes</button>
+                <a class="button-secondary" href="/endpoints">Cancel</a>
+            </div>
+        </form>
+    </div>
+</main>
+</body>
+</html>
