@@ -1,0 +1,116 @@
+@model PingMonitor.Web.ViewModels.Admin.AdminSettingsPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin settings</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6f8;
+            --card: #ffffff;
+            --text: #102a43;
+            --muted: #52606d;
+            --border: #d9e2ec;
+            --accent: #0f62fe;
+            --success: #137333;
+            --error-bg: #fee4e2;
+            --error-text: #b42318;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 760px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .field-grid { display: grid; gap: .85rem; }
+        label { display: block; font-weight: 600; margin-bottom: .35rem; }
+        input { width: 100%; min-height: 48px; padding: .8rem; border: 1px solid var(--border); border-radius: 10px; font-size: 1rem; }
+        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+        .button, .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .8rem 1rem; border-radius: 10px; font-weight: 600; text-decoration: none; }
+        .button { border: 0; background: var(--accent); color: white; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: white; }
+        .field-error { color: var(--error-text); font-size: .9rem; margin-top: .25rem; }
+        .errors { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: .8rem; }
+        .saved { border: 1px solid #c2f0c2; background: #ebffee; color: var(--success); border-radius: 10px; padding: .8rem; }
+        .muted { color: var(--muted); }
+        @@media (min-width: 720px) {
+            .field-grid.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Admin settings</h1>
+            <p class="muted">Configure application-level settings used by agent provisioning and new endpoint defaults.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/status">Back to status</a>
+            </div>
+        </section>
+
+        <form method="post" action="/admin" class="stack">
+            @Html.AntiForgeryToken()
+
+            @if (Model.Saved)
+            {
+                <div class="saved" role="status">Settings saved successfully.</div>
+            }
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="errors" asp-validation-summary="ModelOnly"></div>
+            }
+
+            <section class="card">
+                <h2>Agent provisioning</h2>
+                <div class="field-grid">
+                    <div>
+                        <label asp-for="SiteUrl"></label>
+                        <input asp-for="SiteUrl" />
+                        <div class="field-error"><span asp-validation-for="SiteUrl"></span></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Default endpoint values</h2>
+                <div class="field-grid two-col">
+                    <div>
+                        <label asp-for="DefaultPingIntervalSeconds"></label>
+                        <input asp-for="DefaultPingIntervalSeconds" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="DefaultPingIntervalSeconds"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DefaultRetryIntervalSeconds"></label>
+                        <input asp-for="DefaultRetryIntervalSeconds" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="DefaultRetryIntervalSeconds"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DefaultTimeoutMs"></label>
+                        <input asp-for="DefaultTimeoutMs" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="DefaultTimeoutMs"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DefaultFailureThreshold"></label>
+                        <input asp-for="DefaultFailureThreshold" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="DefaultFailureThreshold"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DefaultRecoveryThreshold"></label>
+                        <input asp-for="DefaultRecoveryThreshold" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="DefaultRecoveryThreshold"></span></div>
+                    </div>
+                </div>
+                <p class="muted">Last updated: @Model.UpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+            </section>
+
+            <div class="button-row">
+                <button class="button" type="submit">Save settings</button>
+            </div>
+        </form>
+    </div>
+</main>
+</body>
+</html>

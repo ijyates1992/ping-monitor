@@ -21,7 +21,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "CheckResults",
         "ResultBatches",
         "EndpointStates",
-        "StateTransitions"
+        "StateTransitions",
+        "ApplicationSettings"
     ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
@@ -114,7 +115,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-        await EnsureStateEngineTablesAsync(dbContext, cancellationToken);
+        await EnsureAdditionalTablesAsync(dbContext, cancellationToken);
 
         var schemaInfo = await dbContext.AppSchemaInfos.OrderByDescending(x => x.AppSchemaInfoId).FirstOrDefaultAsync(cancellationToken);
         if (schemaInfo is null)
@@ -138,7 +139,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         return await GetStatusAsync(cancellationToken);
     }
 
-    private static async Task EnsureStateEngineTablesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    private static async Task EnsureAdditionalTablesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         const string createEndpointStatesSql = """
             CREATE TABLE IF NOT EXISTS `EndpointStates` (
@@ -170,7 +171,22 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+        const string createApplicationSettingsSql = """
+            CREATE TABLE IF NOT EXISTS `ApplicationSettings` (
+                `ApplicationSettingsId` int NOT NULL,
+                `SiteUrl` varchar(2048) NOT NULL,
+                `DefaultPingIntervalSeconds` int NOT NULL,
+                `DefaultRetryIntervalSeconds` int NOT NULL,
+                `DefaultTimeoutMs` int NOT NULL,
+                `DefaultFailureThreshold` int NOT NULL,
+                `DefaultRecoveryThreshold` int NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`ApplicationSettingsId`)
+            );
+            """;
+
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
     }
 }

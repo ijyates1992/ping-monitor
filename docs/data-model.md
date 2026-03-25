@@ -159,6 +159,28 @@ Defines what an agent monitors and how.
 
 ---
 
+### ApplicationSettings
+
+Represents singleton control-plane settings managed from the admin page.
+
+#### Purpose
+
+- provide explicit application-level defaults
+- avoid hidden environment-dependent behavior
+
+#### Key fields
+
+- `applicationSettingsId` (singleton id: 1)
+- `siteUrl` (used when generating agent `.env` `SERVER_URL`)
+- `defaultPingIntervalSeconds`
+- `defaultRetryIntervalSeconds`
+- `defaultTimeoutMs`
+- `defaultFailureThreshold`
+- `defaultRecoveryThreshold`
+- `updatedAtUtc`
+
+---
+
 ### CheckResult
 
 Represents a single raw check result.
@@ -338,6 +360,7 @@ These are scoped per agent:
 These are shared:
 
 - Endpoint  
+- ApplicationSettings  
 
 ### Important implication
 

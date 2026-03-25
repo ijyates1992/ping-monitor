@@ -1,10 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
-using PingMonitor.Web.Options;
 
 namespace PingMonitor.Web.Services;
 
@@ -13,20 +11,20 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
     private readonly PingMonitorDbContext _dbContext;
     private readonly IAgentApiKeyHasher _apiKeyHasher;
     private readonly IAgentPackageBuilder _agentPackageBuilder;
-    private readonly AgentProvisioningOptions _options;
+    private readonly IApplicationSettingsService _applicationSettingsService;
     private readonly ILogger<AgentProvisioningService> _logger;
 
     public AgentProvisioningService(
         PingMonitorDbContext dbContext,
         IAgentApiKeyHasher apiKeyHasher,
         IAgentPackageBuilder agentPackageBuilder,
-        IOptions<AgentProvisioningOptions> options,
+        IApplicationSettingsService applicationSettingsService,
         ILogger<AgentProvisioningService> logger)
     {
         _dbContext = dbContext;
         _apiKeyHasher = apiKeyHasher;
         _agentPackageBuilder = agentPackageBuilder;
-        _options = options.Value;
+        _applicationSettingsService = applicationSettingsService;
         _logger = logger;
     }
 
@@ -38,7 +36,8 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
             throw new ArgumentException("Agent name is required.", nameof(agentName));
         }
 
-        var serverUrl = ValidateServerUrl(_options.ServerUrl);
+        var settings = await _applicationSettingsService.GetCurrentAsync(cancellationToken);
+        var serverUrl = ValidateServerUrl(settings.SiteUrl);
         var now = DateTimeOffset.UtcNow;
         var instanceId = await GenerateUniqueInstanceIdAsync(normalizedName, cancellationToken);
 
@@ -94,18 +93,18 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
     {
         if (string.IsNullOrWhiteSpace(configuredServerUrl))
         {
-            throw new InvalidOperationException("Agent provisioning is not configured. Set AgentProvisioning:ServerUrl.");
+            throw new InvalidOperationException("Agent provisioning Site URL is not configured. Set it on /admin.");
         }
 
         var value = configuredServerUrl.Trim();
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
         {
-            throw new InvalidOperationException("AgentProvisioning:ServerUrl must be an absolute URL.");
+            throw new InvalidOperationException("Admin Site URL must be an absolute URL.");
         }
 
         if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("AgentProvisioning:ServerUrl must use HTTPS.");
+            throw new InvalidOperationException("Admin Site URL must use HTTPS.");
         }
 
         return uri.ToString().TrimEnd('/');

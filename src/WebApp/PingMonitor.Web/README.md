@@ -59,3 +59,12 @@ In normal startup mode, the first operational status page is available at `GET /
 The default landing page at `GET /` routes to the same `StatusController.Index` page so the control plane has an operational landing route immediately after startup-gate completion.
 
 It shows the current server-derived state for each `MonitorAssignment`, including endpoint, target, agent instance, state, counters, dependency parent, suppression source, check type, and enabled flags. The page is assignment-scoped, so the same endpoint can appear more than once for different agents. `SUPPRESSED` is derived on the server from dependency evaluation and is never agent-supplied.
+
+## Admin settings page
+
+In normal startup mode, `GET /admin` provides a server-rendered settings page for:
+
+- `SiteUrl` used by generated agent `.env` files as `SERVER_URL`
+- default endpoint timing/threshold values used to prefill `GET /endpoints/new`
+
+These values are persisted in the `ApplicationSettings` table and can be updated from `POST /admin`.
