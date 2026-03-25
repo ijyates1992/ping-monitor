@@ -36,10 +36,11 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
             throw new ArgumentException("Agent name is required.", nameof(agentName));
         }
 
+        var now = DateTimeOffset.UtcNow;
         var settings = await _applicationSettingsService.GetCurrentAsync(cancellationToken);
         var serverUrl = ValidateServerUrl(settings.SiteUrl);
-        var now = DateTimeOffset.UtcNow;
         var instanceId = await GenerateUniqueInstanceIdAsync(normalizedName, cancellationToken);
+        var plainTextApiKey = GenerateApiKey();
 
         var agent = new Agent
         {
@@ -56,10 +57,10 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
             Platform = null,
             MachineName = null,
             CreatedAtUtc = now,
-            ApiKeyCreatedAtUtc = now
+            ApiKeyCreatedAtUtc = now,
+            ApiKeyHash = string.Empty
         };
 
-        var plainTextApiKey = GenerateApiKey();
         agent.ApiKeyHash = _apiKeyHasher.Hash(agent, plainTextApiKey);
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -73,20 +74,93 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
             await transaction.CommitAsync(cancellationToken);
             _logger.LogInformation("Provisioned agent {AgentId} with instance {InstanceId}", agent.AgentId, agent.InstanceId);
 
-            return new AgentProvisioningResult
-            {
-                AgentId = agent.AgentId,
-                InstanceId = agent.InstanceId,
-                AgentName = normalizedName,
-                PackageFileName = BuildFileName(instanceId),
-                PackageBytes = packageBytes
-            };
+            return BuildResult(agent.AgentId, agent.InstanceId, normalizedName, packageBytes);
         }
         catch
         {
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
+    }
+
+    public async Task<bool> SetEnabledAsync(string agentId, bool enabled, CancellationToken cancellationToken)
+    {
+        var normalizedAgentId = NormalizeAgentId(agentId);
+        var agent = await _dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
+        if (agent is null)
+        {
+            throw new InvalidOperationException("Agent not found.");
+        }
+
+        if (agent.Enabled == enabled)
+        {
+            return false;
+        }
+
+        agent.Enabled = enabled;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Set enabled={Enabled} for agent {AgentId}", enabled, agent.AgentId);
+        return true;
+    }
+
+    public async Task<AgentProvisioningResult> RotatePackageAsync(string agentId, CancellationToken cancellationToken)
+    {
+        var normalizedAgentId = NormalizeAgentId(agentId);
+        var agent = await _dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
+        if (agent is null)
+        {
+            throw new InvalidOperationException("Agent not found.");
+        }
+
+        var settings = await _applicationSettingsService.GetCurrentAsync(cancellationToken);
+        var serverUrl = ValidateServerUrl(settings.SiteUrl);
+        var now = DateTimeOffset.UtcNow;
+        var plainTextApiKey = GenerateApiKey();
+        var apiKeyHash = _apiKeyHasher.Hash(agent, plainTextApiKey);
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            agent.ApiKeyHash = apiKeyHash;
+            agent.ApiKeyCreatedAtUtc = now;
+            agent.ApiKeyRevoked = false;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var packageBytes = await _agentPackageBuilder.BuildAsync(serverUrl, agent.InstanceId, plainTextApiKey, cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+            _logger.LogInformation("Rotated API key and package for agent {AgentId} ({InstanceId})", agent.AgentId, agent.InstanceId);
+
+            return BuildResult(agent.AgentId, agent.InstanceId, agent.Name ?? agent.InstanceId, packageBytes);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private static string NormalizeAgentId(string agentId)
+    {
+        var normalizedAgentId = agentId.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedAgentId))
+        {
+            throw new InvalidOperationException("Agent ID is required.");
+        }
+
+        return normalizedAgentId;
+    }
+
+    private static AgentProvisioningResult BuildResult(string agentId, string instanceId, string agentName, byte[] packageBytes)
+    {
+        return new AgentProvisioningResult
+        {
+            AgentId = agentId,
+            InstanceId = instanceId,
+            AgentName = agentName,
+            PackageFileName = BuildFileName(instanceId),
+            PackageBytes = packageBytes
+        };
     }
 
     private static string ValidateServerUrl(string? configuredServerUrl)
