@@ -561,6 +561,14 @@ These read-side metrics are derived from existing facts and are intended for ope
   - average RTT (arithmetic mean of successful samples)
   - jitter = average absolute delta between consecutive successful RTT samples
 
+### Endpoint performance graphs (v1)
+
+- source: assignment-scoped `CheckResult` rows only
+- supported graph windows: `1h`, `24h`, `7d`
+- RTT graph uses successful checks with non-null `roundTripMs`
+- jitter graph uses absolute deltas between consecutive successful RTT samples
+- failure/drop graph uses failed `CheckResult` rows (`success = false`) bucketed by time; successful counts may be shown in the same buckets for context
+
 ---
 
 ## Future extensions

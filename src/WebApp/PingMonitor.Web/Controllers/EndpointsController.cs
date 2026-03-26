@@ -18,19 +18,22 @@ public sealed class EndpointsController : Controller
     private readonly IEndpointManagementService _endpointManagementService;
     private readonly IApplicationSettingsService _applicationSettingsService;
     private readonly IGroupManagementService _groupManagementService;
+    private readonly IEndpointPerformanceQueryService _endpointPerformanceQueryService;
 
     public EndpointsController(
         IEndpointCreationQueryService endpointCreationQueryService,
         IEndpointManagementQueryService endpointManagementQueryService,
         IEndpointManagementService endpointManagementService,
         IApplicationSettingsService applicationSettingsService,
-        IGroupManagementService groupManagementService)
+        IGroupManagementService groupManagementService,
+        IEndpointPerformanceQueryService endpointPerformanceQueryService)
     {
         _endpointCreationQueryService = endpointCreationQueryService;
         _endpointManagementQueryService = endpointManagementQueryService;
         _endpointManagementService = endpointManagementService;
         _applicationSettingsService = applicationSettingsService;
         _groupManagementService = groupManagementService;
+        _endpointPerformanceQueryService = endpointPerformanceQueryService;
     }
 
     [HttpGet("")]
@@ -166,6 +169,18 @@ public sealed class EndpointsController : Controller
         }
 
         return Redirect("/endpoints");
+    }
+
+    [HttpGet("{assignmentId}/performance")]
+    public async Task<IActionResult> Performance([FromRoute] string assignmentId, [FromQuery] string? range, CancellationToken cancellationToken)
+    {
+        var model = await _endpointPerformanceQueryService.GetPerformancePageAsync(assignmentId, range, cancellationToken);
+        if (model is null)
+        {
+            return NotFound();
+        }
+
+        return View("Performance", model);
     }
 
     [HttpGet("{assignmentId}/remove")]

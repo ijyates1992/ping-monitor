@@ -71,6 +71,7 @@
         .meta-item { min-width: 0; }
         .meta-item span { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .2rem; }
         .empty { text-align: center; padding: 1rem; border: 1px dashed var(--border); border-radius: 12px; }
+        .inline-actions { margin-top: .85rem; }
         .nowrap { white-space: nowrap; }
         @@media (min-width: 720px) {
             .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
@@ -194,6 +195,9 @@
                                 <div class="meta-item"><span>Endpoint enabled</span><div>@(row.EndpointEnabled ? "Enabled" : "Disabled")</div></div>
                                 <div class="meta-item"><span>Assignment ID</span><div>@row.AssignmentId</div></div>
                                 <div class="meta-item"><span>Endpoint ID</span><div>@row.EndpointId</div></div>
+                            </div>
+                            <div class="inline-actions">
+                                <a class="button-secondary" href="/endpoints/@row.AssignmentId/performance">View performance</a>
                             </div>
                         </article>
                     }

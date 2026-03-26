@@ -1,0 +1,209 @@
+@model PingMonitor.Web.ViewModels.Endpoints.EndpointPerformancePageViewModel
+@using System.Text.Json
+@{
+    static string FormatDate(DateTimeOffset value) => value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
+
+    var rttLabels = Model.RttSeries.Select(x => x.TimestampUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")).ToArray();
+    var rttValues = Model.RttSeries.Select(x => x.Value).ToArray();
+    var jitterLabels = Model.JitterSeries.Select(x => x.TimestampUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")).ToArray();
+    var jitterValues = Model.JitterSeries.Select(x => x.JitterMs).ToArray();
+    var failureLabels = Model.FailureSeries.Select(x => x.BucketStartUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm")).ToArray();
+    var failureCounts = Model.FailureSeries.Select(x => x.FailedCount).ToArray();
+    var successCounts = Model.FailureSeries.Select(x => x.SuccessfulCount).ToArray();
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Endpoint performance</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --danger:#b42318; --ok:#137333; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 1180px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .meta-grid { display: grid; gap: .75rem; grid-template-columns: repeat(1, minmax(0, 1fr)); }
+        .meta-item span { display:block; font-size: .85rem; color:var(--muted); margin-bottom: .25rem; }
+        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+        .button,.button-secondary { display:inline-flex; align-items:center; justify-content:center; min-height:48px; padding:.8rem 1rem; border-radius:10px; font-weight:600; text-decoration:none; }
+        .button { border:0; background:var(--accent); color:#fff; }
+        .button-secondary { border:1px solid var(--border); color:var(--text); background:#fff; }
+        .range-grid { display:grid; gap: .75rem; grid-template-columns: 1fr; align-items:end; }
+        label { display:block; font-weight: 600; margin-bottom: .3rem; }
+        select { width:100%; padding:.85rem; border:1px solid var(--border); border-radius:10px; font-size:1rem; }
+        .chart-wrap { position: relative; min-height: 230px; }
+        .empty { border: 1px dashed var(--border); border-radius: 10px; padding: .9rem; color: var(--muted); background: #f8fafc; }
+        .muted { color: var(--muted); }
+        @@media (min-width: 720px) {
+            .meta-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+            .range-grid { grid-template-columns: 220px auto; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Endpoint performance</h1>
+            <p style="margin-top:.2rem; color: var(--muted);">Operational graph view from raw check results for one assignment.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/endpoints">Back to endpoints</a>
+                <a class="button-secondary" href="/status">Back to status</a>
+                <a class="button" href="/endpoints/@Model.AssignmentId/edit">Edit assignment</a>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="meta-grid">
+                <div class="meta-item"><span>Endpoint</span><strong>@Model.EndpointName</strong></div>
+                <div class="meta-item"><span>Target</span><strong>@Model.Target</strong></div>
+                <div class="meta-item"><span>Agent</span><strong>@Model.AgentDisplay</strong></div>
+                <div class="meta-item"><span>Assignment ID</span><div>@Model.AssignmentId</div></div>
+                <div class="meta-item"><span>Window start</span><div>@FormatDate(Model.WindowStartUtc)</div></div>
+                <div class="meta-item"><span>Window end</span><div>@FormatDate(Model.WindowEndUtc)</div></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <form method="get" class="range-grid" action="/endpoints/@Model.AssignmentId/performance">
+                <div>
+                    <label for="range">Time range</label>
+                    <select id="range" name="range">
+                        @foreach (var range in Model.AvailableRanges)
+                        {
+                            <option value="@range.Value" selected="@(string.Equals(range.Value, Model.SelectedRange, StringComparison.Ordinal))">@range.Label</option>
+                        }
+                    </select>
+                </div>
+                <div class="button-row">
+                    <button class="button" type="submit">Apply range</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>RTT (successful checks only)</h2>
+            <p class="muted">X axis = check timestamp (UTC), Y axis = round-trip time in milliseconds.</p>
+            @if (Model.RttSeries.Count == 0)
+            {
+                <div class="empty">No successful RTT samples are available in this range.</div>
+            }
+            else
+            {
+                <div class="chart-wrap"><canvas id="rttChart" aria-label="RTT chart"></canvas></div>
+            }
+        </section>
+
+        <section class="card">
+            <h2>Check outcomes per time bucket</h2>
+            <p class="muted">Failed check counts are shown per bucket, with successful checks included for operational context.</p>
+            @if (Model.FailureSeries.Count == 0)
+            {
+                <div class="empty">No check results are available in this range.</div>
+            }
+            else
+            {
+                <div class="chart-wrap"><canvas id="failureChart" aria-label="Failure chart"></canvas></div>
+            }
+        </section>
+
+        <section class="card">
+            <h2>Jitter (consecutive successful RTT delta)</h2>
+            <p class="muted">Each point is |current successful RTT - previous successful RTT| in milliseconds.</p>
+            @if (Model.JitterSeries.Count == 0)
+            {
+                <div class="empty">At least two successful RTT samples are required to plot jitter.</div>
+            }
+            else
+            {
+                <div class="chart-wrap"><canvas id="jitterChart" aria-label="Jitter chart"></canvas></div>
+            }
+        </section>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+    const rttLabels = @Html.Raw(JsonSerializer.Serialize(rttLabels));
+    const rttValues = @Html.Raw(JsonSerializer.Serialize(rttValues));
+    const jitterLabels = @Html.Raw(JsonSerializer.Serialize(jitterLabels));
+    const jitterValues = @Html.Raw(JsonSerializer.Serialize(jitterValues));
+    const failureLabels = @Html.Raw(JsonSerializer.Serialize(failureLabels));
+    const failureCounts = @Html.Raw(JsonSerializer.Serialize(failureCounts));
+    const successCounts = @Html.Raw(JsonSerializer.Serialize(successCounts));
+
+    if (rttValues.length > 0) {
+        new Chart(document.getElementById('rttChart'), {
+            type: 'line',
+            data: {
+                labels: rttLabels,
+                datasets: [{
+                    label: 'RTT (ms)',
+                    data: rttValues,
+                    borderColor: '#0f62fe',
+                    backgroundColor: '#0f62fe',
+                    tension: 0.1,
+                    pointRadius: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Timestamp (UTC)' } },
+                    y: { title: { display: true, text: 'RTT (ms)' } }
+                }
+            }
+        });
+    }
+
+    if (failureLabels.length > 0) {
+        new Chart(document.getElementById('failureChart'), {
+            type: 'bar',
+            data: {
+                labels: failureLabels,
+                datasets: [
+                    { label: 'Failed checks', data: failureCounts, backgroundColor: '#b42318' },
+                    { label: 'Successful checks', data: successCounts, backgroundColor: '#137333' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Bucket start (UTC)' } },
+                    y: { title: { display: true, text: 'Count' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    if (jitterValues.length > 0) {
+        new Chart(document.getElementById('jitterChart'), {
+            type: 'line',
+            data: {
+                labels: jitterLabels,
+                datasets: [{
+                    label: 'Jitter (ms)',
+                    data: jitterValues,
+                    borderColor: '#b54708',
+                    backgroundColor: '#b54708',
+                    tension: 0.1,
+                    pointRadius: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Timestamp (UTC)' } },
+                    y: { title: { display: true, text: 'Jitter (ms)' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
