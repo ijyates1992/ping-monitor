@@ -30,24 +30,24 @@ internal sealed class AgentMetricsService : IAgentMetricsService
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        var historyRows = await _dbContext.AgentHeartbeatHistories
-            .AsNoTracking()
-            .Where(x => normalizedAgentIds.Contains(x.AgentId) && x.HeartbeatAtUtc >= windowStart && x.HeartbeatAtUtc <= now)
-            .Select(x => new { x.AgentId, x.HeartbeatAtUtc })
-            .ToListAsync(cancellationToken);
-
         var summaries = normalizedAgentIds.ToDictionary(
             x => x,
             _ => new AgentMetricSummary { UptimePercent = 0d },
             StringComparer.Ordinal);
 
         const int totalWindowMinutes = 24 * 60;
-        foreach (var group in historyRows.GroupBy(x => x.AgentId, StringComparer.Ordinal))
+        foreach (var agentId in normalizedAgentIds)
         {
             var minuteBuckets = new HashSet<int>();
-            foreach (var heartbeat in group)
+            var heartbeats = await _dbContext.AgentHeartbeatHistories
+                .AsNoTracking()
+                .Where(x => x.AgentId == agentId && x.HeartbeatAtUtc >= windowStart && x.HeartbeatAtUtc <= now)
+                .Select(x => x.HeartbeatAtUtc)
+                .ToListAsync(cancellationToken);
+
+            foreach (var heartbeatAtUtc in heartbeats)
             {
-                var minuteIndex = (int)Math.Floor((heartbeat.HeartbeatAtUtc - windowStart).TotalMinutes);
+                var minuteIndex = (int)Math.Floor((heartbeatAtUtc - windowStart).TotalMinutes);
                 if (minuteIndex < 0 || minuteIndex >= totalWindowMinutes)
                 {
                     continue;
@@ -57,7 +57,7 @@ internal sealed class AgentMetricsService : IAgentMetricsService
             }
 
             var uptimePercent = minuteBuckets.Count / (double)totalWindowMinutes * 100d;
-            summaries[group.Key] = new AgentMetricSummary { UptimePercent = uptimePercent };
+            summaries[agentId] = new AgentMetricSummary { UptimePercent = uptimePercent };
         }
 
         return summaries;
