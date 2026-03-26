@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services.Groups;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Groups;
 
 namespace PingMonitor.Web.Controllers;
 
+[Authorize(Roles = ApplicationRoles.Admin)]
 [Route("groups")]
 public sealed class GroupsController : Controller
 {

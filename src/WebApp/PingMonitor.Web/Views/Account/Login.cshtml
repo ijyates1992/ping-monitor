@@ -1,0 +1,18 @@
+@model PingMonitor.Web.Controllers.AccountController.LoginViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Login</title></head>
+<body>
+<main style="max-width:420px;margin:2rem auto;font-family:Arial,sans-serif;">
+    <h1>Sign in</h1>
+    @Html.ValidationSummary(false)
+    <form method="post" action="/account/login" style="display:grid;gap:.75rem;">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="ReturnUrl" />
+        <label>Username <input asp-for="UserName" /></label>
+        <label>Password <input asp-for="Password" type="password" /></label>
+        <button type="submit">Sign in</button>
+    </form>
+</main>
+</body>
+</html>

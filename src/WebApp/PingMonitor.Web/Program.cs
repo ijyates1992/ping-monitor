@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.Agents;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Groups;
@@ -42,7 +44,24 @@ builder.Services
     })
     .AddRoles<ApplicationRole>()
     .AddEntityFrameworkStores<PingMonitorDbContext>()
+    .AddSignInManager()
     .AddDefaultTokenProviders();
+
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+    options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+    options.DefaultSignInScheme = IdentityConstants.ApplicationScheme;
+})
+.AddIdentityCookies();
+
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 builder.Services.AddControllersWithViews()
     .AddJsonOptions(options =>
@@ -69,6 +88,7 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 
 builder.Services.AddHealthChecks();
+builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders =
@@ -104,11 +124,20 @@ builder.Services.AddScoped<IGroupManagementService, GroupManagementService>();
 builder.Services.AddScoped<IAgentManagementQueryService, AgentManagementQueryService>();
 builder.Services.AddScoped<IEndpointMetricsService, EndpointMetricsService>();
 builder.Services.AddScoped<IAgentMetricsService, AgentMetricsService>();
+builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
+builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
+    await RoleBootstrapService.EnsureRolesAsync(roleManager);
+}
+
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();
 

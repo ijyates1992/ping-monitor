@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Endpoints;
 
 namespace PingMonitor.Web.Services.Endpoints;
@@ -14,10 +15,14 @@ internal sealed class EndpointPerformanceQueryService : IEndpointPerformanceQuer
     }
 
     private readonly PingMonitorDbContext _dbContext;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
-    public EndpointPerformanceQueryService(PingMonitorDbContext dbContext)
+    public EndpointPerformanceQueryService(PingMonitorDbContext dbContext, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService)
     {
         _dbContext = dbContext;
+        _httpContextAccessor = httpContextAccessor;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public async Task<EndpointPerformancePageViewModel?> GetPerformancePageAsync(
@@ -26,6 +31,11 @@ internal sealed class EndpointPerformanceQueryService : IEndpointPerformanceQuer
         CancellationToken cancellationToken)
     {
         var normalizedAssignmentId = assignmentId.Trim();
+        var principal = _httpContextAccessor.HttpContext?.User;
+        if (principal is null || !await _userAccessScopeService.CanAccessAssignmentAsync(principal, normalizedAssignmentId, cancellationToken))
+        {
+            return null;
+        }
         if (string.IsNullOrWhiteSpace(normalizedAssignmentId))
         {
             return null;

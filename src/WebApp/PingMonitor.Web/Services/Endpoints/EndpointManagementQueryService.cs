@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.Metrics;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Endpoints;
 
 namespace PingMonitor.Web.Services.Endpoints;
@@ -10,16 +11,23 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly IEndpointMetricsService _endpointMetricsService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
-    public EndpointManagementQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService)
+    public EndpointManagementQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService)
     {
         _dbContext = dbContext;
         _endpointMetricsService = endpointMetricsService;
+        _httpContextAccessor = httpContextAccessor;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public async Task<ManageEndpointsPageViewModel> GetManagePageAsync(string? groupId, CancellationToken cancellationToken)
     {
         var normalizedGroupId = string.IsNullOrWhiteSpace(groupId) ? null : groupId.Trim();
+        var principal = _httpContextAccessor.HttpContext?.User;
+        var isAdmin = principal is not null && await _userAccessScopeService.IsAdminAsync(principal);
+        var visibleEndpointIds = isAdmin || principal is null ? null : await _userAccessScopeService.GetVisibleEndpointIdsAsync(principal, cancellationToken);
 
         var rows = await (
             from assignment in _dbContext.MonitorAssignments.AsNoTracking()
@@ -46,6 +54,11 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 assignment.RecoveryThreshold,
                 CurrentState = state != null ? state.CurrentState : EndpointStateKind.Unknown
             }).ToArrayAsync(cancellationToken);
+
+        if (visibleEndpointIds is not null)
+        {
+            rows = rows.Where(x => visibleEndpointIds.Contains(x.EndpointId)).ToArray();
+        }
 
         var groupLookup = (await _dbContext.EndpointGroupMemberships.AsNoTracking().ToArrayAsync(cancellationToken))
             .GroupBy(x => x.EndpointId, StringComparer.Ordinal)

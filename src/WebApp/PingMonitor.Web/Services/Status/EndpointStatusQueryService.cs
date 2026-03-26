@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.Metrics;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Status;
 
 namespace PingMonitor.Web.Services.Status;
@@ -10,11 +11,15 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly IEndpointMetricsService _endpointMetricsService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
-    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService)
+    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService)
     {
         _dbContext = dbContext;
         _endpointMetricsService = endpointMetricsService;
+        _httpContextAccessor = httpContextAccessor;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public async Task<EndpointStatusPageViewModel> GetStatusPageAsync(
@@ -25,6 +30,12 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         CancellationToken cancellationToken)
     {
         var normalizedState = Normalize(state);
+
+        var principal = _httpContextAccessor.HttpContext?.User;
+        var isAdmin = principal is not null && await _userAccessScopeService.IsAdminAsync(principal);
+        var visibleEndpointIds = isAdmin || principal is null
+            ? null
+            : await _userAccessScopeService.GetVisibleEndpointIdsAsync(principal, cancellationToken);
         var normalizedAgent = Normalize(agent);
         var normalizedGroupId = Normalize(groupId);
         var normalizedSearch = Normalize(search);
@@ -58,6 +69,11 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 SuppressedByEndpointId = endpointState != null ? endpointState.SuppressedByEndpointId : null,
                 SuppressedByEndpointName = suppressedByEndpoint != null ? suppressedByEndpoint.Name : null
             };
+
+        if (visibleEndpointIds is not null)
+        {
+            baseQuery = baseQuery.Where(row => visibleEndpointIds.Contains(row.EndpointId));
+        }
 
         if (parsedState.HasValue)
         {

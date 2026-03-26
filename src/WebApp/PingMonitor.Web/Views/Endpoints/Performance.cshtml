@@ -51,7 +51,10 @@
             <div class="button-row">
                 <a class="button-secondary" href="/endpoints">Back to endpoints</a>
                 <a class="button-secondary" href="/status">Back to status</a>
-                <a class="button" href="/endpoints/@Model.AssignmentId/edit">Edit assignment</a>
+                @if (User.IsInRole("Admin"))
+                {
+                    <a class="button" href="/endpoints/@Model.AssignmentId/edit">Edit assignment</a>
+                }
             </div>
         </section>
 

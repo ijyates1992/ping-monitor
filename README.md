@@ -265,3 +265,10 @@ Startup gate and agent API endpoints are in place, with MySQL used in all enviro
 ## License
 
 TBD
+
+
+## Access roles (v1)
+
+- `Admin`: full read/write access to control-plane pages and actions.
+- `User`: read-only access; visible endpoints are the union of explicit endpoint grants and endpoints in explicitly granted groups.
+- Visibility enforcement is server-side in query/service logic (not UI-only hiding).

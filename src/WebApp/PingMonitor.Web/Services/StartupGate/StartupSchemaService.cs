@@ -21,6 +21,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "EndpointDependencies",
         "Groups",
         "EndpointGroupMemberships",
+        "UserGroupAccesses",
+        "UserEndpointAccesses",
         "MonitorAssignments",
         "CheckResults",
         "ResultBatches",
@@ -248,6 +250,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+        const string createUserGroupAccessesSql = """
+            CREATE TABLE IF NOT EXISTS `UserGroupAccesses` (
+                `UserGroupAccessId` varchar(64) NOT NULL,
+                `UserId` varchar(255) NOT NULL,
+                `GroupId` varchar(64) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`UserGroupAccessId`),
+                UNIQUE KEY `UX_UserGroupAccesses_UserId_GroupId` (`UserId`, `GroupId`)
+            );
+            """;
+
+        const string createUserEndpointAccessesSql = """
+            CREATE TABLE IF NOT EXISTS `UserEndpointAccesses` (
+                `UserEndpointAccessId` varchar(64) NOT NULL,
+                `UserId` varchar(255) NOT NULL,
+                `EndpointId` varchar(64) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`UserEndpointAccessId`),
+                UNIQUE KEY `UX_UserEndpointAccesses_UserId_EndpointId` (`UserId`, `EndpointId`)
+            );
+            """;
+
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
@@ -255,6 +279,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createAgentHeartbeatHistorySql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createGroupsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointGroupMembershipsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createUserGroupAccessesSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createUserEndpointAccessesSql, cancellationToken);
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }

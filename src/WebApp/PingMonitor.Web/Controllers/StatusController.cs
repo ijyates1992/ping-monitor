@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services.Status;
 
 namespace PingMonitor.Web.Controllers;
 
+[Authorize]
 [Route("status")]
 public sealed class StatusController : Controller
 {

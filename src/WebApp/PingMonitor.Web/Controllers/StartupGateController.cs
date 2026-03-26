@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
@@ -6,6 +7,7 @@ using PingMonitor.Web.ViewModels.StartupGate;
 
 namespace PingMonitor.Web.Controllers;
 
+[AllowAnonymous]
 [Route("startup-gate")]
 public sealed class StartupGateController : Controller
 {

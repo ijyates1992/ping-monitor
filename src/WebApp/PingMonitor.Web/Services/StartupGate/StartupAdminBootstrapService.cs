@@ -2,12 +2,13 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models.Identity;
+using PingMonitor.Web.Services.Identity;
 
 namespace PingMonitor.Web.Services.StartupGate;
 
 internal sealed class StartupAdminBootstrapService : IStartupAdminBootstrapService
 {
-    public const string AdminRoleName = "Admin";
+    public const string AdminRoleName = ApplicationRoles.Admin;
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
     private readonly UserManager<ApplicationUser> _userManager;
@@ -71,6 +72,11 @@ internal sealed class StartupAdminBootstrapService : IStartupAdminBootstrapServi
                 _logger.LogWarning("Startup gate failed to create the Admin role.");
                 return (false, roleResult.Errors.Select(error => error.Description).ToArray());
             }
+        }
+
+        if (!await _roleManager.RoleExistsAsync(ApplicationRoles.User))
+        {
+            await _roleManager.CreateAsync(new ApplicationRole { Name = ApplicationRoles.User });
         }
 
         var user = new ApplicationUser

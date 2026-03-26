@@ -88,12 +88,16 @@
             <h1>Operational endpoint status</h1>
             <p class="muted">Current assignment-scoped status derived by the server state engine. Missing state rows are shown as <strong>UNKNOWN</strong> until trusted server-side state exists.</p>
             <div class="button-row">
-                <a class="button" href="/agents">Manage agents</a>
-                <a class="button-secondary" href="/agents/deploy">Deploy new agent</a>
-                <a class="button-secondary" href="/groups">Manage groups</a>
-                <a class="button-secondary" href="/endpoints">Manage endpoints</a>
-                <a class="button-secondary" href="/endpoints/new">Add new endpoint</a>
-                <a class="button-secondary" href="/admin">Admin settings</a>
+                <a class="button-secondary" href="/endpoints">Endpoints</a>
+                @if (User.IsInRole("Admin"))
+                {
+                    <a class="button" href="/agents">Manage agents</a>
+                    <a class="button-secondary" href="/agents/deploy">Deploy new agent</a>
+                    <a class="button-secondary" href="/groups">Manage groups</a>
+                    <a class="button-secondary" href="/endpoints/new">Add new endpoint</a>
+                    <a class="button-secondary" href="/admin">Admin settings</a>
+                    <a class="button-secondary" href="/users">Manage users</a>
+                }
             </div>
         </section>
 

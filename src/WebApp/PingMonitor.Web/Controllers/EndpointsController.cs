@@ -1,11 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Groups;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Endpoints;
 
 namespace PingMonitor.Web.Controllers;
 
+[Authorize]
 [Route("endpoints")]
 public sealed class EndpointsController : Controller
 {
@@ -19,6 +22,7 @@ public sealed class EndpointsController : Controller
     private readonly IApplicationSettingsService _applicationSettingsService;
     private readonly IGroupManagementService _groupManagementService;
     private readonly IEndpointPerformanceQueryService _endpointPerformanceQueryService;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
     public EndpointsController(
         IEndpointCreationQueryService endpointCreationQueryService,
@@ -26,7 +30,8 @@ public sealed class EndpointsController : Controller
         IEndpointManagementService endpointManagementService,
         IApplicationSettingsService applicationSettingsService,
         IGroupManagementService groupManagementService,
-        IEndpointPerformanceQueryService endpointPerformanceQueryService)
+        IEndpointPerformanceQueryService endpointPerformanceQueryService,
+        IUserAccessScopeService userAccessScopeService)
     {
         _endpointCreationQueryService = endpointCreationQueryService;
         _endpointManagementQueryService = endpointManagementQueryService;
@@ -34,6 +39,7 @@ public sealed class EndpointsController : Controller
         _applicationSettingsService = applicationSettingsService;
         _groupManagementService = groupManagementService;
         _endpointPerformanceQueryService = endpointPerformanceQueryService;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     [HttpGet("")]
@@ -45,6 +51,7 @@ public sealed class EndpointsController : Controller
         return View("Index", model);
     }
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet("new")]
     public async Task<IActionResult> New(CancellationToken cancellationToken)
     {
@@ -61,6 +68,7 @@ public sealed class EndpointsController : Controller
         return View("New", model);
     }
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost("new")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> New([FromForm] CreateEndpointPageViewModel model, CancellationToken cancellationToken)
@@ -99,6 +107,7 @@ public sealed class EndpointsController : Controller
         return Redirect("/endpoints");
     }
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet("{assignmentId}/edit")]
     public async Task<IActionResult> Edit([FromRoute] string assignmentId, CancellationToken cancellationToken)
     {
@@ -130,6 +139,7 @@ public sealed class EndpointsController : Controller
         return View("Edit", model);
     }
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost("{assignmentId}/edit")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit([FromRoute] string assignmentId, [FromForm] EditEndpointPageViewModel model, CancellationToken cancellationToken)
@@ -183,6 +193,7 @@ public sealed class EndpointsController : Controller
         return View("Performance", model);
     }
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet("{assignmentId}/remove")]
     public async Task<IActionResult> Remove([FromRoute] string assignmentId, CancellationToken cancellationToken)
     {
@@ -195,6 +206,7 @@ public sealed class EndpointsController : Controller
         return View("Remove", BuildRemoveViewModel(details));
     }
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost("{assignmentId}/remove")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Remove(

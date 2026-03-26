@@ -56,9 +56,12 @@
             <h1>Manage endpoints</h1>
             <p class="muted">Edit endpoint and assignment records without changing assignment-scoped state behavior.</p>
             <div class="button-row">
-                <a class="button" href="/endpoints/new">Add new endpoint</a>
-                <a class="button-secondary" href="/groups">Manage groups</a>
                 <a class="button-secondary" href="/status">View status</a>
+                @if (User.IsInRole("Admin"))
+                {
+                    <a class="button" href="/endpoints/new">Add new endpoint</a>
+                    <a class="button-secondary" href="/groups">Manage groups</a>
+                }
             </div>
         </section>
 
@@ -129,8 +132,11 @@
                             </div>
                             <div class="button-row" style="margin-top:.85rem;">
                                 <a class="button-secondary" href="/endpoints/@row.AssignmentId/performance">View performance</a>
-                                <a class="button-secondary" href="/endpoints/@row.AssignmentId/edit">Edit assignment</a>
-                                <a class="button-secondary" href="/endpoints/@row.AssignmentId/remove">Remove endpoint</a>
+                                @if (User.IsInRole("Admin"))
+                                {
+                                    <a class="button-secondary" href="/endpoints/@row.AssignmentId/edit">Edit assignment</a>
+                                    <a class="button-secondary" href="/endpoints/@row.AssignmentId/remove">Remove endpoint</a>
+                                }
                             </div>
                         </article>
                     }
