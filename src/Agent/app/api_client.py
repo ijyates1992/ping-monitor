@@ -62,7 +62,12 @@ class AgentApiClient:
 def _assignment_from_dict(payload: dict[str, Any]):
     from app.models import AssignmentModel
 
-    return AssignmentModel(**_to_snake_kwargs(payload))
+    snake_payload = _to_snake_kwargs(payload)
+    if "depends_on_endpoint_ids" not in snake_payload:
+        singular_dependency = snake_payload.pop("depends_on_endpoint_id", None)
+        if singular_dependency:
+            snake_payload["depends_on_endpoint_ids"] = [singular_dependency]
+    return AssignmentModel(**snake_payload)
 
 
 def _to_snake_kwargs(payload: dict[str, Any]) -> dict[str, Any]:

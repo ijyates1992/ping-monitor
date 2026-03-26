@@ -14,6 +14,8 @@ from app.models import ConfigResponse, HeartbeatRequest, HelloRequest, ResultsRe
 from app.result_queue import ResultQueue
 from app.scheduler import AssignmentScheduler
 
+BOOTSTRAP_CONFIG_VERSION = "bootstrap-pending"
+
 
 def main() -> None:
     config = load_config()
@@ -35,7 +37,7 @@ def main() -> None:
         )
     )
 
-    current_config = client.fetch_config()
+    current_config = _initialize_config(client, hello_response.config_version)
     logging.info(
         "Agent %s connected with config version %s containing %d assignments",
         hello_response.agent_id,
@@ -167,6 +169,15 @@ def _try_refresh_config(client: AgentApiClient, current_config: ConfigResponse, 
             _format_http_error(ex),
         )
         return current_config
+
+
+def _initialize_config(client: AgentApiClient, hello_config_version: str) -> ConfigResponse:
+    bootstrap_config = ConfigResponse(
+        config_version=hello_config_version or BOOTSTRAP_CONFIG_VERSION,
+        generated_at_utc=_utc_now(),
+        assignments=[],
+    )
+    return _try_refresh_config(client, bootstrap_config, "startup")
 
 
 if __name__ == "__main__":

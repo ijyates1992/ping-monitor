@@ -37,7 +37,7 @@ class AssignmentModel:
     timeout_ms: int
     failure_threshold: int
     recovery_threshold: int
-    depends_on_endpoint_id: Optional[str]
+    depends_on_endpoint_ids: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
 
 
