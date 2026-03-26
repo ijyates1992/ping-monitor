@@ -416,14 +416,12 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         var dependencyIds = normalizedDependencies.ToArray();
         if (dependencyIds.Length > 0)
         {
-            var existingDependencyIds = await _dbContext.Endpoints.AsNoTracking()
-                .Where(x => dependencyIds.Contains(x.EndpointId))
-                .Select(x => x.EndpointId)
-                .ToArrayAsync(cancellationToken);
-
             foreach (var dependencyId in dependencyIds)
             {
-                if (!existingDependencyIds.Contains(dependencyId, StringComparer.Ordinal))
+                var dependencyExists = await _dbContext.Endpoints.AsNoTracking()
+                    .AnyAsync(x => x.EndpointId == dependencyId, cancellationToken);
+
+                if (!dependencyExists)
                 {
                     errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointIds), $"Dependency endpoint '{dependencyId}' does not exist."));
                 }
