@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.ViewModels.Endpoints;
 
 namespace PingMonitor.Web.Services.Endpoints;
@@ -8,10 +9,12 @@ namespace PingMonitor.Web.Services.Endpoints;
 internal sealed class EndpointManagementQueryService : IEndpointManagementQueryService
 {
     private readonly PingMonitorDbContext _dbContext;
+    private readonly IEndpointMetricsService _endpointMetricsService;
 
-    public EndpointManagementQueryService(PingMonitorDbContext dbContext)
+    public EndpointManagementQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService)
     {
         _dbContext = dbContext;
+        _endpointMetricsService = endpointMetricsService;
     }
 
     public async Task<ManageEndpointsPageViewModel> GetManagePageAsync(string? groupId, CancellationToken cancellationToken)
@@ -73,12 +76,21 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).ToArray(),
                 StringComparer.Ordinal);
 
+        var metricsByAssignmentId = await _endpointMetricsService.GetEndpointMetricSummariesAsync(
+            rows.Select(x => x.AssignmentId).ToArray(),
+            cancellationToken);
+
         return new ManageEndpointsPageViewModel
         {
             GroupId = normalizedGroupId,
             AvailableGroups = groups.Select(x => new EndpointGroupOptionViewModel { GroupId = x.GroupId, Name = x.Name }).ToArray(),
             Rows = rows.Select(row => new ManageEndpointRowViewModel
             {
+                LastRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.LastRttMs,
+                AverageRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.AverageRttMs,
+                HighestRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.HighestRttMs,
+                LowestRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.LowestRttMs,
+                JitterMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.JitterMs,
                 AssignmentId = row.AssignmentId,
                 EndpointName = row.EndpointName,
                 Target = row.Target,

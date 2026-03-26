@@ -398,3 +398,12 @@ Degraded must remain:
 - `UNKNOWN` = insufficient data  
 
 The system must remain predictable, auditable, and explainable at all times.
+
+---
+
+## v1 uptime interpretation note (read model)
+
+- Operational uptime summaries use assignment-scoped state history over a rolling 24-hour window.
+- Time in `UP` and `DEGRADED` is counted as up-time.
+- Time in `DOWN`, `SUPPRESSED`, and `UNKNOWN` is not counted as up-time.
+- This note defines read-side reporting semantics only; it does not change transition rules above.

@@ -28,6 +28,11 @@ public sealed class ManageEndpointRowViewModel
     public int FailureThreshold { get; init; }
     public int RecoveryThreshold { get; init; }
     public EndpointStateKind CurrentState { get; init; } = EndpointStateKind.Unknown;
+    public double? LastRttMs { get; init; }
+    public double? AverageRttMs { get; init; }
+    public double? HighestRttMs { get; init; }
+    public double? LowestRttMs { get; init; }
+    public double? JitterMs { get; init; }
 }
 
 public sealed class EditEndpointPageViewModel

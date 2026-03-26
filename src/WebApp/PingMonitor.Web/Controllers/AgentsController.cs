@@ -42,7 +42,8 @@ public sealed class AgentsController : Controller
                 MachineName = row.MachineName,
                 Platform = row.Platform,
                 CreatedAtUtc = row.CreatedAtUtc,
-                AssignmentCount = row.AssignmentCount
+                AssignmentCount = row.AssignmentCount,
+                UptimePercent = row.UptimePercent
             }).ToList(),
             StatusMessage = TempData[StatusMessageKey] as string,
             ErrorMessage = TempData[ErrorMessageKey] as string

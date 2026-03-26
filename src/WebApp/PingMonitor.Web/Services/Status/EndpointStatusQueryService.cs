@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.ViewModels.Status;
 
 namespace PingMonitor.Web.Services.Status;
@@ -8,10 +9,12 @@ namespace PingMonitor.Web.Services.Status;
 internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
 {
     private readonly PingMonitorDbContext _dbContext;
+    private readonly IEndpointMetricsService _endpointMetricsService;
 
-    public EndpointStatusQueryService(PingMonitorDbContext dbContext)
+    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService)
     {
         _dbContext = dbContext;
+        _endpointMetricsService = endpointMetricsService;
     }
 
     public async Task<EndpointStatusPageViewModel> GetStatusPageAsync(
@@ -149,6 +152,41 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             };
         }).ToArray();
 
+        var endpointMetricsByAssignmentId = await _endpointMetricsService.GetEndpointMetricSummariesAsync(
+            projectedRows.Select(x => x.AssignmentId).ToArray(),
+            cancellationToken);
+
+        var rowsWithMetrics = projectedRows.Select(row =>
+        {
+            endpointMetricsByAssignmentId.TryGetValue(row.AssignmentId, out var metrics);
+            return new EndpointStatusRowViewModel
+            {
+                AssignmentId = row.AssignmentId,
+                EndpointId = row.EndpointId,
+                EndpointName = row.EndpointName,
+                Target = row.Target,
+                AgentId = row.AgentId,
+                AgentInstanceId = row.AgentInstanceId,
+                AgentName = row.AgentName,
+                CurrentState = row.CurrentState,
+                LastCheckUtc = row.LastCheckUtc,
+                LastStateChangeUtc = row.LastStateChangeUtc,
+                ConsecutiveFailureCount = row.ConsecutiveFailureCount,
+                ConsecutiveSuccessCount = row.ConsecutiveSuccessCount,
+                CheckType = row.CheckType,
+                AssignmentEnabled = row.AssignmentEnabled,
+                EndpointEnabled = row.EndpointEnabled,
+                ParentEndpointIds = row.ParentEndpointIds,
+                ParentEndpointNames = row.ParentEndpointNames,
+                SuppressedByEndpointId = row.SuppressedByEndpointId,
+                SuppressedByEndpointName = row.SuppressedByEndpointName,
+                GroupNames = row.GroupNames,
+                UptimePercent = metrics?.UptimePercent,
+                LastRttMs = metrics?.LastRttMs,
+                AverageRttMs = metrics?.AverageRttMs
+            };
+        }).ToArray();
+
         return new EndpointStatusPageViewModel
         {
             Summary = new EndpointStatusSummaryViewModel
@@ -169,7 +207,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AvailableAgents = availableAgents,
                 AvailableGroups = availableGroups
             },
-            Rows = projectedRows
+            Rows = rowsWithMetrics
         };
     }
 

@@ -59,6 +59,9 @@ public sealed class EndpointStatusRowViewModel
     public string? SuppressedByEndpointId { get; init; }
     public string? SuppressedByEndpointName { get; init; }
     public IReadOnlyList<string> GroupNames { get; init; } = [];
+    public double? UptimePercent { get; init; }
+    public double? LastRttMs { get; init; }
+    public double? AverageRttMs { get; init; }
 }
 
 public sealed class StatusGroupOptionViewModel

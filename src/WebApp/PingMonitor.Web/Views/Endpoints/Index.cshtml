@@ -9,6 +9,7 @@
         EndpointStateKind.Degraded => "state-degraded",
         _ => "state-unknown"
     };
+    static string FormatRtt(double? value) => value.HasValue ? $"{value.Value:F1} ms" : "No data";
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -118,6 +119,11 @@
                                 <div class="meta-item"><span>Ping interval</span><div>@row.PingIntervalSeconds s</div></div>
                                 <div class="meta-item"><span>Retry interval</span><div>@row.RetryIntervalSeconds s</div></div>
                                 <div class="meta-item"><span>Timeout</span><div>@row.TimeoutMs ms</div></div>
+                                <div class="meta-item"><span>Last RTT (24h)</span><div>@FormatRtt(row.LastRttMs)</div></div>
+                                <div class="meta-item"><span>Average RTT (24h)</span><div>@FormatRtt(row.AverageRttMs)</div></div>
+                                <div class="meta-item"><span>High RTT (24h)</span><div>@FormatRtt(row.HighestRttMs)</div></div>
+                                <div class="meta-item"><span>Low RTT (24h)</span><div>@FormatRtt(row.LowestRttMs)</div></div>
+                                <div class="meta-item"><span>Jitter (24h)</span><div>@FormatRtt(row.JitterMs)</div></div>
                                 <div class="meta-item"><span>Failure threshold</span><div>@row.FailureThreshold</div></div>
                                 <div class="meta-item"><span>Recovery threshold</span><div>@row.RecoveryThreshold</div></div>
                             </div>
