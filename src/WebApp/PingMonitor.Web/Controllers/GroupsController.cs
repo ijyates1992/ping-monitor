@@ -55,7 +55,7 @@ public sealed class GroupsController : Controller
         }
 
         TempData[StatusMessageKey] = "Group created.";
-        return Redirect("/groups");
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpGet("{id}/edit")]
@@ -98,6 +98,6 @@ public sealed class GroupsController : Controller
         }
 
         TempData[StatusMessageKey] = "Group updated.";
-        return Redirect("/groups");
+        return RedirectToAction(nameof(Index));
     }
 }

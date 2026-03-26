@@ -23,7 +23,7 @@
 </head>
 <body>
 <main>
-    <form method="post" action="/groups/new" class="stack">
+    <form method="post" asp-controller="Groups" asp-action="New" class="stack">
         @Html.AntiForgeryToken()
         <section class="card">
             <h1>Create group</h1>
@@ -39,7 +39,7 @@
         </section>
         <div>
             <button class="button" type="submit">Create group</button>
-            <a class="button-secondary" href="/groups">Cancel</a>
+            <a class="button-secondary" asp-controller="Groups" asp-action="Index">Cancel</a>
         </div>
     </form>
 </main>
