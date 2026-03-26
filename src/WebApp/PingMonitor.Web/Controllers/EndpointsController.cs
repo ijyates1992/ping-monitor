@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Endpoints;
+using PingMonitor.Web.Services.Groups;
 using PingMonitor.Web.ViewModels.Endpoints;
 
 namespace PingMonitor.Web.Controllers;
@@ -16,23 +17,26 @@ public sealed class EndpointsController : Controller
     private readonly IEndpointManagementQueryService _endpointManagementQueryService;
     private readonly IEndpointManagementService _endpointManagementService;
     private readonly IApplicationSettingsService _applicationSettingsService;
+    private readonly IGroupManagementService _groupManagementService;
 
     public EndpointsController(
         IEndpointCreationQueryService endpointCreationQueryService,
         IEndpointManagementQueryService endpointManagementQueryService,
         IEndpointManagementService endpointManagementService,
-        IApplicationSettingsService applicationSettingsService)
+        IApplicationSettingsService applicationSettingsService,
+        IGroupManagementService groupManagementService)
     {
         _endpointCreationQueryService = endpointCreationQueryService;
         _endpointManagementQueryService = endpointManagementQueryService;
         _endpointManagementService = endpointManagementService;
         _applicationSettingsService = applicationSettingsService;
+        _groupManagementService = groupManagementService;
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(CancellationToken cancellationToken)
+    public async Task<IActionResult> Index([FromQuery] string? groupId, CancellationToken cancellationToken)
     {
-        var model = await _endpointManagementQueryService.GetManagePageAsync(cancellationToken);
+        var model = await _endpointManagementQueryService.GetManagePageAsync(groupId, cancellationToken);
         model.StatusMessage = TempData[StatusMessageKey] as string;
         model.ErrorMessage = TempData[ErrorMessageKey] as string;
         return View("Index", model);
@@ -72,6 +76,7 @@ public sealed class EndpointsController : Controller
                 Target = model.Target,
                 AgentId = model.AgentId,
                 DependsOnEndpointIds = model.DependsOnEndpointIds,
+                GroupIds = model.GroupIds,
                 PingIntervalSeconds = model.PingIntervalSeconds,
                 RetryIntervalSeconds = model.RetryIntervalSeconds,
                 TimeoutMs = model.TimeoutMs,
@@ -108,6 +113,7 @@ public sealed class EndpointsController : Controller
             Target = editModel.Target,
             AgentId = editModel.AgentId,
             DependsOnEndpointIds = editModel.DependsOnEndpointIds.ToList(),
+            GroupIds = editModel.GroupIds.ToList(),
             EndpointEnabled = editModel.EndpointEnabled,
             AssignmentEnabled = editModel.AssignmentEnabled,
             PingIntervalSeconds = editModel.PingIntervalSeconds,
@@ -142,6 +148,7 @@ public sealed class EndpointsController : Controller
                 Target = model.Target,
                 AgentId = model.AgentId,
                 DependsOnEndpointIds = model.DependsOnEndpointIds,
+                GroupIds = model.GroupIds,
                 EndpointEnabled = model.EndpointEnabled,
                 AssignmentEnabled = model.AssignmentEnabled,
                 PingIntervalSeconds = model.PingIntervalSeconds,
@@ -210,6 +217,7 @@ public sealed class EndpointsController : Controller
         var options = await _endpointCreationQueryService.GetOptionsAsync(cancellationToken);
         model.AvailableAgents = options.Agents;
         model.AvailableDependencyEndpoints = options.DependencyEndpoints;
+        model.AvailableGroups = await _groupManagementService.GetGroupOptionsAsync(cancellationToken);
     }
 
     private async Task PopulateEditOptionsAsync(EditEndpointPageViewModel model, CancellationToken cancellationToken)
@@ -217,6 +225,7 @@ public sealed class EndpointsController : Controller
         var options = await _endpointManagementQueryService.GetEditOptionsAsync(model.AssignmentId, cancellationToken);
         model.AvailableAgents = options.Agents;
         model.AvailableDependencies = options.Dependencies;
+        model.AvailableGroups = await _groupManagementService.GetGroupOptionsAsync(cancellationToken);
     }
 
     private void AddValidationErrorsToModelState(IReadOnlyList<EndpointValidationError> validationErrors)

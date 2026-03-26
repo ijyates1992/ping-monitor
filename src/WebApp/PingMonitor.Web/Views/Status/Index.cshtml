@@ -72,7 +72,7 @@
         .nowrap { white-space: nowrap; }
         @@media (min-width: 720px) {
             .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-            .filter-grid { grid-template-columns: 1fr 220px 220px; align-items: end; }
+            .filter-grid { grid-template-columns: 1fr 220px 220px 220px; align-items: end; }
             .row-header { flex-direction: row; justify-content: space-between; align-items: start; }
             .row-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
         }
@@ -87,6 +87,7 @@
             <div class="button-row">
                 <a class="button" href="/agents">Manage agents</a>
                 <a class="button-secondary" href="/agents/deploy">Deploy new agent</a>
+                <a class="button-secondary" href="/groups">Manage groups</a>
                 <a class="button-secondary" href="/endpoints">Manage endpoints</a>
                 <a class="button-secondary" href="/endpoints/new">Add new endpoint</a>
                 <a class="button-secondary" href="/admin">Admin settings</a>
@@ -133,6 +134,16 @@
                             }
                         </select>
                     </div>
+                    <div>
+                        <label for="groupId">Group</label>
+                        <select id="groupId" name="groupId">
+                            <option value="">All groups</option>
+                            @foreach (var group in Model.Filters.AvailableGroups)
+                            {
+                                <option value="@group.GroupId" selected="@(string.Equals(Model.Filters.GroupId, group.GroupId, StringComparison.Ordinal))">@group.Name</option>
+                            }
+                        </select>
+                    </div>
                 </div>
                 <div class="button-row">
                     <button class="button" type="submit">Apply filters</button>
@@ -171,6 +182,7 @@
                                 <div class="meta-item"><span>Last state change</span><div class="nowrap">@FormatDate(row.LastStateChangeUtc)</div></div>
                                 <div class="meta-item"><span>Consecutive failures</span><div>@row.ConsecutiveFailureCount</div></div>
                                 <div class="meta-item"><span>Consecutive successes</span><div>@row.ConsecutiveSuccessCount</div></div>
+                                <div class="meta-item"><span>Groups</span><div>@(row.GroupNames.Count == 0 ? "None" : string.Join(", ", row.GroupNames))</div></div>
                                 <div class="meta-item"><span>Dependency parents</span><div>@FormatDependencies(row.ParentEndpointIds, row.ParentEndpointNames, "None")</div></div>
                                 <div class="meta-item"><span>Suppressed by</span><div>@FormatDependency(row.SuppressedByEndpointId, row.SuppressedByEndpointName, "Not suppressed")</div></div>
                                 <div class="meta-item"><span>Assignment enabled</span><div>@(row.AssignmentEnabled ? "Enabled" : "Disabled")</div></div>

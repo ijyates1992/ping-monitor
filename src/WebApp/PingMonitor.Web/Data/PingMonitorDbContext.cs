@@ -19,6 +19,8 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<EndpointModel> Endpoints => Set<EndpointModel>();
     public DbSet<EndpointDependency> EndpointDependencies => Set<EndpointDependency>();
+    public DbSet<Group> Groups => Set<Group>();
+    public DbSet<EndpointGroupMembership> EndpointGroupMemberships => Set<EndpointGroupMembership>();
     public DbSet<MonitorAssignment> MonitorAssignments => Set<MonitorAssignment>();
     public DbSet<CheckResult> CheckResults => Set<CheckResult>();
     public DbSet<ResultBatch> ResultBatches => Set<ResultBatch>();
@@ -84,6 +86,25 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         endpointDependency.Property(x => x.DependsOnEndpointId).HasMaxLength(64).IsRequired();
         endpointDependency.Property(x => x.CreatedAtUtc).IsRequired();
         endpointDependency.HasIndex(x => new { x.EndpointId, x.DependsOnEndpointId }).IsUnique();
+
+
+        var group = modelBuilder.Entity<Group>();
+        group.ToTable("Groups");
+        group.HasKey(x => x.GroupId);
+        group.Property(x => x.GroupId).HasMaxLength(64);
+        group.Property(x => x.Name).HasMaxLength(255).IsRequired();
+        group.Property(x => x.Description).HasMaxLength(2048);
+        group.Property(x => x.CreatedAtUtc).IsRequired();
+        group.HasIndex(x => x.Name).IsUnique();
+
+        var endpointGroupMembership = modelBuilder.Entity<EndpointGroupMembership>();
+        endpointGroupMembership.ToTable("EndpointGroupMemberships");
+        endpointGroupMembership.HasKey(x => x.EndpointGroupMembershipId);
+        endpointGroupMembership.Property(x => x.EndpointGroupMembershipId).HasMaxLength(64);
+        endpointGroupMembership.Property(x => x.EndpointId).HasMaxLength(64).IsRequired();
+        endpointGroupMembership.Property(x => x.GroupId).HasMaxLength(64).IsRequired();
+        endpointGroupMembership.Property(x => x.CreatedAtUtc).IsRequired();
+        endpointGroupMembership.HasIndex(x => new { x.EndpointId, x.GroupId }).IsUnique();
 
         var assignment = modelBuilder.Entity<MonitorAssignment>();
         assignment.ToTable("MonitorAssignments");

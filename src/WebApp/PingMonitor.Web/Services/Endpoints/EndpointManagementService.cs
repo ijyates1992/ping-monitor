@@ -65,6 +65,17 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             });
         }
 
+        foreach (var groupId in NormalizeGroups(command.GroupIds))
+        {
+            _dbContext.EndpointGroupMemberships.Add(new EndpointGroupMembership
+            {
+                EndpointGroupMembershipId = Guid.NewGuid().ToString(),
+                EndpointId = endpointId,
+                GroupId = groupId,
+                CreatedAtUtc = now
+            });
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return CreateEndpointResult.Succeeded(endpointId, assignmentId);
@@ -109,6 +120,12 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             .Select(x => x.DependsOnEndpointId)
             .ToArrayAsync(cancellationToken);
 
+        var groupIds = await _dbContext.EndpointGroupMemberships.AsNoTracking()
+            .Where(x => x.EndpointId == model.EndpointId)
+            .OrderBy(x => x.GroupId)
+            .Select(x => x.GroupId)
+            .ToArrayAsync(cancellationToken);
+
         return new EditEndpointModel
         {
             AssignmentId = model.AssignmentId,
@@ -117,6 +134,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             Target = model.Target,
             AgentId = model.AgentId,
             DependsOnEndpointIds = dependencyIds,
+            GroupIds = groupIds,
             EndpointEnabled = model.EndpointEnabled,
             AssignmentEnabled = model.AssignmentEnabled,
             PingIntervalSeconds = model.PingIntervalSeconds,
@@ -175,6 +193,33 @@ internal sealed class EndpointManagementService : IEndpointManagementService
                     EndpointDependencyId = Guid.NewGuid().ToString(),
                     EndpointId = endpoint.EndpointId,
                     DependsOnEndpointId = dependencyId,
+                    CreatedAtUtc = DateTimeOffset.UtcNow
+                });
+            }
+        }
+
+        var groupIds = NormalizeGroups(command.GroupIds);
+        var existingMemberships = await _dbContext.EndpointGroupMemberships
+            .Where(x => x.EndpointId == endpoint.EndpointId)
+            .ToListAsync(cancellationToken);
+
+        var membershipsToRemove = existingMemberships
+            .Where(x => !groupIds.Contains(x.GroupId, StringComparer.Ordinal))
+            .ToArray();
+        if (membershipsToRemove.Length > 0)
+        {
+            _dbContext.EndpointGroupMemberships.RemoveRange(membershipsToRemove);
+        }
+
+        foreach (var groupId in groupIds)
+        {
+            if (existingMemberships.All(x => !string.Equals(x.GroupId, groupId, StringComparison.Ordinal)))
+            {
+                _dbContext.EndpointGroupMemberships.Add(new EndpointGroupMembership
+                {
+                    EndpointGroupMembershipId = Guid.NewGuid().ToString(),
+                    EndpointId = endpoint.EndpointId,
+                    GroupId = groupId,
                     CreatedAtUtc = DateTimeOffset.UtcNow
                 });
             }
@@ -256,7 +301,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             return errors;
         }
 
-        await ValidateAgentAndDependenciesAsync(command.AgentId, command.DependsOnEndpointIds, null, errors, cancellationToken);
+        await ValidateAgentAndDependenciesAndGroupsAsync(command.AgentId, command.DependsOnEndpointIds, command.GroupIds, null, errors, cancellationToken);
 
         var normalizedEndpointName = command.EndpointName.Trim();
         var endpointNameExists = await _dbContext.Endpoints.AsNoTracking()
@@ -327,7 +372,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             return errors;
         }
 
-        await ValidateAgentAndDependenciesAsync(command.AgentId, command.DependsOnEndpointIds, normalizedEndpointId, errors, cancellationToken);
+        await ValidateAgentAndDependenciesAndGroupsAsync(command.AgentId, command.DependsOnEndpointIds, command.GroupIds, normalizedEndpointId, errors, cancellationToken);
 
         var normalizedEndpointName = command.EndpointName.Trim();
         var duplicateNameExists = await _dbContext.Endpoints.AsNoTracking()
@@ -349,9 +394,10 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         return errors;
     }
 
-    private async Task ValidateAgentAndDependenciesAsync(
+    private async Task ValidateAgentAndDependenciesAndGroupsAsync(
         string agentId,
         IReadOnlyList<string> dependsOnEndpointIds,
+        IReadOnlyList<string> groupIds,
         string? currentEndpointId,
         ICollection<EndpointValidationError> errors,
         CancellationToken cancellationToken)
@@ -368,21 +414,37 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         var normalizedDependencies = NormalizeDependencies(dependsOnEndpointIds);
 
         var dependencyIds = normalizedDependencies.ToArray();
-        if (dependencyIds.Length == 0)
+        if (dependencyIds.Length > 0)
         {
-            return;
+            var existingDependencyIds = await _dbContext.Endpoints.AsNoTracking()
+                .Where(x => dependencyIds.Contains(x.EndpointId))
+                .Select(x => x.EndpointId)
+                .ToArrayAsync(cancellationToken);
+
+            foreach (var dependencyId in dependencyIds)
+            {
+                if (!existingDependencyIds.Contains(dependencyId, StringComparer.Ordinal))
+                {
+                    errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointIds), $"Dependency endpoint '{dependencyId}' does not exist."));
+                }
+            }
         }
 
-        var existingDependencyIds = await _dbContext.Endpoints.AsNoTracking()
-            .Where(x => dependencyIds.Contains(x.EndpointId))
-            .Select(x => x.EndpointId)
-            .ToArrayAsync(cancellationToken);
-
-        foreach (var dependencyId in dependencyIds)
+        var normalizedGroups = NormalizeGroups(groupIds);
+        var selectedGroupIds = normalizedGroups.ToArray();
+        if (selectedGroupIds.Length > 0)
         {
-            if (!existingDependencyIds.Contains(dependencyId, StringComparer.Ordinal))
+            var existingGroupIds = await _dbContext.Groups.AsNoTracking()
+                .Where(x => selectedGroupIds.Contains(x.GroupId))
+                .Select(x => x.GroupId)
+                .ToArrayAsync(cancellationToken);
+
+            foreach (var selectedGroupId in selectedGroupIds)
             {
-                errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.DependsOnEndpointIds), $"Dependency endpoint '{dependencyId}' does not exist."));
+                if (!existingGroupIds.Contains(selectedGroupId, StringComparer.Ordinal))
+                {
+                    errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.GroupIds), $"Group '{selectedGroupId}' does not exist."));
+                }
             }
         }
 
@@ -479,6 +541,22 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         foreach (var dependencyId in dependencyIds)
         {
             var value = NormalizeRequired(dependencyId);
+            if (value is not null)
+            {
+                normalized.Add(value);
+            }
+        }
+
+        return normalized;
+    }
+
+
+    private static HashSet<string> NormalizeGroups(IReadOnlyList<string> groupIds)
+    {
+        var normalized = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var groupId in groupIds)
+        {
+            var value = NormalizeRequired(groupId);
             if (value is not null)
             {
                 normalized.Add(value);

@@ -4,7 +4,7 @@ namespace PingMonitor.Web.Services.Endpoints;
 
 public interface IEndpointManagementQueryService
 {
-    Task<ManageEndpointsPageViewModel> GetManagePageAsync(CancellationToken cancellationToken);
+    Task<ManageEndpointsPageViewModel> GetManagePageAsync(string? groupId, CancellationToken cancellationToken);
     Task<EditEndpointOptionsViewModel> GetEditOptionsAsync(string assignmentId, CancellationToken cancellationToken);
     Task<RemoveEndpointDetails?> GetRemoveDetailsAsync(string assignmentId, CancellationToken cancellationToken);
 }

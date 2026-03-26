@@ -1,0 +1,59 @@
+@model PingMonitor.Web.ViewModels.Groups.ManageGroupsPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manage groups</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 960px; margin: 0 auto; padding: 1rem; }
+        .stack { display:grid; gap:1rem; }
+        .card { background:var(--card); border-radius:14px; padding:1rem; box-shadow: 0 1px 2px rgba(16,24,40,.08); }
+        .row { border:1px solid var(--border); border-radius:10px; padding:.85rem; }
+        .muted { color: var(--muted); }
+        .button,.button-secondary { display:inline-flex; align-items:center; justify-content:center; min-height:48px; padding:.8rem 1rem; border-radius:10px; font-weight:600; text-decoration:none; }
+        .button { border:0; background:var(--accent); color:#fff; }
+        .button-secondary { border:1px solid var(--border); color:var(--text); background:#fff; }
+        .button-row { display:flex; gap:.75rem; flex-wrap:wrap; margin-top:.75rem; }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Manage groups</h1>
+            <p class="muted">Groups organize endpoints and support status and management filtering.</p>
+            <div class="button-row">
+                <a class="button" href="/groups/new">Create group</a>
+                <a class="button-secondary" href="/endpoints">Manage endpoints</a>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+            {
+                <p><strong>@Model.StatusMessage</strong></p>
+            }
+        </section>
+        <section class="card">
+            @if (Model.Rows.Count == 0)
+            {
+                <p class="muted">No groups are configured yet.</p>
+            }
+            else
+            {
+                @foreach (var row in Model.Rows)
+                {
+                    <article class="row">
+                        <div><strong>@row.Name</strong></div>
+                        <div class="muted">@(string.IsNullOrWhiteSpace(row.Description) ? "No description" : row.Description)</div>
+                        <div class="muted">Created @row.CreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</div>
+                        <div class="button-row"><a class="button-secondary" href="/groups/@row.GroupId/edit">Edit group</a></div>
+                    </article>
+                }
+            }
+        </section>
+    </div>
+</main>
+</body>
+</html>

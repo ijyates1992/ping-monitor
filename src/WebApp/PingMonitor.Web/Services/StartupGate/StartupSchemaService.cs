@@ -18,6 +18,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "Agents",
         "Endpoints",
         "EndpointDependencies",
+        "Groups",
+        "EndpointGroupMemberships",
         "MonitorAssignments",
         "CheckResults",
         "ResultBatches",
@@ -212,10 +214,34 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+        const string createGroupsSql = """
+            CREATE TABLE IF NOT EXISTS `Groups` (
+                `GroupId` varchar(64) NOT NULL,
+                `Name` varchar(255) NOT NULL,
+                `Description` varchar(2048) NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`GroupId`),
+                UNIQUE KEY `UX_Groups_Name` (`Name`)
+            );
+            """;
+
+        const string createEndpointGroupMembershipsSql = """
+            CREATE TABLE IF NOT EXISTS `EndpointGroupMemberships` (
+                `EndpointGroupMembershipId` varchar(64) NOT NULL,
+                `EndpointId` varchar(64) NOT NULL,
+                `GroupId` varchar(64) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`EndpointGroupMembershipId`),
+                UNIQUE KEY `UX_EndpointGroupMemberships_EndpointId_GroupId` (`EndpointId`, `GroupId`)
+            );
+            """;
+
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createGroupsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createEndpointGroupMembershipsSql, cancellationToken);
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }

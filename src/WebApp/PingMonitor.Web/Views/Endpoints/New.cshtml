@@ -88,6 +88,24 @@
             </section>
 
             <section class="card">
+                <h2 class="section-title">Grouping</h2>
+                <div class="field-grid">
+                    <div>
+                        <label asp-for="GroupIds"></label>
+                        <div class="checkbox-list">
+                            @foreach (var group in Model.AvailableGroups)
+                            {
+                                <label class="checkbox">
+                                    <input type="checkbox" name="GroupIds" value="@group.GroupId" checked="@Model.GroupIds.Contains(group.GroupId)" />
+                                    <span>@group.Name</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
                 <h2 class="section-title">Dependency</h2>
                 <div class="field-grid">
                     <div>
@@ -143,6 +161,7 @@
 
             <div class="actions">
                 <button class="button" type="submit">Create endpoint</button>
+                <a class="button-secondary" href="/groups">Manage groups</a>
                 <a class="button-secondary" href="/status">Cancel</a>
             </div>
         </form>
