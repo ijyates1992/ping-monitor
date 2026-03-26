@@ -434,14 +434,12 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         var selectedGroupIds = normalizedGroups.ToArray();
         if (selectedGroupIds.Length > 0)
         {
-            var existingGroupIds = await _dbContext.Groups.AsNoTracking()
-                .Where(x => selectedGroupIds.Contains(x.GroupId))
-                .Select(x => x.GroupId)
-                .ToArrayAsync(cancellationToken);
-
             foreach (var selectedGroupId in selectedGroupIds)
             {
-                if (!existingGroupIds.Contains(selectedGroupId, StringComparer.Ordinal))
+                var groupExists = await _dbContext.Groups.AsNoTracking()
+                    .AnyAsync(x => x.GroupId == selectedGroupId, cancellationToken);
+
+                if (!groupExists)
                 {
                     errors.Add(new EndpointValidationError(nameof(UpdateEndpointCommand.GroupIds), $"Group '{selectedGroupId}' does not exist."));
                 }
