@@ -85,15 +85,16 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         var endpointIds = rows.Select(x => x.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
         var endpointNames = await _dbContext.Endpoints.AsNoTracking()
             .ToDictionaryAsync(x => x.EndpointId, x => x.Name, cancellationToken);
-        var dependencyLookup = endpointIds.Length == 0
+        var endpointIdSet = endpointIds.ToHashSet(StringComparer.Ordinal);
+        var dependencyLookup = endpointIdSet.Count == 0
             ? new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
-            : await _dbContext.EndpointDependencies.AsNoTracking()
-                .Where(x => endpointIds.Contains(x.EndpointId))
+            : (await _dbContext.EndpointDependencies.AsNoTracking().ToArrayAsync(cancellationToken))
+                .Where(x => endpointIdSet.Contains(x.EndpointId))
                 .GroupBy(x => x.EndpointId)
-                .ToDictionaryAsync(
+                .ToDictionary(
                     group => group.Key,
                     group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).OrderBy(x => x).ToArray(),
-                    cancellationToken);
+                    StringComparer.Ordinal);
 
         var projectedRows = rows.Select(row =>
         {
