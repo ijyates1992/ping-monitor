@@ -56,8 +56,27 @@
             <p class="muted">Edit endpoint and assignment records without changing assignment-scoped state behavior.</p>
             <div class="button-row">
                 <a class="button" href="/endpoints/new">Add new endpoint</a>
+                <a class="button-secondary" href="/groups">Manage groups</a>
                 <a class="button-secondary" href="/status">View status</a>
             </div>
+        </section>
+
+        <section class="card">
+            <h2>Filters</h2>
+            <form method="get" action="/endpoints">
+                <label for="groupId">Group</label>
+                <select id="groupId" name="groupId">
+                    <option value="">All groups</option>
+                    @foreach (var group in Model.AvailableGroups)
+                    {
+                        <option value="@group.GroupId" selected="@(string.Equals(Model.GroupId, group.GroupId, StringComparison.Ordinal))">@group.Name</option>
+                    }
+                </select>
+                <div class="button-row" style="margin-top:.75rem;">
+                    <button class="button" type="submit">Apply filter</button>
+                    <a class="button-secondary" href="/endpoints">Clear</a>
+                </div>
+            </form>
         </section>
 
         <section class="card">
@@ -92,6 +111,7 @@
                             <div class="row-meta">
                                 <div class="meta-item"><span>Assignment ID</span><div>@row.AssignmentId</div></div>
                                 <div class="meta-item"><span>Agent / instance</span><div>@row.AgentDisplay</div></div>
+                                <div class="meta-item"><span>Groups</span><div>@(row.GroupNames.Count == 0 ? "None" : string.Join(", ", row.GroupNames))</div></div>
                                 <div class="meta-item"><span>Dependency parents</span><div>@(row.DependencyEndpointNames.Count == 0 ? "None" : string.Join(", ", row.DependencyEndpointNames))</div></div>
                                 <div class="meta-item"><span>Endpoint enabled</span><div>@(row.EndpointEnabled ? "Enabled" : "Disabled")</div></div>
                                 <div class="meta-item"><span>Assignment enabled</span><div>@(row.AssignmentEnabled ? "Enabled" : "Disabled")</div></div>

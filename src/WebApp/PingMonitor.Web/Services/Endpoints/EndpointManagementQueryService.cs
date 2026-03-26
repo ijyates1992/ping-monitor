@@ -14,8 +14,10 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
         _dbContext = dbContext;
     }
 
-    public async Task<ManageEndpointsPageViewModel> GetManagePageAsync(CancellationToken cancellationToken)
+    public async Task<ManageEndpointsPageViewModel> GetManagePageAsync(string? groupId, CancellationToken cancellationToken)
     {
+        var normalizedGroupId = string.IsNullOrWhiteSpace(groupId) ? null : groupId.Trim();
+
         var rows = await (
             from assignment in _dbContext.MonitorAssignments.AsNoTracking()
             join endpoint in _dbContext.Endpoints.AsNoTracking() on assignment.EndpointId equals endpoint.EndpointId
@@ -42,10 +44,25 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 CurrentState = state != null ? state.CurrentState : EndpointStateKind.Unknown
             }).ToArrayAsync(cancellationToken);
 
+        var groupLookup = (await _dbContext.EndpointGroupMemberships.AsNoTracking().ToArrayAsync(cancellationToken))
+            .GroupBy(x => x.EndpointId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.Select(x => x.GroupId).ToArray(), StringComparer.Ordinal);
+
+        if (!string.IsNullOrWhiteSpace(normalizedGroupId))
+        {
+            rows = rows.Where(x => groupLookup.GetValueOrDefault(x.EndpointId, Array.Empty<string>()).Contains(normalizedGroupId, StringComparer.Ordinal)).ToArray();
+        }
+
         var endpointIds = rows.Select(x => x.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
         var endpointIdSet = endpointIds.ToHashSet(StringComparer.Ordinal);
         var endpointNames = await _dbContext.Endpoints.AsNoTracking()
             .ToDictionaryAsync(x => x.EndpointId, x => x.Name, cancellationToken);
+        var groups = await _dbContext.Groups.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .ToArrayAsync(cancellationToken);
+
+        var groupNameLookup = groups.ToDictionary(x => x.GroupId, x => x.Name, StringComparer.Ordinal);
+
         var dependencies = await _dbContext.EndpointDependencies.AsNoTracking()
             .ToArrayAsync(cancellationToken);
         var dependencyLookup = dependencies
@@ -58,6 +75,8 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
 
         return new ManageEndpointsPageViewModel
         {
+            GroupId = normalizedGroupId,
+            AvailableGroups = groups.Select(x => new EndpointGroupOptionViewModel { GroupId = x.GroupId, Name = x.Name }).ToArray(),
             Rows = rows.Select(row => new ManageEndpointRowViewModel
             {
                 AssignmentId = row.AssignmentId,
@@ -66,6 +85,10 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 AgentDisplay = row.AgentDisplay,
                 DependencyEndpointNames = dependencyLookup.GetValueOrDefault(row.EndpointId, Array.Empty<string>())
                     .Select(endpointId => endpointNames.GetValueOrDefault(endpointId, endpointId))
+                    .OrderBy(x => x)
+                    .ToArray(),
+                GroupNames = groupLookup.GetValueOrDefault(row.EndpointId, Array.Empty<string>())
+                    .Select(selectedGroupId => groupNameLookup.GetValueOrDefault(selectedGroupId, selectedGroupId))
                     .OrderBy(x => x)
                     .ToArray(),
                 EndpointEnabled = row.Enabled,
@@ -116,10 +139,20 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
             })
             .ToArrayAsync(cancellationToken);
 
+        var groups = await _dbContext.Groups.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new EndpointGroupOptionViewModel
+            {
+                GroupId = x.GroupId,
+                Name = x.Name
+            })
+            .ToArrayAsync(cancellationToken);
+
         return new EditEndpointOptionsViewModel
         {
             Agents = agents,
-            Dependencies = dependencies
+            Dependencies = dependencies,
+            Groups = groups
         };
     }
 

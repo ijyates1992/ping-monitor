@@ -19,6 +19,9 @@ public sealed class CreateEndpointPageViewModel
     [Display(Name = "Depends on endpoints")]
     public List<string> DependsOnEndpointIds { get; set; } = [];
 
+    [Display(Name = "Groups")]
+    public List<string> GroupIds { get; set; } = [];
+
     [Range(1, int.MaxValue, ErrorMessage = "Ping interval must be at least 1 second.")]
     [Display(Name = "Ping interval (seconds)")]
     public int PingIntervalSeconds { get; set; } = 60;
@@ -48,6 +51,7 @@ public sealed class CreateEndpointPageViewModel
     public IReadOnlyList<CreateEndpointAgentOptionViewModel> AvailableAgents { get; set; } = [];
 
     public IReadOnlyList<CreateEndpointDependencyOptionViewModel> AvailableDependencyEndpoints { get; set; } = [];
+    public IReadOnlyList<EndpointGroupOptionViewModel> AvailableGroups { get; set; } = [];
 }
 
 public sealed class CreateEndpointAgentOptionViewModel
@@ -60,4 +64,10 @@ public sealed class CreateEndpointDependencyOptionViewModel
 {
     public string EndpointId { get; init; } = string.Empty;
     public string EndpointName { get; init; } = string.Empty;
+}
+
+public sealed class EndpointGroupOptionViewModel
+{
+    public string GroupId { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 }

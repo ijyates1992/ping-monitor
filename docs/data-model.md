@@ -115,6 +115,47 @@ Represents a logical target to monitor.
 
 ---
 
+
+### Group
+
+Represents an operational endpoint grouping used for organization and filtering.
+
+#### Purpose
+
+- organize endpoints into named sets
+- support simple control-plane filtering
+
+#### Key fields
+
+- `groupId`
+- `name` (unique)
+- `description` (nullable)
+- `createdAtUtc`
+
+---
+
+### EndpointGroupMembership
+
+Represents one endpoint-to-group membership row.
+
+#### Purpose
+
+- model endpoint-level group membership explicitly
+- support many-to-many endpoint/group relationships
+
+#### Key fields
+
+- `endpointGroupMembershipId`
+- `endpointId`
+- `groupId`
+- `createdAtUtc`
+
+#### Constraints
+
+- (`endpointId`, `groupId`) must be unique
+
+---
+
 ### MonitorAssignment
 
 Defines what an agent monitors and how.
@@ -356,6 +397,8 @@ Represents an alert lifecycle.
 - Endpoint 1 → many MonitorAssignments  
 - Endpoint 1 → many EndpointDependency (as child)  
 - Endpoint 1 → many EndpointDependency (as parent)  
+- Endpoint 1 → many EndpointGroupMembership  
+- Group 1 → many EndpointGroupMembership  
 
 - MonitorAssignment 1 → many CheckResults  
 - MonitorAssignment 1 → 1 EndpointState  
@@ -516,3 +559,11 @@ This data model enforces:
 - Dependency updates block self-reference and cycle creation to preserve a directed acyclic dependency graph.
 - Dependency updates may add or remove multiple direct parents for the same endpoint.
 - Reassignment updates the existing `MonitorAssignment.agentId` explicitly; this flow does not create duplicate assignments.
+
+
+## Endpoint grouping note (v1)
+
+- Endpoints may belong to zero, one, or many groups.
+- Grouping is endpoint-level in v1 (not assignment-level).
+- Groups are used for organization and basic filtering in control-plane pages.
+- Group-based permissions are out of scope for v1 and may be added later.

@@ -17,11 +17,13 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
     public async Task<EndpointStatusPageViewModel> GetStatusPageAsync(
         string? state,
         string? agent,
+        string? groupId,
         string? search,
         CancellationToken cancellationToken)
     {
         var normalizedState = Normalize(state);
         var normalizedAgent = Normalize(agent);
+        var normalizedGroupId = Normalize(groupId);
         var normalizedSearch = Normalize(search);
         var parsedState = TryParseState(normalizedState);
 
@@ -76,11 +78,31 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             .Select(x => x.InstanceId)
             .ToArrayAsync(cancellationToken);
 
+        var availableGroups = await _dbContext.Groups.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new StatusGroupOptionViewModel
+            {
+                GroupId = x.GroupId,
+                Name = x.Name
+            })
+            .ToArrayAsync(cancellationToken);
+        var groupNameLookup = availableGroups.ToDictionary(x => x.GroupId, x => x.Name, StringComparer.Ordinal);
+
         var rows = await baseQuery
             .OrderBy(row => row.CurrentState)
             .ThenBy(row => row.EndpointName)
             .ThenBy(row => row.AgentInstanceId)
             .ToArrayAsync(cancellationToken);
+
+        var memberships = await _dbContext.EndpointGroupMemberships.AsNoTracking().ToArrayAsync(cancellationToken);
+        var groupLookup = memberships
+            .GroupBy(x => x.EndpointId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.Select(x => x.GroupId).ToArray(), StringComparer.Ordinal);
+
+        if (!string.IsNullOrWhiteSpace(normalizedGroupId))
+        {
+            rows = rows.Where(x => groupLookup.GetValueOrDefault(x.EndpointId, Array.Empty<string>()).Contains(normalizedGroupId, StringComparer.Ordinal)).ToArray();
+        }
 
         var endpointIds = rows.Select(x => x.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
         var endpointNames = await _dbContext.Endpoints.AsNoTracking()
@@ -119,7 +141,11 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 ParentEndpointIds = parentIds,
                 ParentEndpointNames = parentIds.Select(x => endpointNames.GetValueOrDefault(x, x)).OrderBy(x => x).ToArray(),
                 SuppressedByEndpointId = row.SuppressedByEndpointId,
-                SuppressedByEndpointName = row.SuppressedByEndpointName
+                SuppressedByEndpointName = row.SuppressedByEndpointName,
+                GroupNames = groupLookup.GetValueOrDefault(row.EndpointId, Array.Empty<string>())
+                    .Select(selectedGroupId => groupNameLookup.GetValueOrDefault(selectedGroupId, selectedGroupId))
+                    .OrderBy(x => x)
+                    .ToArray()
             };
         }).ToArray();
 
@@ -138,8 +164,10 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             {
                 State = normalizedState,
                 Agent = normalizedAgent,
+                GroupId = normalizedGroupId,
                 Search = normalizedSearch,
-                AvailableAgents = availableAgents
+                AvailableAgents = availableAgents,
+                AvailableGroups = availableGroups
             },
             Rows = projectedRows
         };

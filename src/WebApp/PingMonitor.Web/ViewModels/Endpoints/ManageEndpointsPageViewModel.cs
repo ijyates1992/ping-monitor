@@ -6,6 +6,8 @@ namespace PingMonitor.Web.ViewModels.Endpoints;
 public sealed class ManageEndpointsPageViewModel
 {
     public IReadOnlyList<ManageEndpointRowViewModel> Rows { get; init; } = [];
+    public string? GroupId { get; set; }
+    public IReadOnlyList<EndpointGroupOptionViewModel> AvailableGroups { get; init; } = [];
     public string? StatusMessage { get; set; }
     public string? ErrorMessage { get; set; }
 }
@@ -17,6 +19,7 @@ public sealed class ManageEndpointRowViewModel
     public string Target { get; init; } = string.Empty;
     public string AgentDisplay { get; init; } = string.Empty;
     public IReadOnlyList<string> DependencyEndpointNames { get; init; } = [];
+    public IReadOnlyList<string> GroupNames { get; init; } = [];
     public bool EndpointEnabled { get; init; }
     public bool AssignmentEnabled { get; init; }
     public int PingIntervalSeconds { get; init; }
@@ -50,6 +53,9 @@ public sealed class EditEndpointPageViewModel
     [Display(Name = "Depends on endpoints")]
     public List<string> DependsOnEndpointIds { get; set; } = [];
 
+    [Display(Name = "Groups")]
+    public List<string> GroupIds { get; set; } = [];
+
     [Display(Name = "Endpoint enabled")]
     public bool EndpointEnabled { get; set; }
 
@@ -78,6 +84,7 @@ public sealed class EditEndpointPageViewModel
 
     public IReadOnlyList<EndpointAgentOptionViewModel> AvailableAgents { get; set; } = [];
     public IReadOnlyList<EndpointDependencyOptionViewModel> AvailableDependencies { get; set; } = [];
+    public IReadOnlyList<EndpointGroupOptionViewModel> AvailableGroups { get; set; } = [];
 }
 
 public sealed class EndpointAgentOptionViewModel
@@ -96,6 +103,7 @@ public sealed class EditEndpointOptionsViewModel
 {
     public IReadOnlyList<EndpointAgentOptionViewModel> Agents { get; init; } = [];
     public IReadOnlyList<EndpointDependencyOptionViewModel> Dependencies { get; init; } = [];
+    public IReadOnlyList<EndpointGroupOptionViewModel> Groups { get; init; } = [];
 }
 
 public sealed class RemoveEndpointPageViewModel

@@ -36,10 +36,20 @@ internal sealed class EndpointCreationQueryService : IEndpointCreationQueryServi
             })
             .ToArrayAsync(cancellationToken);
 
+        var groupOptions = await _dbContext.Groups.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new EndpointGroupOptionViewModel
+            {
+                GroupId = x.GroupId,
+                Name = x.Name
+            })
+            .ToArrayAsync(cancellationToken);
+
         return new CreateEndpointPageOptions
         {
             Agents = agentOptions,
-            DependencyEndpoints = endpointOptions
+            DependencyEndpoints = endpointOptions,
+            Groups = groupOptions
         };
     }
 }

@@ -72,6 +72,19 @@
                         <div class="field-error"><span asp-validation-for="AgentId"></span></div>
                     </div>
                     <div>
+                        <label asp-for="GroupIds"></label>
+                        <div class="checkbox-list">
+                            @foreach (var group in Model.AvailableGroups)
+                            {
+                                <label class="checkbox">
+                                    <input type="checkbox" name="GroupIds" value="@group.GroupId" checked="@Model.GroupIds.Contains(group.GroupId)" />
+                                    <span>@group.Name</span>
+                                </label>
+                            }
+                        </div>
+                        <div class="field-error"><span asp-validation-for="GroupIds"></span></div>
+                    </div>
+                    <div>
                         <label asp-for="DependsOnEndpointIds"></label>
                         <div class="checkbox-list">
                             @foreach (var endpoint in Model.AvailableDependencies)
@@ -128,6 +141,7 @@
 
             <div class="actions">
                 <button class="button" type="submit">Save changes</button>
+                <a class="button-secondary" href="/groups">Manage groups</a>
                 <a class="button-secondary" href="/endpoints">Cancel</a>
             </div>
         </form>

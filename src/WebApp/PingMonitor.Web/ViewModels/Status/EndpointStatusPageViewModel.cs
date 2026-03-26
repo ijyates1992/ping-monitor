@@ -24,7 +24,9 @@ public sealed class EndpointStatusFiltersViewModel
     public string? State { get; init; }
     public string? Agent { get; init; }
     public string? Search { get; init; }
+    public string? GroupId { get; init; }
     public IReadOnlyList<string> AvailableAgents { get; init; } = [];
+    public IReadOnlyList<StatusGroupOptionViewModel> AvailableGroups { get; init; } = [];
     public IReadOnlyList<EndpointStateKind> AvailableStates { get; init; } =
     [
         EndpointStateKind.Unknown,
@@ -56,4 +58,11 @@ public sealed class EndpointStatusRowViewModel
     public IReadOnlyList<string> ParentEndpointNames { get; init; } = [];
     public string? SuppressedByEndpointId { get; init; }
     public string? SuppressedByEndpointName { get; init; }
+    public IReadOnlyList<string> GroupNames { get; init; } = [];
+}
+
+public sealed class StatusGroupOptionViewModel
+{
+    public string GroupId { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 }

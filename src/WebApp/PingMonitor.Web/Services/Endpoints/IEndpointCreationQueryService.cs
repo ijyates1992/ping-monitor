@@ -11,4 +11,5 @@ public sealed class CreateEndpointPageOptions
 {
     public IReadOnlyList<CreateEndpointAgentOptionViewModel> Agents { get; init; } = [];
     public IReadOnlyList<CreateEndpointDependencyOptionViewModel> DependencyEndpoints { get; init; } = [];
+    public IReadOnlyList<EndpointGroupOptionViewModel> Groups { get; init; } = [];
 }
