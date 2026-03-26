@@ -44,24 +44,24 @@ internal sealed class EndpointMetricsService : IEndpointMetricsService
 
         var endpointStates = await _dbContext.EndpointStates
             .AsNoTracking()
-            .Where(x => EF.Constant(normalizedAssignmentIds).Contains(x.AssignmentId))
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId))
             .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
 
         var transitionsInWindow = await _dbContext.StateTransitions
             .AsNoTracking()
-            .Where(x => EF.Constant(normalizedAssignmentIds).Contains(x.AssignmentId) && x.TransitionAtUtc >= windowStart && x.TransitionAtUtc <= now)
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId) && x.TransitionAtUtc >= windowStart && x.TransitionAtUtc <= now)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
         var transitionsBeforeWindow = await _dbContext.StateTransitions
             .AsNoTracking()
-            .Where(x => EF.Constant(normalizedAssignmentIds).Contains(x.AssignmentId) && x.TransitionAtUtc < windowStart)
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId) && x.TransitionAtUtc < windowStart)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
         var successfulResults = await _dbContext.CheckResults
             .AsNoTracking()
-            .Where(x => EF.Constant(normalizedAssignmentIds).Contains(x.AssignmentId)
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId)
                         && x.CheckedAtUtc >= windowStart
                         && x.CheckedAtUtc <= now
                         && x.Success
