@@ -42,30 +42,26 @@ internal sealed class EndpointMetricsService : IEndpointMetricsService
             return new Dictionary<string, EndpointMetricSummary>(StringComparer.Ordinal);
         }
 
-        // MySQL provider can fail to apply type mapping when assignment ID collections are parameterized.
-        // Force constants into the SQL tree so the provider can translate IN predicates deterministically.
-        var assignmentIdsInQuery = EF.Constant(normalizedAssignmentIds);
-
         var endpointStates = await _dbContext.EndpointStates
             .AsNoTracking()
-            .Where(x => assignmentIdsInQuery.Contains(x.AssignmentId))
+            .Where(x => EF.Constant(normalizedAssignmentIds).Contains(x.AssignmentId))
             .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
 
         var transitionsInWindow = await _dbContext.StateTransitions
             .AsNoTracking()
-            .Where(x => assignmentIdsInQuery.Contains(x.AssignmentId) && x.TransitionAtUtc >= windowStart && x.TransitionAtUtc <= now)
+            .Where(x => EF.Constant(normalizedAssignmentIds).Contains(x.AssignmentId) && x.TransitionAtUtc >= windowStart && x.TransitionAtUtc <= now)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
         var transitionsBeforeWindow = await _dbContext.StateTransitions
             .AsNoTracking()
-            .Where(x => assignmentIdsInQuery.Contains(x.AssignmentId) && x.TransitionAtUtc < windowStart)
+            .Where(x => EF.Constant(normalizedAssignmentIds).Contains(x.AssignmentId) && x.TransitionAtUtc < windowStart)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
         var successfulResults = await _dbContext.CheckResults
             .AsNoTracking()
-            .Where(x => assignmentIdsInQuery.Contains(x.AssignmentId)
+            .Where(x => EF.Constant(normalizedAssignmentIds).Contains(x.AssignmentId)
                         && x.CheckedAtUtc >= windowStart
                         && x.CheckedAtUtc <= now
                         && x.Success
