@@ -21,6 +21,7 @@ public sealed class ManageAgentRowViewModel
     public required string Platform { get; init; }
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required int AssignmentCount { get; init; }
+    public required double? UptimePercent { get; init; }
 }
 
 public sealed class RemoveAgentPageViewModel

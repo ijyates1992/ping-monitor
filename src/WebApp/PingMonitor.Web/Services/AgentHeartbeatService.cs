@@ -26,6 +26,13 @@ internal sealed class AgentHeartbeatService : IHeartbeatService
         agent.LastSeenUtc = now;
         agent.AgentVersion = request.AgentVersion.Trim();
         agent.Status = AgentHealthStatus.Online;
+        _dbContext.AgentHeartbeatHistories.Add(new AgentHeartbeatHistory
+        {
+            AgentHeartbeatHistoryId = $"ahh_{Guid.NewGuid():N}",
+            AgentId = agent.AgentId,
+            HeartbeatAtUtc = now,
+            RecordedAtUtc = now
+        });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 

@@ -1,15 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
+using PingMonitor.Web.Services.Metrics;
 
 namespace PingMonitor.Web.Services.Agents;
 
 internal sealed class AgentManagementQueryService : IAgentManagementQueryService
 {
     private readonly PingMonitorDbContext _dbContext;
+    private readonly IAgentMetricsService _agentMetricsService;
 
-    public AgentManagementQueryService(PingMonitorDbContext dbContext)
+    public AgentManagementQueryService(PingMonitorDbContext dbContext, IAgentMetricsService agentMetricsService)
     {
         _dbContext = dbContext;
+        _agentMetricsService = agentMetricsService;
     }
 
     public async Task<IReadOnlyList<AgentManagementRow>> ListAsync(CancellationToken cancellationToken)
@@ -44,6 +47,10 @@ internal sealed class AgentManagementQueryService : IAgentManagementQueryService
             })
             .ToListAsync(cancellationToken);
 
+        var uptimeByAgentId = await _agentMetricsService.GetAgentMetricSummariesAsync(
+            agents.Select(x => x.AgentId).ToArray(),
+            cancellationToken);
+
         return agents.Select(agent => new AgentManagementRow
             {
                 AgentId = agent.AgentId,
@@ -57,7 +64,8 @@ internal sealed class AgentManagementQueryService : IAgentManagementQueryService
                 MachineName = agent.MachineName ?? "Unknown",
                 Platform = agent.Platform ?? "Unknown",
                 CreatedAtUtc = agent.CreatedAtUtc,
-                AssignmentCount = assignmentCounts.GetValueOrDefault(agent.AgentId, 0)
+                AssignmentCount = assignmentCounts.GetValueOrDefault(agent.AgentId, 0),
+                UptimePercent = uptimeByAgentId.GetValueOrDefault(agent.AgentId)?.UptimePercent
             })
             .ToList();
     }

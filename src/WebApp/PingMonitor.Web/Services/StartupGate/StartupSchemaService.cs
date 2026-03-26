@@ -16,6 +16,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "AspNetUserRoles",
         "AspNetUsers",
         "Agents",
+        "AgentHeartbeatHistory",
         "Endpoints",
         "EndpointDependencies",
         "Groups",
@@ -214,6 +215,17 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+        const string createAgentHeartbeatHistorySql = """
+            CREATE TABLE IF NOT EXISTS `AgentHeartbeatHistory` (
+                `AgentHeartbeatHistoryId` varchar(64) NOT NULL,
+                `AgentId` varchar(64) NOT NULL,
+                `HeartbeatAtUtc` datetime(6) NOT NULL,
+                `RecordedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AgentHeartbeatHistoryId`),
+                KEY `IX_AgentHeartbeatHistory_AgentId_HeartbeatAtUtc` (`AgentId`, `HeartbeatAtUtc`)
+            );
+            """;
+
         const string createGroupsSql = """
             CREATE TABLE IF NOT EXISTS `Groups` (
                 `GroupId` varchar(64) NOT NULL,
@@ -240,6 +252,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAgentHeartbeatHistorySql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createGroupsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointGroupMembershipsSql, cancellationToken);
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);

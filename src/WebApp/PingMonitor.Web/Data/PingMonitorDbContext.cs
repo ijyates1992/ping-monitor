@@ -17,6 +17,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     }
 
     public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<AgentHeartbeatHistory> AgentHeartbeatHistories => Set<AgentHeartbeatHistory>();
     public DbSet<EndpointModel> Endpoints => Set<EndpointModel>();
     public DbSet<EndpointDependency> EndpointDependencies => Set<EndpointDependency>();
     public DbSet<Group> Groups => Set<Group>();
@@ -66,6 +67,15 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         agent.Property(x => x.ApiKeyRevoked).HasDefaultValue(false);
         agent.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
         agent.HasIndex(x => x.InstanceId).IsUnique();
+
+        var agentHeartbeatHistory = modelBuilder.Entity<AgentHeartbeatHistory>();
+        agentHeartbeatHistory.ToTable("AgentHeartbeatHistory");
+        agentHeartbeatHistory.HasKey(x => x.AgentHeartbeatHistoryId);
+        agentHeartbeatHistory.Property(x => x.AgentHeartbeatHistoryId).HasMaxLength(64);
+        agentHeartbeatHistory.Property(x => x.AgentId).HasMaxLength(64).IsRequired();
+        agentHeartbeatHistory.Property(x => x.HeartbeatAtUtc).IsRequired();
+        agentHeartbeatHistory.Property(x => x.RecordedAtUtc).IsRequired();
+        agentHeartbeatHistory.HasIndex(x => new { x.AgentId, x.HeartbeatAtUtc });
 
         var endpoint = modelBuilder.Entity<EndpointModel>();
         endpoint.ToTable("Endpoints");

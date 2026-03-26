@@ -14,6 +14,7 @@ public sealed class AgentManagementRow
     public required string Platform { get; init; }
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required int AssignmentCount { get; init; }
+    public double? UptimePercent { get; init; }
 }
 
 public sealed class RemoveAgentDetails

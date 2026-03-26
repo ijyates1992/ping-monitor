@@ -8,6 +8,8 @@
             ? string.Join(", ", endpointIds)
             : string.Join(", ", endpointNames);
     static string FormatDependency(string? endpointId, string? endpointName, string emptyText) => string.IsNullOrWhiteSpace(endpointId) ? emptyText : string.IsNullOrWhiteSpace(endpointName) ? $"{endpointId} (name unavailable)" : endpointName;
+    static string FormatPercent(double? value) => value.HasValue ? $"{value.Value:F1}%" : "Unknown";
+    static string FormatRtt(double? value) => value.HasValue ? $"{value.Value:F1} ms" : "No data";
     static string StateClass(EndpointStateKind state) => state switch
     {
         EndpointStateKind.Up => "state-up",
@@ -182,6 +184,9 @@
                                 <div class="meta-item"><span>Last state change</span><div class="nowrap">@FormatDate(row.LastStateChangeUtc)</div></div>
                                 <div class="meta-item"><span>Consecutive failures</span><div>@row.ConsecutiveFailureCount</div></div>
                                 <div class="meta-item"><span>Consecutive successes</span><div>@row.ConsecutiveSuccessCount</div></div>
+                                <div class="meta-item"><span>Endpoint uptime (24h)</span><div>@FormatPercent(row.UptimePercent)</div></div>
+                                <div class="meta-item"><span>Last RTT (24h)</span><div>@FormatRtt(row.LastRttMs)</div></div>
+                                <div class="meta-item"><span>Average RTT (24h)</span><div>@FormatRtt(row.AverageRttMs)</div></div>
                                 <div class="meta-item"><span>Groups</span><div>@(row.GroupNames.Count == 0 ? "None" : string.Join(", ", row.GroupNames))</div></div>
                                 <div class="meta-item"><span>Dependency parents</span><div>@FormatDependencies(row.ParentEndpointIds, row.ParentEndpointNames, "None")</div></div>
                                 <div class="meta-item"><span>Suppressed by</span><div>@FormatDependency(row.SuppressedByEndpointId, row.SuppressedByEndpointName, "Not suppressed")</div></div>

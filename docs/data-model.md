@@ -86,6 +86,29 @@ Represents a monitoring agent instance.
 
 ---
 
+### AgentHeartbeatHistory
+
+Represents one persisted heartbeat event for an agent.
+
+#### Purpose
+
+- support explicit agent-uptime summaries over a rolling window
+- preserve auditable heartbeat availability history
+
+#### Key fields
+
+- `agentHeartbeatHistoryId`
+- `agentId`
+- `heartbeatAtUtc`
+- `recordedAtUtc`
+
+#### Constraints
+
+- append-only
+- indexed by (`agentId`, `heartbeatAtUtc`)
+
+---
+
 ### Endpoint
 
 Represents a logical target to monitor.
@@ -506,6 +529,37 @@ Use flags:
 
 - `batchId` must be used to prevent duplicate inserts  
 - duplicate batches must not duplicate CheckResults  
+
+---
+
+## v1 summary metrics (24-hour rolling window)
+
+These read-side metrics are derived from existing facts and are intended for operational UI summaries.
+
+### Endpoint uptime (v1)
+
+- computed from assignment-scoped state history (`EndpointState` + `StateTransition`)
+- numerator: time in `UP` or `DEGRADED`
+- denominator: full selected window (v1 fixed to last 24 hours)
+- `DOWN` and `SUPPRESSED` count as not-up
+- `UNKNOWN` is never counted as up
+
+### Agent uptime (v1)
+
+- computed from `AgentHeartbeatHistory`
+- v1 uses minute-level availability buckets across the last 24 hours
+- a minute counts as available when at least one heartbeat exists in that minute bucket
+
+### RTT summary (v1)
+
+- source: successful `CheckResult` rows only (`success = true` with non-null `roundTripMs`)
+- fixed window: last 24 hours
+- summary values:
+  - last RTT (most recent successful sample)
+  - high RTT (maximum successful sample)
+  - low RTT (minimum successful sample)
+  - average RTT (arithmetic mean of successful samples)
+  - jitter = average absolute delta between consecutive successful RTT samples
 
 ---
 
