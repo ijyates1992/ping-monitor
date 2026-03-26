@@ -99,6 +99,7 @@ builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsServi
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();
+builder.Services.AddScoped<IEndpointPerformanceQueryService, EndpointPerformanceQueryService>();
 builder.Services.AddScoped<IGroupManagementService, GroupManagementService>();
 builder.Services.AddScoped<IAgentManagementQueryService, AgentManagementQueryService>();
 builder.Services.AddScoped<IEndpointMetricsService, EndpointMetricsService>();
