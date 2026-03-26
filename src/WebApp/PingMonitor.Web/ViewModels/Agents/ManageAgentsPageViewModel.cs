@@ -22,3 +22,14 @@ public sealed class ManageAgentRowViewModel
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required int AssignmentCount { get; init; }
 }
+
+public sealed class RemoveAgentPageViewModel
+{
+    public string AgentId { get; init; } = string.Empty;
+    public string AgentName { get; init; } = string.Empty;
+    public string InstanceId { get; init; } = string.Empty;
+    public int AssignmentCount { get; init; }
+    public string ConfirmationText { get; set; } = string.Empty;
+    public string RequiredConfirmationText { get; init; } = string.Empty;
+    public string? ErrorMessage { get; set; }
+}

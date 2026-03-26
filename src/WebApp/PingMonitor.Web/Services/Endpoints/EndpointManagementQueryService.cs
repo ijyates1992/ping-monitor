@@ -122,4 +122,32 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
             Dependencies = dependencies
         };
     }
+
+    public async Task<RemoveEndpointDetails?> GetRemoveDetailsAsync(string assignmentId, CancellationToken cancellationToken)
+    {
+        var normalizedAssignmentId = assignmentId.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedAssignmentId))
+        {
+            return null;
+        }
+
+        var details = await (
+            from assignment in _dbContext.MonitorAssignments.AsNoTracking()
+            join endpoint in _dbContext.Endpoints.AsNoTracking() on assignment.EndpointId equals endpoint.EndpointId
+            join agent in _dbContext.Agents.AsNoTracking() on assignment.AgentId equals agent.AgentId
+            where assignment.AssignmentId == normalizedAssignmentId
+            select new RemoveEndpointDetails
+            {
+                AssignmentId = assignment.AssignmentId,
+                EndpointId = endpoint.EndpointId,
+                EndpointName = endpoint.Name,
+                Target = endpoint.Target,
+                AgentDisplay = string.IsNullOrWhiteSpace(agent.Name)
+                    ? agent.InstanceId
+                    : $"{agent.Name} ({agent.InstanceId})"
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return details;
+    }
 }

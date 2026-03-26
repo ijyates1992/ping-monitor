@@ -1,0 +1,59 @@
+@model PingMonitor.Web.ViewModels.Agents.RemoveAgentPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remove agent</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --warn:#b54708; --danger:#b42318; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family:Arial,sans-serif; background:var(--bg); color:var(--text); }
+        main { max-width:780px; margin:0 auto; padding:1rem; }
+        .card { background:var(--card); border-radius:14px; box-shadow:0 1px 2px rgba(16,24,40,.08); padding:1rem; display:grid; gap:.85rem; }
+        .warning { border:1px solid #fdb022; border-radius:10px; background:#fffaeb; color:var(--warn); padding:.8rem; }
+        .error { border:1px solid #fda29b; border-radius:10px; background:#fee4e2; color:var(--danger); padding:.8rem; }
+        label { display:block; font-weight:600; margin-bottom:.3rem; }
+        input[type=text] { width:100%; min-height:46px; padding:.7rem; border-radius:10px; border:1px solid var(--border); }
+        .button-row { display:flex; gap:.65rem; flex-wrap:wrap; }
+        .button,.button-secondary,.button-danger { display:inline-flex; min-height:46px; align-items:center; justify-content:center; border-radius:10px; padding:.7rem .95rem; font-weight:600; text-decoration:none; border:0; }
+        .button-danger { background:var(--danger); color:#fff; }
+        .button-secondary { background:#fff; border:1px solid var(--border); color:var(--text); }
+        .muted { color:var(--muted); }
+    </style>
+</head>
+<body>
+<main>
+    <section class="card">
+        <h1>Remove agent</h1>
+        <p class="muted">This action disables the agent, revokes its API key, and disables active assignments. Historical monitoring data is preserved.</p>
+
+        <div>
+            <div><strong>@Model.AgentName</strong></div>
+            <div class="muted">Instance: @Model.InstanceId</div>
+            <div class="muted">Agent ID: @Model.AgentId</div>
+            <div class="muted">Assignments: @Model.AssignmentCount</div>
+        </div>
+
+        <div class="warning">
+            Removal is operational, not destructive. The agent will no longer authenticate to <code>/api/v1/agent/hello</code>, <code>/api/v1/agent/config</code>, <code>/api/v1/agent/heartbeat</code>, or <code>/api/v1/agent/results</code>.
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="error" role="alert">@Model.ErrorMessage</div>
+        }
+
+        <form method="post" action="/agents/@Model.AgentId/remove">
+            @Html.AntiForgeryToken()
+            <label for="ConfirmationText">Type <strong>@Model.RequiredConfirmationText</strong> to confirm</label>
+            <input id="ConfirmationText" name="ConfirmationText" type="text" value="@Model.ConfirmationText" autocomplete="off" />
+            <div class="button-row" style="margin-top:.85rem;">
+                <button class="button-danger" type="submit">Remove agent</button>
+                <a class="button-secondary" href="/agents">Cancel</a>
+            </div>
+        </form>
+    </section>
+</main>
+</body>
+</html>

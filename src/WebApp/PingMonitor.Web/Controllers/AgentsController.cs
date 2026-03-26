@@ -10,6 +10,7 @@ public sealed class AgentsController : Controller
 {
     private const string StatusMessageKey = "Agents.StatusMessage";
     private const string ErrorMessageKey = "Agents.ErrorMessage";
+    private const string RemoveConfirmationKeyword = "REMOVE";
 
     private readonly IAgentProvisioningService _agentProvisioningService;
     private readonly IAgentManagementQueryService _agentManagementQueryService;
@@ -107,6 +108,50 @@ public sealed class AgentsController : Controller
         }
     }
 
+    [HttpGet("{id}/remove")]
+    public async Task<IActionResult> Remove([FromRoute] string id, CancellationToken cancellationToken)
+    {
+        var details = await _agentManagementQueryService.GetRemoveDetailsAsync(id, cancellationToken);
+        if (details is null)
+        {
+            return NotFound();
+        }
+
+        return View("Remove", BuildRemoveViewModel(details));
+    }
+
+    [HttpPost("{id}/remove")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Remove([FromRoute] string id, [FromForm] RemoveAgentPageViewModel model, CancellationToken cancellationToken)
+    {
+        var details = await _agentManagementQueryService.GetRemoveDetailsAsync(id, cancellationToken);
+        if (details is null)
+        {
+            return NotFound();
+        }
+
+        var viewModel = BuildRemoveViewModel(details, model.ConfirmationText);
+        if (!string.Equals(model.ConfirmationText?.Trim(), RemoveConfirmationKeyword, StringComparison.Ordinal))
+        {
+            viewModel.ErrorMessage = $"Type {RemoveConfirmationKeyword} to confirm removing this agent.";
+            return View("Remove", viewModel);
+        }
+
+        try
+        {
+            var changed = await _agentProvisioningService.RemoveAsync(id, cancellationToken);
+            TempData[StatusMessageKey] = changed
+                ? "Agent removed. Authentication is revoked and active assignments are disabled. Historical data is preserved."
+                : "Agent was already removed.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData[ErrorMessageKey] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
     private async Task<IActionResult> SetEnabledAsync(string agentId, bool enabled, CancellationToken cancellationToken)
     {
         try
@@ -131,5 +176,18 @@ public sealed class AgentsController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    private static RemoveAgentPageViewModel BuildRemoveViewModel(RemoveAgentDetails details, string? confirmationText = null)
+    {
+        return new RemoveAgentPageViewModel
+        {
+            AgentId = details.AgentId,
+            AgentName = details.Name,
+            InstanceId = details.InstanceId,
+            AssignmentCount = details.AssignmentCount,
+            ConfirmationText = confirmationText ?? string.Empty,
+            RequiredConfirmationText = RemoveConfirmationKeyword
+        };
     }
 }

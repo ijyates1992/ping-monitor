@@ -8,6 +8,10 @@ namespace PingMonitor.Web.Controllers;
 [Route("endpoints")]
 public sealed class EndpointsController : Controller
 {
+    private const string RemoveConfirmationKeyword = "REMOVE";
+    private const string StatusMessageKey = "Endpoints.StatusMessage";
+    private const string ErrorMessageKey = "Endpoints.ErrorMessage";
+
     private readonly IEndpointCreationQueryService _endpointCreationQueryService;
     private readonly IEndpointManagementQueryService _endpointManagementQueryService;
     private readonly IEndpointManagementService _endpointManagementService;
@@ -29,6 +33,8 @@ public sealed class EndpointsController : Controller
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var model = await _endpointManagementQueryService.GetManagePageAsync(cancellationToken);
+        model.StatusMessage = TempData[StatusMessageKey] as string;
+        model.ErrorMessage = TempData[ErrorMessageKey] as string;
         return View("Index", model);
     }
 
@@ -155,6 +161,50 @@ public sealed class EndpointsController : Controller
         return Redirect("/endpoints");
     }
 
+    [HttpGet("{assignmentId}/remove")]
+    public async Task<IActionResult> Remove([FromRoute] string assignmentId, CancellationToken cancellationToken)
+    {
+        var details = await _endpointManagementQueryService.GetRemoveDetailsAsync(assignmentId, cancellationToken);
+        if (details is null)
+        {
+            return NotFound();
+        }
+
+        return View("Remove", BuildRemoveViewModel(details));
+    }
+
+    [HttpPost("{assignmentId}/remove")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Remove(
+        [FromRoute] string assignmentId,
+        [FromForm] RemoveEndpointPageViewModel model,
+        CancellationToken cancellationToken)
+    {
+        var details = await _endpointManagementQueryService.GetRemoveDetailsAsync(assignmentId, cancellationToken);
+        if (details is null)
+        {
+            return NotFound();
+        }
+
+        var viewModel = BuildRemoveViewModel(details, model.ConfirmationText);
+        if (!string.Equals(model.ConfirmationText?.Trim(), RemoveConfirmationKeyword, StringComparison.Ordinal))
+        {
+            viewModel.ErrorMessage = $"Type {RemoveConfirmationKeyword} to confirm removing this endpoint.";
+            return View("Remove", viewModel);
+        }
+
+        var result = await _endpointManagementService.RemoveByAssignmentAsync(assignmentId, cancellationToken);
+        if (!result.Found)
+        {
+            return NotFound();
+        }
+
+        TempData[StatusMessageKey] = result.Changed
+            ? "Endpoint removed. Endpoint and related assignments are disabled. Historical data is preserved."
+            : "Endpoint was already removed.";
+        return Redirect("/endpoints");
+    }
+
     private async Task PopulateOptionsAsync(CreateEndpointPageViewModel model, CancellationToken cancellationToken)
     {
         var options = await _endpointCreationQueryService.GetOptionsAsync(cancellationToken);
@@ -176,5 +226,19 @@ public sealed class EndpointsController : Controller
             var modelKey = validationError.Field;
             ModelState.AddModelError(modelKey, validationError.Message);
         }
+    }
+
+    private static RemoveEndpointPageViewModel BuildRemoveViewModel(RemoveEndpointDetails details, string? confirmationText = null)
+    {
+        return new RemoveEndpointPageViewModel
+        {
+            AssignmentId = details.AssignmentId,
+            EndpointId = details.EndpointId,
+            EndpointName = details.EndpointName,
+            Target = details.Target,
+            AgentDisplay = details.AgentDisplay,
+            ConfirmationText = confirmationText ?? string.Empty,
+            RequiredConfirmationText = RemoveConfirmationKeyword
+        };
     }
 }

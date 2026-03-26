@@ -61,4 +61,39 @@ internal sealed class AgentManagementQueryService : IAgentManagementQueryService
             })
             .ToList();
     }
+
+    public async Task<RemoveAgentDetails?> GetRemoveDetailsAsync(string agentId, CancellationToken cancellationToken)
+    {
+        var normalizedAgentId = agentId.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedAgentId))
+        {
+            return null;
+        }
+
+        var details = await _dbContext.Agents.AsNoTracking()
+            .Where(x => x.AgentId == normalizedAgentId)
+            .Select(x => new
+            {
+                x.AgentId,
+                x.Name,
+                x.InstanceId
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (details is null)
+        {
+            return null;
+        }
+
+        var assignmentCount = await _dbContext.MonitorAssignments.AsNoTracking()
+            .CountAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
+
+        return new RemoveAgentDetails
+        {
+            AgentId = details.AgentId,
+            Name = string.IsNullOrWhiteSpace(details.Name) ? "(unnamed agent)" : details.Name,
+            InstanceId = details.InstanceId,
+            AssignmentCount = assignmentCount
+        };
+    }
 }
