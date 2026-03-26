@@ -85,6 +85,7 @@ public sealed class EndpointsController : Controller
             {
                 EndpointName = model.EndpointName,
                 Target = model.Target,
+                IconKey = model.IconKey,
                 AgentId = model.AgentId,
                 DependsOnEndpointIds = model.DependsOnEndpointIds,
                 GroupIds = model.GroupIds,
@@ -123,6 +124,7 @@ public sealed class EndpointsController : Controller
             EndpointId = editModel.EndpointId,
             EndpointName = editModel.EndpointName,
             Target = editModel.Target,
+            IconKey = editModel.IconKey,
             AgentId = editModel.AgentId,
             DependsOnEndpointIds = editModel.DependsOnEndpointIds.ToList(),
             GroupIds = editModel.GroupIds.ToList(),
@@ -159,6 +161,7 @@ public sealed class EndpointsController : Controller
                 EndpointId = model.EndpointId,
                 EndpointName = model.EndpointName,
                 Target = model.Target,
+                IconKey = model.IconKey,
                 AgentId = model.AgentId,
                 DependsOnEndpointIds = model.DependsOnEndpointIds,
                 GroupIds = model.GroupIds,
@@ -245,6 +248,10 @@ public sealed class EndpointsController : Controller
         model.AvailableAgents = options.Agents;
         model.AvailableDependencyEndpoints = options.DependencyEndpoints;
         model.AvailableGroups = await _groupManagementService.GetGroupOptionsAsync(cancellationToken);
+        model.AvailableIcons = EndpointIconCatalog.Options
+            .Select(x => new EndpointIconOptionViewModel { Key = x.Key, DisplayName = x.DisplayName, Symbol = x.Symbol })
+            .ToArray();
+        model.IconKey = EndpointIconCatalog.Normalize(model.IconKey);
     }
 
     private async Task PopulateEditOptionsAsync(EditEndpointPageViewModel model, CancellationToken cancellationToken)
@@ -253,6 +260,10 @@ public sealed class EndpointsController : Controller
         model.AvailableAgents = options.Agents;
         model.AvailableDependencies = options.Dependencies;
         model.AvailableGroups = await _groupManagementService.GetGroupOptionsAsync(cancellationToken);
+        model.AvailableIcons = EndpointIconCatalog.Options
+            .Select(x => new EndpointIconOptionViewModel { Key = x.Key, DisplayName = x.DisplayName, Symbol = x.Symbol })
+            .ToArray();
+        model.IconKey = EndpointIconCatalog.Normalize(model.IconKey);
     }
 
     private void AddValidationErrorsToModelState(IReadOnlyList<EndpointValidationError> validationErrors)

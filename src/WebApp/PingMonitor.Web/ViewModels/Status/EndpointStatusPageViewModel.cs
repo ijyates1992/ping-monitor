@@ -42,6 +42,7 @@ public sealed class EndpointStatusRowViewModel
     public string AssignmentId { get; init; } = string.Empty;
     public string EndpointId { get; init; } = string.Empty;
     public string EndpointName { get; init; } = string.Empty;
+    public string IconKey { get; init; } = "generic";
     public string Target { get; init; } = string.Empty;
     public string AgentId { get; init; } = string.Empty;
     public string AgentInstanceId { get; init; } = string.Empty;

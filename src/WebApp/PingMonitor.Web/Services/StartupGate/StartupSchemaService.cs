@@ -37,6 +37,15 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "DependsOnEndpointId",
         "CreatedAtUtc"
     ];
+    private static readonly string[] RequiredEndpointColumns =
+    [
+        "EndpointId",
+        "Name",
+        "Target",
+        "Enabled",
+        "Tags",
+        "IconKey"
+    ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
@@ -98,6 +107,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"EndpointDependencies table is missing required columns: {string.Join(", ", missingEndpointDependencyColumns)}.");
+            return status;
+        }
+        var missingEndpointColumns = await GetMissingEndpointColumnsAsync(connection, cancellationToken);
+        if (missingEndpointColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"Endpoints table is missing required columns: {string.Join(", ", missingEndpointColumns)}.");
             return status;
         }
 
@@ -282,6 +298,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createUserGroupAccessesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserEndpointAccessesSql, cancellationToken);
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
+        await EnsureEndpointColumnsAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }
 
@@ -303,6 +320,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
 
         return RequiredEndpointDependencyColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
+    }
+
+    private static async Task<string[]> GetMissingEndpointColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'Endpoints';
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return RequiredEndpointColumns
             .Where(column => !existingColumns.Contains(column))
             .ToArray();
     }
@@ -423,6 +462,58 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """,
                 cancellationToken);
         }
+    }
+
+    private static async Task EnsureEndpointColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await HasEndpointColumnAsync(connection, "IconKey", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `Endpoints`
+                ADD COLUMN `IconKey` varchar(64) NULL;
+                """,
+                cancellationToken);
+
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE `Endpoints`
+                SET `IconKey` = 'generic'
+                WHERE `IconKey` IS NULL OR `IconKey` = '';
+                """,
+                cancellationToken);
+
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `Endpoints`
+                MODIFY COLUMN `IconKey` varchar(64) NOT NULL DEFAULT 'generic';
+                """,
+                cancellationToken);
+        }
+    }
+
+    private static async Task<bool> HasEndpointColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'Endpoints'
+              AND column_name = @columnName;
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
     }
 
     private static async Task<bool> HasEndpointDependencyColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)

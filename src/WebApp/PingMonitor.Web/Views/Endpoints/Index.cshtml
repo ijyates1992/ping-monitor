@@ -1,5 +1,6 @@
 @model PingMonitor.Web.ViewModels.Endpoints.ManageEndpointsPageViewModel
 @using PingMonitor.Web.Models
+@using PingMonitor.Web.Services.Endpoints
 @{
     static string StateClass(EndpointStateKind state) => state switch
     {
@@ -107,7 +108,7 @@
                         <article class="row">
                             <div class="row-header">
                                 <div>
-                                    <div><strong>@row.EndpointName</strong></div>
+                                    <div><strong>@EndpointIconCatalog.GetSymbol(row.IconKey) @row.EndpointName</strong></div>
                                     <div class="muted">@row.Target</div>
                                 </div>
                                 <div class="badge @StateClass(row.CurrentState)">@row.CurrentState</div>

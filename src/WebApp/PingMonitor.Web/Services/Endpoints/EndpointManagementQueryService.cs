@@ -41,6 +41,7 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 assignment.AssignmentId,
                 endpoint.EndpointId,
                 EndpointName = endpoint.Name,
+                IconKey = endpoint.IconKey,
                 endpoint.Target,
                 AgentDisplay = string.IsNullOrWhiteSpace(agent.Name)
                     ? agent.InstanceId
@@ -106,6 +107,7 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 JitterMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.JitterMs,
                 AssignmentId = row.AssignmentId,
                 EndpointName = row.EndpointName,
+                IconKey = EndpointIconCatalog.Normalize(row.IconKey),
                 Target = row.Target,
                 AgentDisplay = row.AgentDisplay,
                 DependencyEndpointNames = dependencyLookup.GetValueOrDefault(row.EndpointId, Array.Empty<string>())

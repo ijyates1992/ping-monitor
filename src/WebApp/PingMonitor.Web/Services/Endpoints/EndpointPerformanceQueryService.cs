@@ -50,6 +50,7 @@ internal sealed class EndpointPerformanceQueryService : IEndpointPerformanceQuer
             {
                 assignment.AssignmentId,
                 EndpointName = endpoint.Name,
+                IconKey = endpoint.IconKey,
                 endpoint.Target,
                 AgentDisplay = string.IsNullOrWhiteSpace(agent.Name)
                     ? agent.InstanceId
@@ -95,6 +96,7 @@ internal sealed class EndpointPerformanceQueryService : IEndpointPerformanceQuer
         {
             AssignmentId = context.AssignmentId,
             EndpointName = context.EndpointName,
+            IconKey = EndpointIconCatalog.Normalize(context.IconKey),
             Target = context.Target,
             AgentDisplay = context.AgentDisplay,
             SelectedRange = parsedRange.Range,

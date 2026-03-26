@@ -12,6 +12,9 @@ public sealed class CreateEndpointPageViewModel
     [Display(Name = "Target")]
     public string Target { get; set; } = string.Empty;
 
+    [Display(Name = "Icon")]
+    public string IconKey { get; set; } = "generic";
+
     [Required(ErrorMessage = "Agent selection is required.")]
     [Display(Name = "Agent")]
     public string AgentId { get; set; } = string.Empty;
@@ -52,6 +55,7 @@ public sealed class CreateEndpointPageViewModel
 
     public IReadOnlyList<CreateEndpointDependencyOptionViewModel> AvailableDependencyEndpoints { get; set; } = [];
     public IReadOnlyList<EndpointGroupOptionViewModel> AvailableGroups { get; set; } = [];
+    public IReadOnlyList<EndpointIconOptionViewModel> AvailableIcons { get; set; } = [];
 }
 
 public sealed class CreateEndpointAgentOptionViewModel
@@ -70,4 +74,11 @@ public sealed class EndpointGroupOptionViewModel
 {
     public string GroupId { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
+}
+
+public sealed class EndpointIconOptionViewModel
+{
+    public string Key { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string Symbol { get; init; } = string.Empty;
 }

@@ -1,5 +1,6 @@
 @model PingMonitor.Web.ViewModels.Status.EndpointStatusPageViewModel
 @using PingMonitor.Web.Models
+@using PingMonitor.Web.Services.Endpoints
 @{
     static string FormatDate(DateTimeOffset? value) => value.HasValue ? value.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") : "No checks yet";
     static string FormatDependencies(IReadOnlyList<string> endpointIds, IReadOnlyList<string> endpointNames, string emptyText) => endpointIds.Count == 0
@@ -176,7 +177,7 @@
                         <article class="status-row">
                             <div class="row-header">
                                 <div>
-                                    <h2>@row.EndpointName</h2>
+                                    <h2>@EndpointIconCatalog.GetSymbol(row.IconKey) @row.EndpointName</h2>
                                     <div class="muted">@row.Target</div>
                                 </div>
                                 <div class="badge @StateClass(row.CurrentState)">@row.CurrentState</div>

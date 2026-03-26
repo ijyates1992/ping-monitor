@@ -31,3 +31,5 @@ Add server-side alert lifecycle handling driven by state transitions.
 
 ## Phase 7: UI
 Continue the .NET web application control-plane UI without moving monitoring interpretation into the agent.
+
+- Endpoint records support a selectable built-in icon key for quick visual identification in key operational pages.

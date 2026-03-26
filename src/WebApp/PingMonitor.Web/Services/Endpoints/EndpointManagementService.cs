@@ -31,6 +31,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             EndpointId = endpointId,
             Name = command.EndpointName.Trim(),
             Target = command.Target.Trim(),
+            IconKey = EndpointIconCatalog.Normalize(command.IconKey),
             Enabled = command.EndpointEnabled,
             CreatedAtUtc = now,
             Tags = []
@@ -99,6 +100,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
                 EndpointId = endpoint.EndpointId,
                 EndpointName = endpoint.Name,
                 Target = endpoint.Target,
+                IconKey = EndpointIconCatalog.Normalize(endpoint.IconKey),
                 AgentId = assignment.AgentId,
                 EndpointEnabled = endpoint.Enabled,
                 AssignmentEnabled = assignment.Enabled,
@@ -132,6 +134,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
             EndpointId = model.EndpointId,
             EndpointName = model.EndpointName,
             Target = model.Target,
+            IconKey = EndpointIconCatalog.Normalize(model.IconKey),
             AgentId = model.AgentId,
             DependsOnEndpointIds = dependencyIds,
             GroupIds = groupIds,
@@ -160,6 +163,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
 
         endpoint.Name = command.EndpointName.Trim();
         endpoint.Target = command.Target.Trim();
+        endpoint.IconKey = EndpointIconCatalog.Normalize(command.IconKey);
         endpoint.Enabled = command.EndpointEnabled;
 
         assignment.AgentId = command.AgentId.Trim();
