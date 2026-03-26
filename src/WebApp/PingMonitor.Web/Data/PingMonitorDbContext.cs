@@ -22,6 +22,8 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<EndpointDependency> EndpointDependencies => Set<EndpointDependency>();
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<EndpointGroupMembership> EndpointGroupMemberships => Set<EndpointGroupMembership>();
+    public DbSet<UserGroupAccess> UserGroupAccesses => Set<UserGroupAccess>();
+    public DbSet<UserEndpointAccess> UserEndpointAccesses => Set<UserEndpointAccess>();
     public DbSet<MonitorAssignment> MonitorAssignments => Set<MonitorAssignment>();
     public DbSet<CheckResult> CheckResults => Set<CheckResult>();
     public DbSet<ResultBatch> ResultBatches => Set<ResultBatch>();
@@ -115,6 +117,25 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         endpointGroupMembership.Property(x => x.GroupId).HasMaxLength(64).IsRequired();
         endpointGroupMembership.Property(x => x.CreatedAtUtc).IsRequired();
         endpointGroupMembership.HasIndex(x => new { x.EndpointId, x.GroupId }).IsUnique();
+
+
+        var userGroupAccess = modelBuilder.Entity<UserGroupAccess>();
+        userGroupAccess.ToTable("UserGroupAccesses");
+        userGroupAccess.HasKey(x => x.UserGroupAccessId);
+        userGroupAccess.Property(x => x.UserGroupAccessId).HasMaxLength(64);
+        userGroupAccess.Property(x => x.UserId).HasMaxLength(255).IsRequired();
+        userGroupAccess.Property(x => x.GroupId).HasMaxLength(64).IsRequired();
+        userGroupAccess.Property(x => x.CreatedAtUtc).IsRequired();
+        userGroupAccess.HasIndex(x => new { x.UserId, x.GroupId }).IsUnique();
+
+        var userEndpointAccess = modelBuilder.Entity<UserEndpointAccess>();
+        userEndpointAccess.ToTable("UserEndpointAccesses");
+        userEndpointAccess.HasKey(x => x.UserEndpointAccessId);
+        userEndpointAccess.Property(x => x.UserEndpointAccessId).HasMaxLength(64);
+        userEndpointAccess.Property(x => x.UserId).HasMaxLength(255).IsRequired();
+        userEndpointAccess.Property(x => x.EndpointId).HasMaxLength(64).IsRequired();
+        userEndpointAccess.Property(x => x.CreatedAtUtc).IsRequired();
+        userEndpointAccess.HasIndex(x => new { x.UserId, x.EndpointId }).IsUnique();
 
         var assignment = modelBuilder.Entity<MonitorAssignment>();
         assignment.ToTable("MonitorAssignments");

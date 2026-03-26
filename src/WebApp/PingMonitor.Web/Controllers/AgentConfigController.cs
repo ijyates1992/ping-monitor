@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Contracts.Config;
 using PingMonitor.Web.Services;
@@ -5,6 +6,7 @@ using PingMonitor.Web.Services;
 namespace PingMonitor.Web.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/v1/agent/config")]
 public sealed class AgentConfigController : ControllerBase
 {

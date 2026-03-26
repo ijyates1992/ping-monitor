@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Admin;
 
 namespace PingMonitor.Web.Controllers;
 
+[Authorize(Roles = ApplicationRoles.Admin)]
 [Route("admin")]
 public sealed class AdminController : Controller
 {

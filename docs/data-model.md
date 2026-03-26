@@ -179,6 +179,40 @@ Represents one endpoint-to-group membership row.
 
 ---
 
+
+### UserGroupAccess
+
+Represents one explicit user-to-group read-scope grant.
+
+#### Key fields
+
+- `userGroupAccessId`
+- `userId`
+- `groupId`
+- `createdAtUtc`
+
+#### Constraints
+
+- (`userId`, `groupId`) must be unique
+
+---
+
+### UserEndpointAccess
+
+Represents one explicit user-to-endpoint read-scope grant.
+
+#### Key fields
+
+- `userEndpointAccessId`
+- `userId`
+- `endpointId`
+- `createdAtUtc`
+
+#### Constraints
+
+- (`userId`, `endpointId`) must be unique
+
+---
 ### MonitorAssignment
 
 Defines what an agent monitors and how.
@@ -628,4 +662,4 @@ This data model enforces:
 - Endpoints may belong to zero, one, or many groups.
 - Grouping is endpoint-level in v1 (not assignment-level).
 - Groups are used for organization and basic filtering in control-plane pages.
-- Group-based permissions are out of scope for v1 and may be added later.
+- Read-only user visibility may be granted by explicit endpoint scope and/or group scope.

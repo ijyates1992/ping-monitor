@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Contracts.Results;
 using PingMonitor.Web.Services;
@@ -6,6 +7,7 @@ using PingMonitor.Web.Support;
 namespace PingMonitor.Web.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/v1/agent/results")]
 public sealed class AgentResultsController : ControllerBase
 {
