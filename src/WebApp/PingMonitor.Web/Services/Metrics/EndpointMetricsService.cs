@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
@@ -42,27 +43,21 @@ internal sealed class EndpointMetricsService : IEndpointMetricsService
             return new Dictionary<string, EndpointMetricSummary>(StringComparer.Ordinal);
         }
 
-        var endpointStates = await _dbContext.EndpointStates
-            .AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId))
+        var endpointStates = await ApplyAssignmentFilter(_dbContext.EndpointStates.AsNoTracking(), x => x.AssignmentId, normalizedAssignmentIds)
             .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
 
-        var transitionsInWindow = await _dbContext.StateTransitions
-            .AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId) && x.TransitionAtUtc >= windowStart && x.TransitionAtUtc <= now)
+        var transitionsInWindow = await ApplyAssignmentFilter(_dbContext.StateTransitions.AsNoTracking(), x => x.AssignmentId, normalizedAssignmentIds)
+            .Where(x => x.TransitionAtUtc >= windowStart && x.TransitionAtUtc <= now)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
-        var transitionsBeforeWindow = await _dbContext.StateTransitions
-            .AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId) && x.TransitionAtUtc < windowStart)
+        var transitionsBeforeWindow = await ApplyAssignmentFilter(_dbContext.StateTransitions.AsNoTracking(), x => x.AssignmentId, normalizedAssignmentIds)
+            .Where(x => x.TransitionAtUtc < windowStart)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
-        var successfulResults = await _dbContext.CheckResults
-            .AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId)
-                        && x.CheckedAtUtc >= windowStart
+        var successfulResults = await ApplyAssignmentFilter(_dbContext.CheckResults.AsNoTracking(), x => x.AssignmentId, normalizedAssignmentIds)
+            .Where(x => x.CheckedAtUtc >= windowStart
                         && x.CheckedAtUtc <= now
                         && x.Success
                         && x.RoundTripMs.HasValue)
@@ -213,5 +208,33 @@ internal sealed class EndpointMetricsService : IEndpointMetricsService
             AverageRttMs = values.Average(),
             JitterMs = jitter
         };
+    }
+
+    private static IQueryable<T> ApplyAssignmentFilter<T>(
+        IQueryable<T> query,
+        Expression<Func<T, string>> assignmentIdSelector,
+        IReadOnlyList<string> assignmentIds)
+    {
+        Expression? filterExpression = null;
+        var parameter = assignmentIdSelector.Parameters[0];
+
+        foreach (var assignmentId in assignmentIds)
+        {
+            var equalsExpression = Expression.Equal(
+                assignmentIdSelector.Body,
+                Expression.Constant(assignmentId));
+
+            filterExpression = filterExpression is null
+                ? equalsExpression
+                : Expression.OrElse(filterExpression, equalsExpression);
+        }
+
+        if (filterExpression is null)
+        {
+            return query.Where(_ => false);
+        }
+
+        var predicate = Expression.Lambda<Func<T, bool>>(filterExpression, parameter);
+        return query.Where(predicate);
     }
 }
