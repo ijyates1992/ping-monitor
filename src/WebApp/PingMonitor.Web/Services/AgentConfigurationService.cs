@@ -30,9 +30,10 @@ internal sealed class AgentConfigurationService : IAgentConfigurationService
             .OrderBy(x => x.Endpoint.Name)
             .ToListAsync(cancellationToken);
 
-        var endpointIds = assignments.Select(x => x.Endpoint.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
         var dependencyLookup = await _dbContext.EndpointDependencies.AsNoTracking()
-            .Where(x => endpointIds.Contains(x.EndpointId))
+            .Where(x => _dbContext.MonitorAssignments.Any(assignment =>
+                assignment.AgentId == agent.AgentId &&
+                assignment.EndpointId == x.EndpointId))
             .GroupBy(x => x.EndpointId)
             .ToDictionaryAsync(
                 group => group.Key,
