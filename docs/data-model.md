@@ -182,6 +182,14 @@ Represents one explicit direct dependency edge between two endpoints.
 
 **State is per MonitorAssignment, not per Endpoint.**
 
+## Operational removal semantics
+
+Remove actions are logical deactivation, not destructive deletion.
+
+- Removing an **Endpoint** disables the endpoint and disables related monitor assignments.
+- Removing an **Agent** disables the agent and revokes its API key, preventing future authentication.
+- Historical records are preserved (for example: check results, endpoint state, state transitions, alert history, and assignment history).
+
 ---
 
 ### ApplicationSettings

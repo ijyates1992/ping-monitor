@@ -5,6 +5,7 @@ public interface IEndpointManagementService
     Task<CreateEndpointResult> CreateEndpointWithAssignmentAsync(CreateEndpointCommand command, CancellationToken cancellationToken);
     Task<EditEndpointModel?> GetEditModelAsync(string assignmentId, CancellationToken cancellationToken);
     Task<UpdateEndpointResult> UpdateEndpointWithAssignmentAsync(UpdateEndpointCommand command, CancellationToken cancellationToken);
+    Task<RemoveEndpointResult> RemoveByAssignmentAsync(string assignmentId, CancellationToken cancellationToken);
 }
 
 public sealed class CreateEndpointCommand
@@ -110,4 +111,14 @@ public sealed class EndpointValidationError
 
     public string Field { get; }
     public string Message { get; }
+}
+
+public sealed class RemoveEndpointResult
+{
+    public bool Found { get; init; }
+    public bool Changed { get; init; }
+
+    public static RemoveEndpointResult NotFound() => new() { Found = false, Changed = false };
+
+    public static RemoveEndpointResult Completed(bool changed) => new() { Found = true, Changed = changed };
 }

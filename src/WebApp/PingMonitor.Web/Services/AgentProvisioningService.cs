@@ -103,6 +103,54 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
         return true;
     }
 
+    public async Task<bool> RemoveAsync(string agentId, CancellationToken cancellationToken)
+    {
+        var normalizedAgentId = NormalizeAgentId(agentId);
+        var agent = await _dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
+        if (agent is null)
+        {
+            throw new InvalidOperationException("Agent not found.");
+        }
+
+        var assignments = await _dbContext.MonitorAssignments
+            .Where(x => x.AgentId == normalizedAgentId && x.Enabled)
+            .ToListAsync(cancellationToken);
+
+        var changed = false;
+        if (agent.Enabled)
+        {
+            agent.Enabled = false;
+            changed = true;
+        }
+
+        if (!agent.ApiKeyRevoked)
+        {
+            agent.ApiKeyRevoked = true;
+            changed = true;
+        }
+
+        if (assignments.Count > 0)
+        {
+            var now = DateTimeOffset.UtcNow;
+            foreach (var assignment in assignments)
+            {
+                assignment.Enabled = false;
+                assignment.UpdatedAtUtc = now;
+            }
+
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return false;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Removed agent {AgentId}. Agent disabled, API key revoked, and active assignments disabled.", agent.AgentId);
+        return true;
+    }
+
     public async Task<AgentProvisioningResult> RotatePackageAsync(string agentId, CancellationToken cancellationToken)
     {
         var normalizedAgentId = NormalizeAgentId(agentId);

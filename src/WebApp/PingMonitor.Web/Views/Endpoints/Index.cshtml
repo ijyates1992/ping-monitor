@@ -39,6 +39,9 @@
         .state-unknown { color: var(--unknown); background: #eaecf0; }
         .state-degraded { color: var(--degraded); background: #fff7e6; }
         .muted { color: var(--muted); }
+        .notice, .error { border-radius: 10px; padding: .75rem; }
+        .notice { border: 1px solid #b7e4c7; background: #ebffee; color: #137333; }
+        .error { border: 1px solid #fda29b; background: #fee4e2; color: #b42318; }
         @@media (min-width: 720px) {
             .row-header { flex-direction: row; justify-content: space-between; align-items: start; }
             .row-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -59,6 +62,16 @@
 
         <section class="card">
             <h2>Assignments</h2>
+            @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+            {
+                <div class="notice" role="status">@Model.StatusMessage</div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+            {
+                <div class="error" role="alert">@Model.ErrorMessage</div>
+            }
+
             @if (Model.Rows.Count == 0)
             {
                 <p class="muted">No endpoint assignments are available.</p>
@@ -90,6 +103,7 @@
                             </div>
                             <div class="button-row" style="margin-top:.85rem;">
                                 <a class="button-secondary" href="/endpoints/@row.AssignmentId/edit">Edit assignment</a>
+                                <a class="button-secondary" href="/endpoints/@row.AssignmentId/remove">Remove endpoint</a>
                             </div>
                         </article>
                     }

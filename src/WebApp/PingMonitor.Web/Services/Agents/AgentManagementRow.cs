@@ -15,3 +15,11 @@ public sealed class AgentManagementRow
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required int AssignmentCount { get; init; }
 }
+
+public sealed class RemoveAgentDetails
+{
+    public required string AgentId { get; init; }
+    public required string Name { get; init; }
+    public required string InstanceId { get; init; }
+    public required int AssignmentCount { get; init; }
+}

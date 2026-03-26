@@ -185,6 +185,57 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         return UpdateEndpointResult.Succeeded();
     }
 
+    public async Task<RemoveEndpointResult> RemoveByAssignmentAsync(string assignmentId, CancellationToken cancellationToken)
+    {
+        var normalizedAssignmentId = NormalizeRequired(assignmentId);
+        if (normalizedAssignmentId is null)
+        {
+            return RemoveEndpointResult.NotFound();
+        }
+
+        var assignment = await _dbContext.MonitorAssignments
+            .SingleOrDefaultAsync(x => x.AssignmentId == normalizedAssignmentId, cancellationToken);
+
+        if (assignment is null)
+        {
+            return RemoveEndpointResult.NotFound();
+        }
+
+        var endpoint = await _dbContext.Endpoints
+            .SingleAsync(x => x.EndpointId == assignment.EndpointId, cancellationToken);
+
+        var endpointAssignments = await _dbContext.MonitorAssignments
+            .Where(x => x.EndpointId == endpoint.EndpointId)
+            .ToListAsync(cancellationToken);
+
+        var changed = false;
+        if (endpoint.Enabled)
+        {
+            endpoint.Enabled = false;
+            changed = true;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var endpointAssignment in endpointAssignments)
+        {
+            if (!endpointAssignment.Enabled)
+            {
+                continue;
+            }
+
+            endpointAssignment.Enabled = false;
+            endpointAssignment.UpdatedAtUtc = now;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return RemoveEndpointResult.Completed(changed);
+    }
+
     private async Task<List<EndpointValidationError>> ValidateCreateAsync(CreateEndpointCommand command, CancellationToken cancellationToken)
     {
         var errors = new List<EndpointValidationError>();

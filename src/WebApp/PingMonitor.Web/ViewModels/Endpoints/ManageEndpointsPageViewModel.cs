@@ -6,6 +6,8 @@ namespace PingMonitor.Web.ViewModels.Endpoints;
 public sealed class ManageEndpointsPageViewModel
 {
     public IReadOnlyList<ManageEndpointRowViewModel> Rows { get; init; } = [];
+    public string? StatusMessage { get; set; }
+    public string? ErrorMessage { get; set; }
 }
 
 public sealed class ManageEndpointRowViewModel
@@ -94,4 +96,16 @@ public sealed class EditEndpointOptionsViewModel
 {
     public IReadOnlyList<EndpointAgentOptionViewModel> Agents { get; init; } = [];
     public IReadOnlyList<EndpointDependencyOptionViewModel> Dependencies { get; init; } = [];
+}
+
+public sealed class RemoveEndpointPageViewModel
+{
+    public string AssignmentId { get; init; } = string.Empty;
+    public string EndpointId { get; init; } = string.Empty;
+    public string EndpointName { get; init; } = string.Empty;
+    public string Target { get; init; } = string.Empty;
+    public string AgentDisplay { get; init; } = string.Empty;
+    public string ConfirmationText { get; set; } = string.Empty;
+    public string RequiredConfirmationText { get; init; } = string.Empty;
+    public string? ErrorMessage { get; set; }
 }
