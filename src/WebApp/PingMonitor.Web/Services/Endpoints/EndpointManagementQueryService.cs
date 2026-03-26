@@ -43,15 +43,18 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
             }).ToArrayAsync(cancellationToken);
 
         var endpointIds = rows.Select(x => x.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
+        var endpointIdSet = endpointIds.ToHashSet(StringComparer.Ordinal);
         var endpointNames = await _dbContext.Endpoints.AsNoTracking()
             .ToDictionaryAsync(x => x.EndpointId, x => x.Name, cancellationToken);
-        var dependencyLookup = await _dbContext.EndpointDependencies.AsNoTracking()
-            .Where(x => endpointIds.Contains(x.EndpointId))
-            .GroupBy(x => x.EndpointId)
-            .ToDictionaryAsync(
+        var dependencies = await _dbContext.EndpointDependencies.AsNoTracking()
+            .ToArrayAsync(cancellationToken);
+        var dependencyLookup = dependencies
+            .Where(x => endpointIdSet.Contains(x.EndpointId))
+            .GroupBy(x => x.EndpointId, StringComparer.Ordinal)
+            .ToDictionary(
                 group => group.Key,
                 group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).ToArray(),
-                cancellationToken);
+                StringComparer.Ordinal);
 
         return new ManageEndpointsPageViewModel
         {
