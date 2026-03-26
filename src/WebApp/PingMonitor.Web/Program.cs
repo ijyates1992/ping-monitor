@@ -8,10 +8,10 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
-using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.Agents;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Groups;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.Services.Status;
@@ -128,12 +128,6 @@ builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 
 var app = builder.Build();
-
-using (var scope = app.Services.CreateScope())
-{
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
-    await RoleBootstrapService.EnsureRolesAsync(roleManager);
-}
 
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
