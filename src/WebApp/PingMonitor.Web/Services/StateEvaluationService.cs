@@ -170,9 +170,18 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             return ParentStateContext.None;
         }
 
-        var parentAssignments = await _dbContext.MonitorAssignments.AsNoTracking()
-            .Where(x => x.AgentId == assignment.AgentId && directParentEndpointIds.Contains(x.EndpointId))
-            .ToDictionaryAsync(x => x.EndpointId, x => x.AssignmentId, cancellationToken);
+        var parentAssignments = await _dbContext.EndpointDependencies.AsNoTracking()
+            .Where(x => x.EndpointId == endpointId)
+            .Join(
+                _dbContext.MonitorAssignments.AsNoTracking().Where(x => x.AgentId == assignment.AgentId),
+                dependency => dependency.DependsOnEndpointId,
+                monitorAssignment => monitorAssignment.EndpointId,
+                (dependency, monitorAssignment) => new
+                {
+                    ParentEndpointId = dependency.DependsOnEndpointId,
+                    monitorAssignment.AssignmentId
+                })
+            .ToDictionaryAsync(x => x.ParentEndpointId, x => x.AssignmentId, cancellationToken);
 
         if (parentAssignments.Count == 0)
         {
@@ -180,18 +189,26 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         }
 
         var parentStates = await _dbContext.EndpointStates.AsNoTracking()
-            .Where(x => parentAssignments.Values.Contains(x.AssignmentId))
-            .Select(x => new { x.AssignmentId, x.CurrentState })
+            .Where(x => x.AgentId == assignment.AgentId)
+            .Join(
+                _dbContext.MonitorAssignments.AsNoTracking(),
+                state => state.AssignmentId,
+                monitorAssignment => monitorAssignment.AssignmentId,
+                (state, monitorAssignment) => new
+                {
+                    monitorAssignment.EndpointId,
+                    state.CurrentState
+                })
             .ToArrayAsync(cancellationToken);
 
         foreach (var parentEndpointId in directParentEndpointIds)
         {
-            if (!parentAssignments.TryGetValue(parentEndpointId, out var parentAssignmentId))
+            if (!parentAssignments.ContainsKey(parentEndpointId))
             {
                 continue;
             }
 
-            if (parentStates.Any(x => x.AssignmentId == parentAssignmentId && x.CurrentState == EndpointStateKind.Down))
+            if (parentStates.Any(x => x.EndpointId == parentEndpointId && x.CurrentState == EndpointStateKind.Down))
             {
                 return new ParentStateContext(parentEndpointId, true);
             }
