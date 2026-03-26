@@ -4,6 +4,7 @@ public sealed class EndpointPerformancePageViewModel
 {
     public string AssignmentId { get; init; } = string.Empty;
     public string EndpointName { get; init; } = string.Empty;
+    public string IconKey { get; init; } = "generic";
     public string Target { get; init; } = string.Empty;
     public string AgentDisplay { get; init; } = string.Empty;
     public string SelectedRange { get; init; } = EndpointPerformanceRange.Default;

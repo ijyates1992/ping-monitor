@@ -16,6 +16,7 @@ public sealed class ManageEndpointRowViewModel
 {
     public string AssignmentId { get; init; } = string.Empty;
     public string EndpointName { get; init; } = string.Empty;
+    public string IconKey { get; init; } = "generic";
     public string Target { get; init; } = string.Empty;
     public string AgentDisplay { get; init; } = string.Empty;
     public IReadOnlyList<string> DependencyEndpointNames { get; init; } = [];
@@ -50,6 +51,9 @@ public sealed class EditEndpointPageViewModel
     [Required(ErrorMessage = "Target is required.")]
     [Display(Name = "Target")]
     public string Target { get; set; } = string.Empty;
+
+    [Display(Name = "Icon")]
+    public string IconKey { get; set; } = "generic";
 
     [Required(ErrorMessage = "Agent selection is required.")]
     [Display(Name = "Agent")]
@@ -90,6 +94,7 @@ public sealed class EditEndpointPageViewModel
     public IReadOnlyList<EndpointAgentOptionViewModel> AvailableAgents { get; set; } = [];
     public IReadOnlyList<EndpointDependencyOptionViewModel> AvailableDependencies { get; set; } = [];
     public IReadOnlyList<EndpointGroupOptionViewModel> AvailableGroups { get; set; } = [];
+    public IReadOnlyList<EndpointIconOptionViewModel> AvailableIcons { get; set; } = [];
 }
 
 public sealed class EndpointAgentOptionViewModel

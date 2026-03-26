@@ -1,4 +1,5 @@
 @model PingMonitor.Web.ViewModels.Endpoints.CreateEndpointPageViewModel
+@using PingMonitor.Web.Services.Endpoints
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -70,6 +71,16 @@
                         <div class="field-error"><span asp-validation-for="Target"></span></div>
                     </div>
                     <div>
+                        <label asp-for="IconKey"></label>
+                        <select asp-for="IconKey">
+                            @foreach (var icon in Model.AvailableIcons)
+                            {
+                                <option value="@icon.Key">@icon.Symbol @icon.DisplayName</option>
+                            }
+                        </select>
+                        <div class="field-error"><span asp-validation-for="IconKey"></span></div>
+                    </div>
+                    <div>
                         <label asp-for="AgentId"></label>
                         <select asp-for="AgentId">
                             <option value="">Select an agent</option>
@@ -84,6 +95,7 @@
                         <input asp-for="EndpointEnabled" />
                         <label asp-for="EndpointEnabled"></label>
                     </div>
+                    <div class="muted">Selected icon: @EndpointIconCatalog.GetSymbol(Model.IconKey) @EndpointIconCatalog.GetDisplayName(Model.IconKey)</div>
                 </div>
             </section>
 

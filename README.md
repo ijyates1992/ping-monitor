@@ -57,6 +57,8 @@ Agents collect facts. The server decides meaning.
 - Configurable intervals and timeouts
 - Failure and recovery thresholds
 - Per-endpoint alert control
+- Selectable built-in endpoint icons for quick visual identification (`generic`, `switch`, `firewall`, `server`, `router`, `printer`, `pc`, `laptop`, `nas`, `access-point`, `camera`, `phone`)
+- Icons are operational UI hints only; v1 does not support custom or uploaded icons
 
 ### Dependency-Aware Alerting
 

@@ -124,6 +124,7 @@ Represents a logical target to monitor.
 - `endpointId`
 - `name`
 - `target` (IP or hostname)
+- `iconKey` (controlled endpoint icon selection, default `generic`)
 - `enabled` (bool)
 
 #### Relationships

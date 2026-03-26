@@ -12,6 +12,7 @@ public sealed class CreateEndpointCommand
 {
     public string EndpointName { get; init; } = string.Empty;
     public string Target { get; init; } = string.Empty;
+    public string IconKey { get; init; } = EndpointIconCatalog.Generic;
     public string AgentId { get; init; } = string.Empty;
     public IReadOnlyList<string> DependsOnEndpointIds { get; init; } = [];
     public IReadOnlyList<string> GroupIds { get; init; } = [];
@@ -30,6 +31,7 @@ public sealed class UpdateEndpointCommand
     public string EndpointId { get; init; } = string.Empty;
     public string EndpointName { get; init; } = string.Empty;
     public string Target { get; init; } = string.Empty;
+    public string IconKey { get; init; } = EndpointIconCatalog.Generic;
     public string AgentId { get; init; } = string.Empty;
     public IReadOnlyList<string> DependsOnEndpointIds { get; init; } = [];
     public IReadOnlyList<string> GroupIds { get; init; } = [];
@@ -48,6 +50,7 @@ public sealed class EditEndpointModel
     public string EndpointId { get; init; } = string.Empty;
     public string EndpointName { get; init; } = string.Empty;
     public string Target { get; init; } = string.Empty;
+    public string IconKey { get; init; } = EndpointIconCatalog.Generic;
     public string AgentId { get; init; } = string.Empty;
     public IReadOnlyList<string> DependsOnEndpointIds { get; init; } = [];
     public IReadOnlyList<string> GroupIds { get; init; } = [];

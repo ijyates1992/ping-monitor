@@ -85,6 +85,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         endpoint.Property(x => x.EndpointId).HasMaxLength(64);
         endpoint.Property(x => x.Name).HasMaxLength(255).IsRequired();
         endpoint.Property(x => x.Target).HasMaxLength(255).IsRequired();
+        endpoint.Property(x => x.IconKey).HasMaxLength(64).IsRequired().HasDefaultValue("generic");
         endpoint.Property(x => x.Notes).HasMaxLength(2048);
         endpoint.Property(x => x.CreatedAtUtc).IsRequired();
         endpoint.Property(x => x.Tags).HasConversion(stringListConverter).Metadata.SetValueComparer(stringListComparer);

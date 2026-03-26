@@ -1,5 +1,6 @@
 @model PingMonitor.Web.ViewModels.Endpoints.EndpointPerformancePageViewModel
 @using System.Text.Json
+@using PingMonitor.Web.Services.Endpoints
 @{
     static string FormatDate(DateTimeOffset value) => value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
 
@@ -60,7 +61,7 @@
 
         <section class="card">
             <div class="meta-grid">
-                <div class="meta-item"><span>Endpoint</span><strong>@Model.EndpointName</strong></div>
+                <div class="meta-item"><span>Endpoint</span><strong>@EndpointIconCatalog.GetSymbol(Model.IconKey) @Model.EndpointName</strong></div>
                 <div class="meta-item"><span>Target</span><strong>@Model.Target</strong></div>
                 <div class="meta-item"><span>Agent</span><strong>@Model.AgentDisplay</strong></div>
                 <div class="meta-item"><span>Assignment ID</span><div>@Model.AssignmentId</div></div>

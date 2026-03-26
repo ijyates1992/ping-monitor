@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Status;
@@ -54,6 +55,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AssignmentId = assignment.AssignmentId,
                 EndpointId = endpoint.EndpointId,
                 EndpointName = endpoint.Name,
+                IconKey = endpoint.IconKey,
                 Target = endpoint.Target,
                 AgentId = assignmentAgent.AgentId,
                 AgentInstanceId = assignmentAgent.InstanceId,
@@ -145,6 +147,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AssignmentId = row.AssignmentId,
                 EndpointId = row.EndpointId,
                 EndpointName = row.EndpointName,
+                IconKey = EndpointIconCatalog.Normalize(row.IconKey),
                 Target = row.Target,
                 AgentId = row.AgentId,
                 AgentInstanceId = row.AgentInstanceId,
@@ -180,6 +183,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AssignmentId = row.AssignmentId,
                 EndpointId = row.EndpointId,
                 EndpointName = row.EndpointName,
+                IconKey = row.IconKey,
                 Target = row.Target,
                 AgentId = row.AgentId,
                 AgentInstanceId = row.AgentInstanceId,
