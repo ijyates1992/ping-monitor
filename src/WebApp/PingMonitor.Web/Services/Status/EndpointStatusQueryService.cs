@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.ViewModels.Status;
+using System.Linq.Expressions;
 
 namespace PingMonitor.Web.Services.Status;
 
@@ -85,11 +86,10 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         var endpointIds = rows.Select(x => x.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
         var endpointNames = await _dbContext.Endpoints.AsNoTracking()
             .ToDictionaryAsync(x => x.EndpointId, x => x.Name, cancellationToken);
-        var endpointIdSet = endpointIds.ToHashSet(StringComparer.Ordinal);
-        var dependencyLookup = endpointIdSet.Count == 0
+        var dependencyLookup = endpointIds.Length == 0
             ? new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
-            : (await _dbContext.EndpointDependencies.AsNoTracking().ToArrayAsync(cancellationToken))
-                .Where(x => endpointIdSet.Contains(x.EndpointId))
+            : (await BuildDependencyQuery(endpointIds)
+                .ToArrayAsync(cancellationToken))
                 .GroupBy(x => x.EndpointId)
                 .ToDictionary(
                     group => group.Key,
@@ -160,5 +160,22 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         return Enum.TryParse<EndpointStateKind>(value, ignoreCase: true, out var parsedValue)
             ? parsedValue
             : null;
+    }
+
+    private IQueryable<EndpointDependency> BuildDependencyQuery(IReadOnlyList<string> endpointIds)
+    {
+        var dependencyParameter = Expression.Parameter(typeof(EndpointDependency), "dependency");
+        var endpointIdProperty = Expression.Property(dependencyParameter, nameof(EndpointDependency.EndpointId));
+        Expression predicateBody = Expression.Constant(false);
+
+        foreach (var endpointId in endpointIds)
+        {
+            var endpointIdValue = Expression.Constant(endpointId, typeof(string));
+            var endpointMatches = Expression.Equal(endpointIdProperty, endpointIdValue);
+            predicateBody = Expression.OrElse(predicateBody, endpointMatches);
+        }
+
+        var predicate = Expression.Lambda<Func<EndpointDependency, bool>>(predicateBody, dependencyParameter);
+        return _dbContext.EndpointDependencies.AsNoTracking().Where(predicate);
     }
 }
