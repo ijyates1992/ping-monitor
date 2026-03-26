@@ -31,32 +31,37 @@ internal sealed class EndpointMetricsService : IEndpointMetricsService
 
         var now = DateTimeOffset.UtcNow;
         var windowStart = now - Window;
-        var assignmentIdSet = assignmentIds
+        var normalizedAssignmentIds = assignmentIds
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x.Trim())
             .Distinct(StringComparer.Ordinal)
-            .ToHashSet(StringComparer.Ordinal);
+            .ToArray();
+
+        if (normalizedAssignmentIds.Length == 0)
+        {
+            return new Dictionary<string, EndpointMetricSummary>(StringComparer.Ordinal);
+        }
 
         var endpointStates = await _dbContext.EndpointStates
             .AsNoTracking()
-            .Where(x => assignmentIdSet.Contains(x.AssignmentId))
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId))
             .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
 
         var transitionsInWindow = await _dbContext.StateTransitions
             .AsNoTracking()
-            .Where(x => assignmentIdSet.Contains(x.AssignmentId) && x.TransitionAtUtc >= windowStart && x.TransitionAtUtc <= now)
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId) && x.TransitionAtUtc >= windowStart && x.TransitionAtUtc <= now)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
         var transitionsBeforeWindow = await _dbContext.StateTransitions
             .AsNoTracking()
-            .Where(x => assignmentIdSet.Contains(x.AssignmentId) && x.TransitionAtUtc < windowStart)
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId) && x.TransitionAtUtc < windowStart)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
         var successfulResults = await _dbContext.CheckResults
             .AsNoTracking()
-            .Where(x => assignmentIdSet.Contains(x.AssignmentId)
+            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId)
                         && x.CheckedAtUtc >= windowStart
                         && x.CheckedAtUtc <= now
                         && x.Success
@@ -84,7 +89,7 @@ internal sealed class EndpointMetricsService : IEndpointMetricsService
                 StringComparer.Ordinal);
 
         var summaries = new Dictionary<string, EndpointMetricSummary>(StringComparer.Ordinal);
-        foreach (var assignmentId in assignmentIdSet)
+        foreach (var assignmentId in normalizedAssignmentIds)
         {
             endpointStates.TryGetValue(assignmentId, out var endpointState);
             transitionsInWindowByAssignment.TryGetValue(assignmentId, out var stateTransitions);
