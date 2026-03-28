@@ -232,7 +232,7 @@ public sealed class AdminBackupsController : Controller
             new DeleteConfigurationBackupRequest
             {
                 FileId = form.FileId,
-                ConfirmSingleDelete = form.ConfirmDelete
+                ConfirmationText = form.ConfirmationText
             },
             cancellationToken);
 

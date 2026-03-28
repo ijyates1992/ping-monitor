@@ -61,7 +61,7 @@ public sealed class BackupDeleteSingleForm
     [Required]
     public string FileId { get; set; } = string.Empty;
 
-    public bool ConfirmDelete { get; set; }
+    public string? ConfirmationText { get; set; }
 }
 
 public sealed class BackupDeleteBulkForm

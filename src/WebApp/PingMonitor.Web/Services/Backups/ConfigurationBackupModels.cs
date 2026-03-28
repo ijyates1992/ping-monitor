@@ -43,6 +43,7 @@ public static class BackupDeleteModes
 {
     public const string Single = "single";
     public const string Bulk = "bulk";
+    public const string SingleConfirmationText = "DELETE";
     public const string BulkConfirmationText = "DELETE";
 }
 
@@ -237,7 +238,7 @@ public sealed class DeleteConfigurationBackupRequest
     [Required]
     public string FileId { get; init; } = string.Empty;
 
-    public bool ConfirmSingleDelete { get; init; }
+    public string? ConfirmationText { get; init; }
 }
 
 public sealed class BulkDeleteConfigurationBackupsRequest
