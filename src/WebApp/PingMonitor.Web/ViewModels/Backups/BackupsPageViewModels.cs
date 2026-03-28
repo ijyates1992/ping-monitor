@@ -41,4 +41,73 @@ public sealed class AdminBackupsPageViewModel
     public required CreateBackupPageForm Form { get; init; }
     public required IReadOnlyList<BackupRowViewModel> Backups { get; init; } = [];
     public string? StatusMessage { get; init; }
+    public RestorePreviewForm RestorePreviewForm { get; init; } = new();
+    public RestoreApplyForm RestoreApplyForm { get; init; } = new();
+    public BackupRestorePreviewViewModel? Preview { get; init; }
+    public BackupRestoreSummaryViewModel? RestoreSummary { get; init; }
+}
+
+public sealed class RestorePreviewForm
+{
+    [Required(ErrorMessage = "Backup file is required.")]
+    [Display(Name = "Backup file")]
+    public string SelectedFileId { get; set; } = string.Empty;
+}
+
+public sealed class RestoreApplyForm
+{
+    [Required(ErrorMessage = "Backup file is required.")]
+    public string SelectedFileId { get; set; } = string.Empty;
+
+    [Display(Name = "Restore agents")]
+    public bool IncludeAgents { get; set; } = true;
+
+    [Display(Name = "Restore endpoints")]
+    public bool IncludeEndpoints { get; set; } = true;
+
+    [Display(Name = "Restore assignments")]
+    public bool IncludeAssignments { get; set; } = true;
+
+    [Display(Name = "Restore identity")]
+    public bool IncludeIdentity { get; set; }
+}
+
+public sealed class BackupRestorePreviewViewModel
+{
+    public string FileId { get; init; } = string.Empty;
+    public string BackupName { get; init; } = string.Empty;
+    public string? Notes { get; init; }
+    public DateTimeOffset ExportedAtUtc { get; init; }
+    public string AppVersion { get; init; } = string.Empty;
+    public int FormatVersion { get; init; }
+    public IReadOnlyList<string> IncludedSections { get; init; } = [];
+    public ConfigurationBackupSectionCountViewModel Counts { get; init; } = new();
+}
+
+public sealed class ConfigurationBackupSectionCountViewModel
+{
+    public int Agents { get; init; }
+    public int Endpoints { get; init; }
+    public int Assignments { get; init; }
+    public int IdentityUsers { get; init; }
+    public int IdentityRoles { get; init; }
+    public int IdentityUserRoles { get; init; }
+}
+
+public sealed class BackupRestoreSectionResultViewModel
+{
+    public string Section { get; init; } = string.Empty;
+    public int InsertedCount { get; init; }
+    public int UpdatedCount { get; init; }
+    public int SkippedCount { get; init; }
+    public int ErrorCount { get; init; }
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+}
+
+public sealed class BackupRestoreSummaryViewModel
+{
+    public string FileId { get; init; } = string.Empty;
+    public string BackupName { get; init; } = string.Empty;
+    public IReadOnlyList<string> SelectedSections { get; init; } = [];
+    public IReadOnlyList<BackupRestoreSectionResultViewModel> Sections { get; init; } = [];
 }

@@ -130,7 +130,10 @@ builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IConfigurationBackupFileNameGenerator, ConfigurationBackupFileNameGenerator>();
 builder.Services.AddScoped<IConfigurationBackupService, ConfigurationBackupService>();
+builder.Services.AddScoped<IConfigurationBackupDocumentLoader, ConfigurationBackupDocumentLoader>();
 builder.Services.AddScoped<IConfigurationBackupQueryService, ConfigurationBackupQueryService>();
+builder.Services.AddScoped<IConfigurationRestorePreviewService, ConfigurationRestorePreviewService>();
+builder.Services.AddScoped<IConfigurationRestoreService, ConfigurationRestoreService>();
 
 var app = builder.Build();
 

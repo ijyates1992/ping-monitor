@@ -12,19 +12,25 @@ public sealed class AdminBackupsController : Controller
 {
     private readonly IConfigurationBackupService _backupService;
     private readonly IConfigurationBackupQueryService _backupQueryService;
+    private readonly IConfigurationRestorePreviewService _restorePreviewService;
+    private readonly IConfigurationRestoreService _restoreService;
 
     public AdminBackupsController(
         IConfigurationBackupService backupService,
-        IConfigurationBackupQueryService backupQueryService)
+        IConfigurationBackupQueryService backupQueryService,
+        IConfigurationRestorePreviewService restorePreviewService,
+        IConfigurationRestoreService restoreService)
     {
         _backupService = backupService;
         _backupQueryService = backupQueryService;
+        _restorePreviewService = restorePreviewService;
+        _restoreService = restoreService;
     }
 
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
-        var viewModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), statusMessage: null, cancellationToken);
+        var viewModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
         return View("Index", viewModel);
     }
 
@@ -32,7 +38,7 @@ public sealed class AdminBackupsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create([FromForm] CreateBackupPageForm form, CancellationToken cancellationToken)
     {
-        var selectedSections = GetSelectedSections(form);
+        var selectedSections = GetSelectedExportSections(form);
         if (selectedSections.Count == 0)
         {
             ModelState.AddModelError(string.Empty, "Select at least one configuration section to export.");
@@ -40,7 +46,7 @@ public sealed class AdminBackupsController : Controller
 
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildPageViewModelAsync(form, statusMessage: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(form, new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
 
@@ -61,9 +67,105 @@ public sealed class AdminBackupsController : Controller
         catch (InvalidOperationException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildPageViewModelAsync(form, statusMessage: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(form, new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
+    }
+
+    [HttpPost("preview")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PreviewRestore([FromForm] RestorePreviewForm form, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            return View("Index", invalidModel);
+        }
+
+        try
+        {
+            var preview = await _restorePreviewService.GetPreviewAsync(form.SelectedFileId, cancellationToken);
+            var previewViewModel = ToPreviewViewModel(preview);
+            var applyForm = new RestoreApplyForm
+            {
+                SelectedFileId = preview.FileId,
+                IncludeAgents = preview.IncludedSections.Contains(ConfigurationBackupSections.Agents, StringComparer.Ordinal),
+                IncludeEndpoints = preview.IncludedSections.Contains(ConfigurationBackupSections.Endpoints, StringComparer.Ordinal),
+                IncludeAssignments = preview.IncludedSections.Contains(ConfigurationBackupSections.Assignments, StringComparer.Ordinal),
+                IncludeIdentity = false
+            };
+
+            var model = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, applyForm, statusMessage: null, preview: previewViewModel, restoreSummary: null, cancellationToken);
+            return View("Index", model);
+        }
+        catch (FileNotFoundException)
+        {
+            ModelState.AddModelError(string.Empty, "Backup file was not found.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+        }
+
+        var failedModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+        return View("Index", failedModel);
+    }
+
+    [HttpPost("restore")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restore([FromForm] RestoreApplyForm form, CancellationToken cancellationToken)
+    {
+        var selectedSections = GetSelectedRestoreSections(form);
+        if (selectedSections.Count == 0)
+        {
+            ModelState.AddModelError(string.Empty, "Select at least one section for merge restore.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new RestorePreviewForm { SelectedFileId = form.SelectedFileId }, form, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            return View("Index", invalidModel);
+        }
+
+        try
+        {
+            var response = await _restoreService.RestoreMergeAsync(
+                new RestoreConfigurationRequest
+                {
+                    FileId = form.SelectedFileId,
+                    SelectedSections = selectedSections
+                },
+                cancellationToken);
+
+            var preview = await _restorePreviewService.GetPreviewAsync(form.SelectedFileId, cancellationToken);
+            var model = await BuildPageViewModelAsync(
+                new CreateBackupPageForm(),
+                new RestorePreviewForm { SelectedFileId = form.SelectedFileId },
+                form,
+                statusMessage: "Merge restore completed.",
+                preview: ToPreviewViewModel(preview),
+                restoreSummary: ToRestoreSummaryViewModel(response),
+                cancellationToken);
+            return View("Index", model);
+        }
+        catch (FileNotFoundException)
+        {
+            ModelState.AddModelError(string.Empty, "Backup file was not found.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+        }
+
+        var failedModel = await BuildPageViewModelAsync(
+            new CreateBackupPageForm(),
+            new RestorePreviewForm { SelectedFileId = form.SelectedFileId },
+            form,
+            statusMessage: null,
+            preview: null,
+            restoreSummary: null,
+            cancellationToken);
+        return View("Index", failedModel);
     }
 
     [HttpGet("download")]
@@ -81,12 +183,23 @@ public sealed class AdminBackupsController : Controller
         }
     }
 
-    private async Task<AdminBackupsPageViewModel> BuildPageViewModelAsync(CreateBackupPageForm form, string? statusMessage, CancellationToken cancellationToken)
+    private async Task<AdminBackupsPageViewModel> BuildPageViewModelAsync(
+        CreateBackupPageForm form,
+        RestorePreviewForm restorePreviewForm,
+        RestoreApplyForm restoreApplyForm,
+        string? statusMessage,
+        BackupRestorePreviewViewModel? preview,
+        BackupRestoreSummaryViewModel? restoreSummary,
+        CancellationToken cancellationToken)
     {
         var backups = await _backupQueryService.ListBackupsAsync(cancellationToken);
         return new AdminBackupsPageViewModel
         {
             Form = form,
+            RestorePreviewForm = restorePreviewForm,
+            RestoreApplyForm = restoreApplyForm,
+            Preview = preview,
+            RestoreSummary = restoreSummary,
             StatusMessage = statusMessage ?? Request.Query["status"],
             Backups = backups
                 .Select(item => new BackupRowViewModel
@@ -106,7 +219,7 @@ public sealed class AdminBackupsController : Controller
         };
     }
 
-    private static List<string> GetSelectedSections(CreateBackupPageForm form)
+    private static List<string> GetSelectedExportSections(CreateBackupPageForm form)
     {
         var sections = new List<string>();
         if (form.IncludeAgents)
@@ -130,6 +243,74 @@ public sealed class AdminBackupsController : Controller
         }
 
         return sections;
+    }
+
+    private static List<string> GetSelectedRestoreSections(RestoreApplyForm form)
+    {
+        var sections = new List<string>();
+        if (form.IncludeAgents)
+        {
+            sections.Add(ConfigurationBackupSections.Agents);
+        }
+
+        if (form.IncludeEndpoints)
+        {
+            sections.Add(ConfigurationBackupSections.Endpoints);
+        }
+
+        if (form.IncludeAssignments)
+        {
+            sections.Add(ConfigurationBackupSections.Assignments);
+        }
+
+        if (form.IncludeIdentity)
+        {
+            sections.Add(ConfigurationBackupSections.Identity);
+        }
+
+        return sections;
+    }
+
+    private static BackupRestorePreviewViewModel ToPreviewViewModel(ConfigurationBackupPreview preview)
+    {
+        return new BackupRestorePreviewViewModel
+        {
+            FileId = preview.FileId,
+            BackupName = preview.Metadata.BackupName,
+            Notes = preview.Metadata.Notes,
+            ExportedAtUtc = preview.Metadata.ExportedAtUtc,
+            AppVersion = preview.Metadata.AppVersion,
+            FormatVersion = preview.Metadata.FormatVersion,
+            IncludedSections = preview.IncludedSections,
+            Counts = new ConfigurationBackupSectionCountViewModel
+            {
+                Agents = preview.Counts.Agents,
+                Endpoints = preview.Counts.Endpoints,
+                Assignments = preview.Counts.Assignments,
+                IdentityUsers = preview.Counts.IdentityUsers,
+                IdentityRoles = preview.Counts.IdentityRoles,
+                IdentityUserRoles = preview.Counts.IdentityUserRoles
+            }
+        };
+    }
+
+    private static BackupRestoreSummaryViewModel ToRestoreSummaryViewModel(RestoreConfigurationResponse response)
+    {
+        return new BackupRestoreSummaryViewModel
+        {
+            FileId = response.FileId,
+            BackupName = response.BackupName,
+            SelectedSections = response.SelectedSections,
+            Sections = response.SectionResults.Select(x => new BackupRestoreSectionResultViewModel
+            {
+                Section = x.Section,
+                InsertedCount = x.InsertedCount,
+                UpdatedCount = x.UpdatedCount,
+                SkippedCount = x.SkippedCount,
+                ErrorCount = x.ErrorCount,
+                Warnings = x.Warnings
+            }).ToArray()
+        };
     }
 
     private static string ToDisplaySectionName(string section)

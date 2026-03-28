@@ -93,6 +93,13 @@ States:
 
 - No silent failures
 - All actions are traceable
+
+### Configuration Backup and Restore
+
+- Admin backup page supports server-side JSON configuration backups.
+- Restore is explicit and preview-first from existing server-side backup files.
+- Restore currently supports **merge mode only** (insert missing + update matching).
+- Replace mode, operational data restore, and backup upload are intentionally not implemented yet.
 - Logs are treated as first-class outputs
 
 ---

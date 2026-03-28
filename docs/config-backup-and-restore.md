@@ -87,11 +87,23 @@ Example:
 }
 ```
 
-## Phase 1 implementation notes
+## Restore behaviour (current)
 
-- This phase implements **export only**.
-- Restore and upload workflows are intentionally not implemented yet.
-- Backup name is required for export.
-- Notes are stored in the backup document metadata (`notes`) and displayed in backup listings.
-- Backup files are stored server-side under the configured `Backup:StoragePath` location (default `App_Data/Backups`), which is outside public static web content.
-- Backup format remains JSON and configuration-only.
+- Restore is **configuration-only** and uses **merge mode only**.
+- Restore must be **previewed before apply**.
+- Preview must display backup metadata including `notes` prominently before restore is run.
+- Restore is driven from existing **server-side backup files** in the configured `Backup:StoragePath`.
+- Restore supports these sections:
+  - `agents`
+  - `endpoints`
+  - `assignments`
+  - `identity` (optional and explicit)
+- Merge mode updates matching records and inserts missing records.
+- Merge mode in this phase does **not delete existing configuration**.
+- Replace mode is not implemented in this phase.
+- Restore does **not** import operational data (results, state transitions, alerts, logs, metrics, runtime state).
+
+## Historical phase note
+
+- Phase 1 introduced export-only backup creation and listing.
+- Restore/upload workflows were intentionally deferred in that phase.

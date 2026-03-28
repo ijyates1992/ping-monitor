@@ -112,6 +112,7 @@ public sealed class BackupEndpointRecord
     public string IconKey { get; init; } = string.Empty;
     public bool Enabled { get; init; }
     public IReadOnlyList<string> Tags { get; init; } = [];
+    public IReadOnlyList<string> DependsOnEndpointIds { get; init; } = [];
     public string? Notes { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
 }
@@ -196,4 +197,59 @@ public sealed class CreateConfigurationBackupResponse
     public string BackupName { get; init; } = string.Empty;
     public DateTimeOffset ExportedAtUtc { get; init; }
     public IReadOnlyList<string> IncludedSections { get; init; } = [];
+}
+
+public sealed class RestorePreviewMetadata
+{
+    public string BackupName { get; init; } = string.Empty;
+    public DateTimeOffset ExportedAtUtc { get; init; }
+    public string AppVersion { get; init; } = string.Empty;
+    public int FormatVersion { get; init; }
+    public string? Notes { get; init; }
+}
+
+public sealed class ConfigurationBackupSectionCounts
+{
+    public int Agents { get; init; }
+    public int Endpoints { get; init; }
+    public int Assignments { get; init; }
+    public int IdentityUsers { get; init; }
+    public int IdentityRoles { get; init; }
+    public int IdentityUserRoles { get; init; }
+}
+
+public sealed class ConfigurationBackupPreview
+{
+    public string FileId { get; init; } = string.Empty;
+    public string FileName { get; init; } = string.Empty;
+    public RestorePreviewMetadata Metadata { get; init; } = new();
+    public IReadOnlyList<string> IncludedSections { get; init; } = [];
+    public ConfigurationBackupSectionCounts Counts { get; init; } = new();
+}
+
+public sealed class RestoreConfigurationRequest
+{
+    [Required(ErrorMessage = "Backup file is required.")]
+    public string FileId { get; init; } = string.Empty;
+
+    [Required]
+    public IReadOnlyList<string> SelectedSections { get; init; } = [];
+}
+
+public sealed class RestoreSectionResult
+{
+    public string Section { get; init; } = string.Empty;
+    public int InsertedCount { get; set; }
+    public int UpdatedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public int ErrorCount { get; set; }
+    public List<string> Warnings { get; init; } = [];
+}
+
+public sealed class RestoreConfigurationResponse
+{
+    public string FileId { get; init; } = string.Empty;
+    public string BackupName { get; init; } = string.Empty;
+    public IReadOnlyList<string> SelectedSections { get; init; } = [];
+    public IReadOnlyList<RestoreSectionResult> SectionResults { get; init; } = [];
 }
