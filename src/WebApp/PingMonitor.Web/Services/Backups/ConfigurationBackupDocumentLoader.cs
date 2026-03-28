@@ -16,15 +16,18 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
 {
     private readonly IWebHostEnvironment _environment;
     private readonly BackupOptions _options;
+    private readonly IConfigurationBackupDocumentValidator _documentValidator;
     private readonly ILogger<ConfigurationBackupDocumentLoader> _logger;
 
     public ConfigurationBackupDocumentLoader(
         IWebHostEnvironment environment,
         IOptions<BackupOptions> options,
+        IConfigurationBackupDocumentValidator documentValidator,
         ILogger<ConfigurationBackupDocumentLoader> logger)
     {
         _environment = environment;
         _options = options.Value;
+        _documentValidator = documentValidator;
         _logger = logger;
     }
 
@@ -104,7 +107,16 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
             throw new InvalidOperationException("Backup file could not be parsed.");
         }
 
-        ValidateDocument(document, fileId);
+        try
+        {
+            _documentValidator.Validate(document, fileId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw BuildValidationException(fileId, ex.Message);
+        }
+
+        _logger.LogInformation("Validated configuration backup {FileId} for restore workflow.", fileId);
         return document;
     }
 
@@ -113,75 +125,6 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
         return Path.IsPathRooted(_options.StoragePath)
             ? _options.StoragePath
             : Path.Combine(_environment.ContentRootPath, _options.StoragePath);
-    }
-
-    private void ValidateDocument(ConfigurationBackupDocument document, string fileId)
-    {
-        if (document.FormatVersion != ConfigurationBackupMetadata.CurrentFormatVersion)
-        {
-            throw BuildValidationException(fileId, $"Backup formatVersion {document.FormatVersion} is not supported.");
-        }
-
-        if (string.IsNullOrWhiteSpace(document.BackupName)
-            || string.IsNullOrWhiteSpace(document.AppVersion)
-            || document.ExportedAtUtc == default
-            || string.IsNullOrWhiteSpace(document.MachineName))
-        {
-            throw BuildValidationException(fileId, "Backup metadata is incomplete.");
-        }
-
-        if (document.Sections is null)
-        {
-            throw BuildValidationException(fileId, "Backup sections are missing.");
-        }
-
-        if (document.Sections.Agents is not null)
-        {
-            foreach (var agent in document.Sections.Agents)
-            {
-                if (string.IsNullOrWhiteSpace(agent.InstanceId))
-                {
-                    throw BuildValidationException(fileId, "Agent section contains an invalid record (instanceId missing).");
-                }
-            }
-        }
-
-        if (document.Sections.Endpoints is not null)
-        {
-            foreach (var endpoint in document.Sections.Endpoints)
-            {
-                if (string.IsNullOrWhiteSpace(endpoint.Name) || string.IsNullOrWhiteSpace(endpoint.Target))
-                {
-                    throw BuildValidationException(fileId, "Endpoint section contains an invalid record (name/target missing).");
-                }
-            }
-        }
-
-        if (document.Sections.Assignments is not null)
-        {
-            foreach (var assignment in document.Sections.Assignments)
-            {
-                if (string.IsNullOrWhiteSpace(assignment.AgentId)
-                    || string.IsNullOrWhiteSpace(assignment.EndpointId)
-                    || string.IsNullOrWhiteSpace(assignment.CheckType))
-                {
-                    throw BuildValidationException(fileId, "Assignment section contains an invalid record.");
-                }
-            }
-        }
-
-        if (document.Sections.Identity is not null)
-        {
-            foreach (var user in document.Sections.Identity.Users)
-            {
-                if (string.IsNullOrWhiteSpace(user.NormalizedUserName) && string.IsNullOrWhiteSpace(user.NormalizedEmail))
-                {
-                    throw BuildValidationException(fileId, "Identity section contains a user without normalized username/email.");
-                }
-            }
-        }
-
-        _logger.LogInformation("Validated configuration backup {FileId} for restore workflow.", fileId);
     }
 
     private InvalidOperationException BuildValidationException(string fileId, string message)

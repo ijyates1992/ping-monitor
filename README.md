@@ -97,11 +97,13 @@ States:
 ### Configuration Backup and Restore
 
 - Admin backup page supports server-side JSON configuration backups.
+- Admin backup page supports uploading JSON configuration backups.
+- Accepted uploads are validated, retained on the server, and added to the managed backup list.
 - Restore is explicit and preview-first from existing server-side backup files.
 - Restore supports:
   - **merge mode** (insert missing + update matching; no deletes)
   - **replace mode** (destructive, section-scoped delete + restore; requires typing `REPLACE`)
-- Replace mode, operational data restore, and backup upload are intentionally not implemented yet.
+- Operational data restore is intentionally not implemented.
 - Logs are treated as first-class outputs
 
 ---

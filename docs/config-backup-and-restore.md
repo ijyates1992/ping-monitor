@@ -93,6 +93,9 @@ Example:
 - Restore must be **previewed before apply**.
 - Preview must display backup metadata including `notes` prominently before restore is run.
 - Restore is driven from existing **server-side backup files** in the configured `Backup:StoragePath`.
+- Backup upload accepts JSON configuration backup files and validates them before acceptance.
+- Accepted uploaded files are retained in `Backup:StoragePath` and become part of the managed backup set.
+- Uploaded files are treated exactly like locally created backup files for preview and restore.
 - Restore supports these sections:
   - `agents`
   - `endpoints`
@@ -111,8 +114,12 @@ Example:
 - Replace requests with missing/incorrect confirmation must be rejected.
 - Identity replace is not supported in this phase; identity restore remains merge-only and explicit.
 - Restore does **not** import operational data (results, state transitions, alerts, logs, metrics, runtime state).
+- Upload does **not** trigger restore automatically; restore remains an explicit separate operator action.
+- Upload supports **JSON only**. Invalid or unsupported files must be rejected and must not be stored.
 
-## Historical phase note
+## Managed backup set note
 
-- Phase 1 introduced export-only backup creation and listing.
-- Restore/upload workflows were intentionally deferred in that phase.
+- The managed backup set includes:
+  - locally created backups
+  - accepted uploaded JSON configuration backups
+- Both sources are listed together and use the same preview and restore paths.

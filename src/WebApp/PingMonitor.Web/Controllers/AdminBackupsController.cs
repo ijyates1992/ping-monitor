@@ -12,17 +12,20 @@ public sealed class AdminBackupsController : Controller
 {
     private readonly IConfigurationBackupService _backupService;
     private readonly IConfigurationBackupQueryService _backupQueryService;
+    private readonly IConfigurationBackupUploadService _backupUploadService;
     private readonly IConfigurationRestorePreviewService _restorePreviewService;
     private readonly IConfigurationRestoreService _restoreService;
 
     public AdminBackupsController(
         IConfigurationBackupService backupService,
         IConfigurationBackupQueryService backupQueryService,
+        IConfigurationBackupUploadService backupUploadService,
         IConfigurationRestorePreviewService restorePreviewService,
         IConfigurationRestoreService restoreService)
     {
         _backupService = backupService;
         _backupQueryService = backupQueryService;
+        _backupUploadService = backupUploadService;
         _restorePreviewService = restorePreviewService;
         _restoreService = restoreService;
     }
@@ -30,7 +33,7 @@ public sealed class AdminBackupsController : Controller
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
-        var viewModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+        var viewModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
         return View("Index", viewModel);
     }
 
@@ -46,7 +49,7 @@ public sealed class AdminBackupsController : Controller
 
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildPageViewModelAsync(form, new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(form, new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
 
@@ -67,7 +70,37 @@ public sealed class AdminBackupsController : Controller
         catch (InvalidOperationException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildPageViewModelAsync(form, new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(form, new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            return View("Index", invalidModel);
+        }
+    }
+
+    [HttpPost("upload")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Upload([FromForm] UploadBackupPageForm form, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            return View("Index", invalidModel);
+        }
+
+        try
+        {
+            var response = await _backupUploadService.UploadAsync(
+                new UploadConfigurationBackupRequest
+                {
+                    File = form.BackupFile,
+                    UploadedBy = User?.Identity?.Name
+                },
+                cancellationToken);
+
+            return RedirectToAction(nameof(Index), new { status = $"Backup upload accepted: {response.FileName}" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
     }
@@ -78,7 +111,7 @@ public sealed class AdminBackupsController : Controller
     {
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
 
@@ -96,7 +129,7 @@ public sealed class AdminBackupsController : Controller
                 RestoreMode = ConfigurationRestoreModes.Merge
             };
 
-            var model = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, applyForm, statusMessage: null, preview: previewViewModel, restoreSummary: null, cancellationToken);
+            var model = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, applyForm, statusMessage: null, preview: previewViewModel, restoreSummary: null, cancellationToken);
             return View("Index", model);
         }
         catch (FileNotFoundException)
@@ -108,7 +141,7 @@ public sealed class AdminBackupsController : Controller
             ModelState.AddModelError(string.Empty, ex.Message);
         }
 
-        var failedModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+        var failedModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
         return View("Index", failedModel);
     }
 
@@ -130,7 +163,7 @@ public sealed class AdminBackupsController : Controller
 
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new RestorePreviewForm { SelectedFileId = form.SelectedFileId }, form, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), new RestorePreviewForm { SelectedFileId = form.SelectedFileId }, form, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
 
@@ -149,6 +182,7 @@ public sealed class AdminBackupsController : Controller
             var preview = await _restorePreviewService.GetPreviewAsync(form.SelectedFileId, cancellationToken);
             var model = await BuildPageViewModelAsync(
                 new CreateBackupPageForm(),
+                new UploadBackupPageForm(),
                 new RestorePreviewForm { SelectedFileId = form.SelectedFileId },
                 form,
                 statusMessage: $"{response.RestoreMode.ToUpperInvariant()} restore completed.",
@@ -168,6 +202,7 @@ public sealed class AdminBackupsController : Controller
 
         var failedModel = await BuildPageViewModelAsync(
             new CreateBackupPageForm(),
+            new UploadBackupPageForm(),
             new RestorePreviewForm { SelectedFileId = form.SelectedFileId },
             form,
             statusMessage: null,
@@ -194,6 +229,7 @@ public sealed class AdminBackupsController : Controller
 
     private async Task<AdminBackupsPageViewModel> BuildPageViewModelAsync(
         CreateBackupPageForm form,
+        UploadBackupPageForm uploadForm,
         RestorePreviewForm restorePreviewForm,
         RestoreApplyForm restoreApplyForm,
         string? statusMessage,
@@ -205,6 +241,7 @@ public sealed class AdminBackupsController : Controller
         return new AdminBackupsPageViewModel
         {
             Form = form,
+            UploadForm = uploadForm,
             RestorePreviewForm = restorePreviewForm,
             RestoreApplyForm = restoreApplyForm,
             Preview = preview,
