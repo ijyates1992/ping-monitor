@@ -16,6 +16,7 @@ public sealed class ConfigurationBackupUploadService : IConfigurationBackupUploa
     private readonly BackupOptions _options;
     private readonly IConfigurationBackupDocumentValidator _documentValidator;
     private readonly IConfigurationBackupFileNameGenerator _fileNameGenerator;
+    private readonly IConfigurationBackupCatalogService _catalogService;
     private readonly ILogger<ConfigurationBackupUploadService> _logger;
 
     public ConfigurationBackupUploadService(
@@ -23,12 +24,14 @@ public sealed class ConfigurationBackupUploadService : IConfigurationBackupUploa
         IOptions<BackupOptions> options,
         IConfigurationBackupDocumentValidator documentValidator,
         IConfigurationBackupFileNameGenerator fileNameGenerator,
+        IConfigurationBackupCatalogService catalogService,
         ILogger<ConfigurationBackupUploadService> logger)
     {
         _environment = environment;
         _options = options.Value;
         _documentValidator = documentValidator;
         _fileNameGenerator = fileNameGenerator;
+        _catalogService = catalogService;
         _logger = logger;
     }
 
@@ -73,6 +76,8 @@ public sealed class ConfigurationBackupUploadService : IConfigurationBackupUploa
         {
             await outputStream.WriteAsync(fileContent, cancellationToken);
         }
+
+        await _catalogService.UpsertSourceAsync(storedFileName, ConfigurationBackupSources.Uploaded, cancellationToken);
 
         _logger.LogInformation(
             "Configuration backup upload accepted. StoredFile: {StoredFile}, BackupName: {BackupName}, ExportedAtUtc: {ExportedAtUtc:O}.",

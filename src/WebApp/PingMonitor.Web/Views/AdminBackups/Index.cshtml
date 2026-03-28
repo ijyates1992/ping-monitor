@@ -45,6 +45,9 @@
         th, td { text-align: left; vertical-align: top; padding: .6rem .4rem; border-bottom: 1px solid var(--border); }
         .field-error { color: var(--error-text); font-size: .9rem; margin-top: .25rem; }
         .split { display: grid; gap: 1rem; }
+        .inline-form { display:inline; }
+        .danger { background:#b42318; color:white; border:0; }
+        .pill { display:inline-block; padding:.2rem .45rem; border-radius:999px; background:#eef2ff; color:#1e3a8a; font-size:.82rem; }
         @@media (min-width: 780px) {
             .split { grid-template-columns: 1fr 1fr; }
         }
@@ -263,51 +266,105 @@
 
         <section class="card">
             <h2>Stored backups</h2>
+            <form method="get" action="/admin/backups" class="stack" style="margin-bottom:1rem;">
+                <div class="split">
+                    <div>
+                        <label for="name">Filter by name</label>
+                        <input id="name" name="name" value="@Model.NameFilter" placeholder="backup name contains..." />
+                    </div>
+                    <div>
+                        <label for="source">Filter by source</label>
+                        <select id="source" name="source">
+                            <option value="">All sources</option>
+                            <option value="manual" selected="@(Model.SourceFilter == "manual")">manual</option>
+                            <option value="uploaded" selected="@(Model.SourceFilter == "uploaded")">uploaded</option>
+                            <option value="automatic_scheduled" selected="@(Model.SourceFilter == "automatic_scheduled")">automatic_scheduled</option>
+                            <option value="automatic_config_change" selected="@(Model.SourceFilter == "automatic_config_change")">automatic_config_change</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="button-row">
+                    <button class="button-secondary" type="submit">Apply filters</button>
+                    <a class="button-secondary" href="/admin/backups">Reset filters</a>
+                </div>
+            </form>
             @if (Model.Backups.Count == 0)
             {
                 <p class="muted">No backups found in the configured storage folder.</p>
             }
             else
             {
-                <div style="overflow-x:auto;">
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Backup</th>
-                            <th>Exported</th>
-                            <th>App version</th>
-                            <th>Sections</th>
-                            <th>Notes</th>
-                            <th></th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var backup in Model.Backups)
-                        {
+                <form id="bulkDeleteForm" method="post" action="/admin/backups/delete-bulk">
+                    @Html.AntiForgeryToken()
+                    <div class="warning" style="margin-bottom:.75rem;">Bulk delete requires typed confirmation <strong>DELETE</strong>. Manual and uploaded backups are never auto-pruned by default.</div>
+                    <div class="split">
+                        <div>
+                            <label asp-for="DeleteBulkForm.ConfirmationText">Bulk delete confirmation</label>
+                            <input asp-for="DeleteBulkForm.ConfirmationText" placeholder="Type DELETE" />
+                        </div>
+                        <div class="button-row" style="align-items:end;">
+                            <button class="button danger" type="submit">Bulk delete selected</button>
+                        </div>
+                    </div>
+                </form>
+                <div style="overflow-x:auto; margin-top: .75rem;">
+                        <table>
+                            <thead>
                             <tr>
-                                <td>
-                                    <strong>@backup.BackupName</strong>
-                                    <div class="muted">@backup.FileName</div>
-                                </td>
-                                <td>
-                                    @if (backup.ExportedAtUtc.HasValue)
-                                    {
-                                        @backup.ExportedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
-                                    }
-                                    else
-                                    {
-                                        @backup.FileCreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
-                                    }
-                                </td>
-                                <td>@(backup.AppVersion ?? "(unknown)")</td>
-                                <td>@backup.IncludedSectionsDisplay</td>
-                                <td>@(backup.NotesSummary ?? "")</td>
-                                <td><a class="button-secondary" href="/admin/backups/download?id=@Uri.EscapeDataString(backup.FileId)">Download</a></td>
+                                <th>Select</th>
+                                <th>Backup</th>
+                                <th>Source</th>
+                                <th>Exported</th>
+                                <th>App version</th>
+                                <th>Size</th>
+                                <th>Sections</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
                             </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
+                            </thead>
+                            <tbody>
+                            @foreach (var backup in Model.Backups)
+                            {
+                                <tr>
+                                    <td><input type="checkbox" form="bulkDeleteForm" name="DeleteBulkForm.SelectedFileIds" value="@backup.FileId" style="width:24px;height:24px;" /></td>
+                                    <td>
+                                        <strong>@backup.BackupName</strong>
+                                        <div class="muted">@backup.FileName</div>
+                                    </td>
+                                    <td><span class="pill">@backup.BackupSource</span></td>
+                                    <td>
+                                        @if (backup.ExportedAtUtc.HasValue)
+                                        {
+                                            @backup.ExportedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+                                        }
+                                        else
+                                        {
+                                            @backup.FileCreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+                                        }
+                                    </td>
+                                    <td>@(backup.AppVersion ?? "(unknown)")</td>
+                                    <td>@((backup.FileSizeBytes / 1024.0).ToString("0.0")) KB</td>
+                                    <td>@backup.IncludedSectionsDisplay</td>
+                                    <td>@(backup.NotesSummary ?? "")</td>
+                                    <td>
+                                        <form method="post" action="/admin/backups/preview" class="inline-form">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="RestorePreviewForm.SelectedFileId" value="@backup.FileId" />
+                                            <button class="button-secondary" type="submit">Preview/Restore</button>
+                                        </form>
+                                        <a class="button-secondary" href="/admin/backups/download?id=@Uri.EscapeDataString(backup.FileId)">Download</a>
+                                        <form method="post" action="/admin/backups/delete" class="inline-form">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="DeleteSingleForm.FileId" value="@backup.FileId" />
+                                            <input type="hidden" name="DeleteSingleForm.ConfirmDelete" value="true" />
+                                            <button class="button-secondary danger" type="submit" onclick="return confirm('Delete backup @backup.BackupName? This cannot be undone.');">Delete</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
             }
         </section>
     </div>

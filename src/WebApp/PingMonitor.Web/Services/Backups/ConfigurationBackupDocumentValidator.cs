@@ -23,6 +23,12 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
             throw new InvalidOperationException("Backup metadata is incomplete.");
         }
 
+        if (!string.IsNullOrWhiteSpace(document.BackupSource)
+            && !ConfigurationBackupSources.All.Contains(document.BackupSource, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException("Backup source metadata is not supported.");
+        }
+
         if (document.Sections is null)
         {
             throw new InvalidOperationException("Backup sections are missing.");

@@ -13,6 +13,7 @@ public sealed class AdminBackupsController : Controller
     private readonly IConfigurationBackupService _backupService;
     private readonly IConfigurationBackupQueryService _backupQueryService;
     private readonly IConfigurationBackupUploadService _backupUploadService;
+    private readonly IConfigurationBackupManagementService _backupManagementService;
     private readonly IConfigurationRestorePreviewService _restorePreviewService;
     private readonly IConfigurationRestoreService _restoreService;
 
@@ -20,20 +21,22 @@ public sealed class AdminBackupsController : Controller
         IConfigurationBackupService backupService,
         IConfigurationBackupQueryService backupQueryService,
         IConfigurationBackupUploadService backupUploadService,
+        IConfigurationBackupManagementService backupManagementService,
         IConfigurationRestorePreviewService restorePreviewService,
         IConfigurationRestoreService restoreService)
     {
         _backupService = backupService;
         _backupQueryService = backupQueryService;
         _backupUploadService = backupUploadService;
+        _backupManagementService = backupManagementService;
         _restorePreviewService = restorePreviewService;
         _restoreService = restoreService;
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken cancellationToken)
+    public async Task<IActionResult> Index([FromQuery] string? name, [FromQuery] string? source, CancellationToken cancellationToken)
     {
-        var viewModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+        var viewModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), name, source, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
         return View("Index", viewModel);
     }
 
@@ -49,7 +52,7 @@ public sealed class AdminBackupsController : Controller
 
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildPageViewModelAsync(form, new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(form, new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), null, null, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
 
@@ -61,7 +64,8 @@ public sealed class AdminBackupsController : Controller
                     BackupName = form.BackupName,
                     Notes = form.Notes,
                     SelectedSections = selectedSections,
-                    ExportedBy = User?.Identity?.Name
+                    ExportedBy = User?.Identity?.Name,
+                    BackupSource = ConfigurationBackupSources.Manual
                 },
                 cancellationToken);
 
@@ -70,7 +74,7 @@ public sealed class AdminBackupsController : Controller
         catch (InvalidOperationException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildPageViewModelAsync(form, new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(form, new UploadBackupPageForm(), new RestorePreviewForm(), new RestoreApplyForm(), new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), null, null, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
     }
@@ -81,7 +85,7 @@ public sealed class AdminBackupsController : Controller
     {
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestorePreviewForm(), new RestoreApplyForm(), new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), null, null, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
 
@@ -100,7 +104,7 @@ public sealed class AdminBackupsController : Controller
         catch (InvalidOperationException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestorePreviewForm(), new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, new RestorePreviewForm(), new RestoreApplyForm(), new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), null, null, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
     }
@@ -111,7 +115,7 @@ public sealed class AdminBackupsController : Controller
     {
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, new RestoreApplyForm(), new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), null, null, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
 
@@ -129,7 +133,7 @@ public sealed class AdminBackupsController : Controller
                 RestoreMode = ConfigurationRestoreModes.Merge
             };
 
-            var model = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, applyForm, statusMessage: null, preview: previewViewModel, restoreSummary: null, cancellationToken);
+            var model = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, applyForm, new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), null, null, statusMessage: null, preview: previewViewModel, restoreSummary: null, cancellationToken);
             return View("Index", model);
         }
         catch (FileNotFoundException)
@@ -141,7 +145,7 @@ public sealed class AdminBackupsController : Controller
             ModelState.AddModelError(string.Empty, ex.Message);
         }
 
-        var failedModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, new RestoreApplyForm(), statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+        var failedModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), form, new RestoreApplyForm(), new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), null, null, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
         return View("Index", failedModel);
     }
 
@@ -163,7 +167,7 @@ public sealed class AdminBackupsController : Controller
 
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), new RestorePreviewForm { SelectedFileId = form.SelectedFileId }, form, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
+            var invalidModel = await BuildPageViewModelAsync(new CreateBackupPageForm(), new UploadBackupPageForm(), new RestorePreviewForm { SelectedFileId = form.SelectedFileId }, form, new BackupDeleteSingleForm(), new BackupDeleteBulkForm(), null, null, statusMessage: null, preview: null, restoreSummary: null, cancellationToken);
             return View("Index", invalidModel);
         }
 
@@ -185,6 +189,10 @@ public sealed class AdminBackupsController : Controller
                 new UploadBackupPageForm(),
                 new RestorePreviewForm { SelectedFileId = form.SelectedFileId },
                 form,
+                new BackupDeleteSingleForm(),
+                new BackupDeleteBulkForm(),
+                null,
+                null,
                 statusMessage: $"{response.RestoreMode.ToUpperInvariant()} restore completed.",
                 preview: ToPreviewViewModel(preview),
                 restoreSummary: ToRestoreSummaryViewModel(response),
@@ -205,11 +213,47 @@ public sealed class AdminBackupsController : Controller
             new UploadBackupPageForm(),
             new RestorePreviewForm { SelectedFileId = form.SelectedFileId },
             form,
+            new BackupDeleteSingleForm(),
+            new BackupDeleteBulkForm(),
+            null,
+            null,
             statusMessage: null,
             preview: null,
             restoreSummary: null,
             cancellationToken);
         return View("Index", failedModel);
+    }
+
+    [HttpPost("delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteSingle([FromForm, Bind(Prefix = "DeleteSingleForm")] BackupDeleteSingleForm form, CancellationToken cancellationToken)
+    {
+        var result = await _backupManagementService.DeleteAsync(
+            new DeleteConfigurationBackupRequest
+            {
+                FileId = form.FileId,
+                ConfirmSingleDelete = form.ConfirmDelete
+            },
+            cancellationToken);
+
+        var status = result.Deleted ? "Backup deleted successfully." : result.Message;
+        return RedirectToAction(nameof(Index), new { status });
+    }
+
+    [HttpPost("delete-bulk")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteBulk([FromForm, Bind(Prefix = "DeleteBulkForm")] BackupDeleteBulkForm form, CancellationToken cancellationToken)
+    {
+        var result = await _backupManagementService.BulkDeleteAsync(
+            new BulkDeleteConfigurationBackupsRequest
+            {
+                FileIds = form.SelectedFileIds,
+                ConfirmationText = form.ConfirmationText
+            },
+            cancellationToken);
+
+        var status = $"Bulk delete complete. Requested={result.RequestedCount}, Deleted={result.DeletedCount}, Failed={result.FailedCount}.";
+        return RedirectToAction(nameof(Index), new { status });
     }
 
     [HttpGet("download")]
@@ -232,18 +276,36 @@ public sealed class AdminBackupsController : Controller
         UploadBackupPageForm uploadForm,
         RestorePreviewForm restorePreviewForm,
         RestoreApplyForm restoreApplyForm,
+        BackupDeleteSingleForm deleteSingleForm,
+        BackupDeleteBulkForm deleteBulkForm,
+        string? nameFilter,
+        string? sourceFilter,
         string? statusMessage,
         BackupRestorePreviewViewModel? preview,
         BackupRestoreSummaryViewModel? restoreSummary,
         CancellationToken cancellationToken)
     {
         var backups = await _backupQueryService.ListBackupsAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(nameFilter))
+        {
+            backups = backups.Where(x => (x.BackupName ?? x.FileName).Contains(nameFilter, StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+
+        if (!string.IsNullOrWhiteSpace(sourceFilter))
+        {
+            backups = backups.Where(x => string.Equals(x.BackupSource, sourceFilter, StringComparison.Ordinal)).ToArray();
+        }
+
         return new AdminBackupsPageViewModel
         {
             Form = form,
             UploadForm = uploadForm,
             RestorePreviewForm = restorePreviewForm,
             RestoreApplyForm = restoreApplyForm,
+            DeleteSingleForm = deleteSingleForm,
+            DeleteBulkForm = deleteBulkForm,
+            NameFilter = nameFilter?.Trim() ?? string.Empty,
+            SourceFilter = sourceFilter?.Trim() ?? string.Empty,
             Preview = preview,
             RestoreSummary = restoreSummary,
             StatusMessage = statusMessage ?? Request.Query["status"],
@@ -254,8 +316,10 @@ public sealed class AdminBackupsController : Controller
                     FileId = item.FileId,
                     BackupName = string.IsNullOrWhiteSpace(item.BackupName) ? "(unknown)" : item.BackupName,
                     AppVersion = item.AppVersion,
+                    BackupSource = item.BackupSource,
                     ExportedAtUtc = item.ExportedAtUtc,
                     FileCreatedAtUtc = item.FileCreatedAtUtc,
+                    FileSizeBytes = item.FileSizeBytes,
                     IncludedSectionsDisplay = item.IncludedSections.Count == 0
                         ? "(not detected)"
                         : string.Join(", ", item.IncludedSections.Select(ToDisplaySectionName)),

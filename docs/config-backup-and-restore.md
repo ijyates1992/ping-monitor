@@ -123,3 +123,50 @@ Example:
   - locally created backups
   - accepted uploaded JSON configuration backups
 - Both sources are listed together and use the same preview and restore paths.
+
+
+## Backup source classification
+
+Each managed backup is classified with a source value for operational visibility and retention handling:
+
+- `manual` - created explicitly by an operator from the admin backup page
+- `uploaded` - accepted uploaded JSON backup file
+- `automatic_scheduled` - created by the daily automatic backup schedule
+- `automatic_config_change` - created automatically after configuration changes are coalesced
+
+Source classification is part of managed backup metadata and is shown in the admin backup list.
+
+## Delete management
+
+Managed backups can be deleted from the admin UI with explicit confirmation:
+
+- Single-file delete requires explicit confirmation in the delete form submission
+- Bulk delete requires typed confirmation text: `DELETE`
+- Delete operations are restricted to files in the configured `Backup:StoragePath`
+- Path traversal and arbitrary file delete attempts must be rejected
+
+## Automatic backup behaviour
+
+Automatic backups remain configuration-only and use the existing export pipeline.
+
+### Scheduled backups
+
+- Daily scheduled backups are supported using a simple configured local time
+- Scheduled backups are created with source `automatic_scheduled`
+- Scheduling remains intentionally simple (no cron dependency)
+
+### Configuration-change backups
+
+- Configuration changes in monitored configuration areas can trigger automatic backup creation
+- Config-change backups are created with source `automatic_config_change`
+- Debounce/coalescing is required so bursts of changes result in one backup for the coalescing window
+
+## Retention behaviour
+
+Retention is safe and predictable by default:
+
+- Retention pruning applies to automatic backups by default
+- Manual backups are not silently auto-pruned by default
+- Uploaded backups are not silently auto-pruned by default
+- Pruning may run after automatic backup creation and/or during maintenance passes
+- Max-count pruning for automatic backups is the baseline policy; optional age-based pruning may be added when needed

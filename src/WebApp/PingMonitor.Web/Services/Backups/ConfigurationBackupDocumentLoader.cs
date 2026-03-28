@@ -17,17 +17,20 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
     private readonly IWebHostEnvironment _environment;
     private readonly BackupOptions _options;
     private readonly IConfigurationBackupDocumentValidator _documentValidator;
+    private readonly IConfigurationBackupCatalogService _catalogService;
     private readonly ILogger<ConfigurationBackupDocumentLoader> _logger;
 
     public ConfigurationBackupDocumentLoader(
         IWebHostEnvironment environment,
         IOptions<BackupOptions> options,
         IConfigurationBackupDocumentValidator documentValidator,
+        IConfigurationBackupCatalogService catalogService,
         ILogger<ConfigurationBackupDocumentLoader> logger)
     {
         _environment = environment;
         _options = options.Value;
         _documentValidator = documentValidator;
+        _catalogService = catalogService;
         _logger = logger;
     }
 
@@ -44,6 +47,7 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
             .ToArray();
 
         var rows = new List<BackupFileListItem>(files.Length);
+        var sourceCatalog = await _catalogService.GetSourcesAsync(cancellationToken);
         foreach (var fullPath in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -59,8 +63,10 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
                 ExportedAtUtc = metadata.ExportedAtUtc,
                 BackupName = metadata.BackupName,
                 AppVersion = metadata.AppVersion,
+                BackupSource = ResolveSource(fileInfo.Name, metadata.BackupSource, sourceCatalog),
                 IncludedSections = metadata.IncludedSections,
-                NotesSummary = metadata.NotesSummary
+                NotesSummary = metadata.NotesSummary,
+                FileSizeBytes = fileInfo.Length
             });
         }
 
@@ -172,6 +178,7 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
                 ExportedAtUtc = exportedAtUtc,
                 BackupName = TryReadString(root, "backupName"),
                 AppVersion = TryReadString(root, "appVersion"),
+                BackupSource = TryReadString(root, "backupSource"),
                 IncludedSections = includedSections,
                 NotesSummary = ToNotesSummary(notes)
             };
@@ -217,7 +224,25 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
         public DateTimeOffset? ExportedAtUtc { get; init; }
         public string? BackupName { get; init; }
         public string? AppVersion { get; init; }
+        public string? BackupSource { get; init; }
         public IReadOnlyList<string> IncludedSections { get; init; } = [];
         public string? NotesSummary { get; init; }
+    }
+
+    private static string ResolveSource(string fileId, string? documentSource, IReadOnlyDictionary<string, string> catalog)
+    {
+        if (catalog.TryGetValue(fileId, out var catalogSource)
+            && ConfigurationBackupSources.All.Contains(catalogSource, StringComparer.Ordinal))
+        {
+            return catalogSource;
+        }
+
+        if (!string.IsNullOrWhiteSpace(documentSource)
+            && ConfigurationBackupSources.All.Contains(documentSource, StringComparer.Ordinal))
+        {
+            return documentSource;
+        }
+
+        return ConfigurationBackupSources.Manual;
     }
 }

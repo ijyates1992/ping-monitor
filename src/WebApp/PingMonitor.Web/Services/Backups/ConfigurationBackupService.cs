@@ -24,17 +24,20 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
     private readonly IWebHostEnvironment _environment;
     private readonly BackupOptions _options;
     private readonly IConfigurationBackupFileNameGenerator _fileNameGenerator;
+    private readonly IConfigurationBackupCatalogService _catalogService;
 
     public ConfigurationBackupService(
         PingMonitorDbContext dbContext,
         IWebHostEnvironment environment,
         IOptions<BackupOptions> options,
-        IConfigurationBackupFileNameGenerator fileNameGenerator)
+        IConfigurationBackupFileNameGenerator fileNameGenerator,
+        IConfigurationBackupCatalogService catalogService)
     {
         _dbContext = dbContext;
         _environment = environment;
         _options = options.Value;
         _fileNameGenerator = fileNameGenerator;
+        _catalogService = catalogService;
     }
 
     public async Task<CreateConfigurationBackupResponse> CreateBackupAsync(CreateConfigurationBackupRequest request, CancellationToken cancellationToken)
@@ -69,7 +72,8 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             ExportedAtUtc = exportedAtUtc,
             ExportedBy = request.ExportedBy,
-            MachineName = Environment.MachineName
+            MachineName = Environment.MachineName,
+            BackupSource = NormalizeSource(request.BackupSource)
         };
 
         var sections = new ConfigurationBackupSectionData
@@ -98,6 +102,7 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
 
         var json = JsonSerializer.Serialize(document, SerializerOptions);
         await File.WriteAllTextAsync(fullPath, json, cancellationToken);
+        await _catalogService.UpsertSourceAsync(fileName, metadata.BackupSource, cancellationToken);
 
         return new CreateConfigurationBackupResponse
         {
@@ -107,6 +112,19 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
             ExportedAtUtc = metadata.ExportedAtUtc,
             IncludedSections = selectedSections
         };
+    }
+
+    private static string NormalizeSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return ConfigurationBackupSources.Manual;
+        }
+
+        var trimmed = source.Trim().ToLowerInvariant();
+        return ConfigurationBackupSources.All.Contains(trimmed, StringComparer.Ordinal)
+            ? trimmed
+            : ConfigurationBackupSources.Manual;
     }
 
     private string ResolveStoragePath()

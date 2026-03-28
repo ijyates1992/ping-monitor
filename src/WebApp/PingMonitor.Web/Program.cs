@@ -133,11 +133,17 @@ builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IConfigurationBackupFileNameGenerator, ConfigurationBackupFileNameGenerator>();
 builder.Services.AddScoped<IConfigurationBackupService, ConfigurationBackupService>();
 builder.Services.AddScoped<IConfigurationBackupDocumentValidator, ConfigurationBackupDocumentValidator>();
+builder.Services.AddSingleton<IConfigurationBackupCatalogService, ConfigurationBackupCatalogService>();
 builder.Services.AddScoped<IConfigurationBackupDocumentLoader, ConfigurationBackupDocumentLoader>();
 builder.Services.AddScoped<IConfigurationBackupQueryService, ConfigurationBackupQueryService>();
 builder.Services.AddScoped<IConfigurationBackupUploadService, ConfigurationBackupUploadService>();
+builder.Services.AddScoped<IConfigurationBackupManagementService, ConfigurationBackupManagementService>();
+builder.Services.AddScoped<IConfigurationBackupRetentionService, ConfigurationBackupRetentionService>();
 builder.Services.AddScoped<IConfigurationRestorePreviewService, ConfigurationRestorePreviewService>();
 builder.Services.AddScoped<IConfigurationRestoreService, ConfigurationRestoreService>();
+builder.Services.AddSingleton<ConfigurationAutoBackupBackgroundService>();
+builder.Services.AddSingleton<IConfigurationChangeBackupSignal>(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 
 var app = builder.Build();
 

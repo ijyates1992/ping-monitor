@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Backups;
 
 namespace PingMonitor.Web.Services;
 
@@ -12,6 +13,7 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
     private readonly IAgentApiKeyHasher _apiKeyHasher;
     private readonly IAgentPackageBuilder _agentPackageBuilder;
     private readonly IApplicationSettingsService _applicationSettingsService;
+    private readonly IConfigurationChangeBackupSignal _configurationChangeBackupSignal;
     private readonly ILogger<AgentProvisioningService> _logger;
 
     public AgentProvisioningService(
@@ -19,12 +21,14 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
         IAgentApiKeyHasher apiKeyHasher,
         IAgentPackageBuilder agentPackageBuilder,
         IApplicationSettingsService applicationSettingsService,
+        IConfigurationChangeBackupSignal configurationChangeBackupSignal,
         ILogger<AgentProvisioningService> logger)
     {
         _dbContext = dbContext;
         _apiKeyHasher = apiKeyHasher;
         _agentPackageBuilder = agentPackageBuilder;
         _applicationSettingsService = applicationSettingsService;
+        _configurationChangeBackupSignal = configurationChangeBackupSignal;
         _logger = logger;
     }
 
@@ -72,6 +76,7 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
             var packageBytes = await _agentPackageBuilder.BuildAsync(serverUrl, instanceId, plainTextApiKey, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
+            _configurationChangeBackupSignal.NotifyConfigurationChanged("agent-provisioned");
             _logger.LogInformation("Provisioned agent {AgentId} with instance {InstanceId}", agent.AgentId, agent.InstanceId);
 
             return BuildResult(agent.AgentId, agent.InstanceId, normalizedName, packageBytes);
@@ -99,6 +104,7 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
 
         agent.Enabled = enabled;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _configurationChangeBackupSignal.NotifyConfigurationChanged("agent-enabled-state-changed");
         _logger.LogInformation("Set enabled={Enabled} for agent {AgentId}", enabled, agent.AgentId);
         return true;
     }
@@ -147,6 +153,7 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _configurationChangeBackupSignal.NotifyConfigurationChanged("agent-removed");
         _logger.LogInformation("Removed agent {AgentId}. Agent disabled, API key revoked, and active assignments disabled.", agent.AgentId);
         return true;
     }
