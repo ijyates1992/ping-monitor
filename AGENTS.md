@@ -152,6 +152,57 @@ Correctness, safety, and predictability take priority over elegance.
 
 ---
 
+## Recurring Regression Guardrails (mandatory for bug fixes)
+
+Recent merged PR history has shown repeated regressions in startup flow, MySQL query translation/type mapping, dependency evaluation, and agent runtime/package behaviour. To prevent reintroducing known bugs, all bug-fix PRs must include the following:
+
+### 1) Regression proof requirement
+
+- Every bug fix must include at least one of:
+  - an automated regression test, or
+  - a deterministic reproduction script/checklist recorded in the PR
+- The reproduction must fail before the fix and pass after the fix
+- “Tested manually” alone is not sufficient for previously seen failure classes
+
+### 2) MySQL-first query validation
+
+- Any change to LINQ/EF queries used by web app runtime paths must be validated against MySQL (never SQLite-only validation)
+- PR must list all touched query paths and confirm:
+  - server-side translation succeeds
+  - no provider-specific type-mapping exceptions
+  - no client-eval fallback for critical monitoring/state queries
+- If a query cannot be translated deterministically, rewrite to an explicit, provider-safe form before merge
+
+### 3) Startup and routing invariants
+
+- Changes affecting startup, middleware order, auth, startup-gate, or root routing must include a smoke check that verifies:
+  - startup gate executes in the intended order
+  - `/` renders successfully behind reverse proxy headers
+  - HTTPS redirect + forwarded headers do not introduce redirect loops/timeouts
+- Never reorder startup pipeline components without documenting why and what regression is being prevented
+
+### 4) Dependency and suppression safety checks
+
+- Changes touching dependency logic must explicitly test:
+  - empty dependency sets
+  - multi-parent dependencies
+  - MySQL translation of dependency lookups
+  - deterministic suppression outcomes (no circular or ambiguous evaluation paths)
+
+### 5) Agent runtime and packaging checks
+
+- Changes affecting agent config polling, result submission, launcher scripts, or deployment ZIP generation must verify:
+  - agent continues running when initial assignments are empty
+  - transient server/API failures do not terminate the agent loop
+  - generated deployment package is non-empty and executable with documented steps
+
+### 6) Fix-forward discipline
+
+- If a bug was fixed previously, new related PRs must reference the earlier PR(s) and state why regression became possible
+- Add a specific “regression barrier” note in PR description describing the added guard (test, assertion, or validation step) that should prevent recurrence
+
+---
+
 ## Issue and Pull Request Traceability
 
 - All changes must be associated with at least one GitHub issue
