@@ -10,13 +10,16 @@ internal sealed class ResultIngestionService : IResultIngestionService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly IStateEvaluationService _stateEvaluationService;
+    private readonly ILogger<ResultIngestionService> _logger;
 
     public ResultIngestionService(
         PingMonitorDbContext dbContext,
-        IStateEvaluationService stateEvaluationService)
+        IStateEvaluationService stateEvaluationService,
+        ILogger<ResultIngestionService> logger)
     {
         _dbContext = dbContext;
         _stateEvaluationService = stateEvaluationService;
+        _logger = logger;
     }
 
     public async Task<SubmitResultsResponse> IngestAsync(Agent agent, SubmitResultsRequest request, CancellationToken cancellationToken)
@@ -137,7 +140,19 @@ internal sealed class ResultIngestionService : IResultIngestionService
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
 
-            await _stateEvaluationService.EvaluateAssignmentsAsync(affectedAssignmentIds, cancellationToken);
+            try
+            {
+                await _stateEvaluationService.EvaluateAssignmentsAsync(affectedAssignmentIds, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Result ingestion persisted batch {BatchId} for agent {AgentId}, but state evaluation failed for assignments: {AssignmentIds}.",
+                    normalizedBatchId,
+                    agent.AgentId,
+                    affectedAssignmentIds);
+            }
 
             return new SubmitResultsResponse(true, storedResults.Length, false, serverTimeUtc);
         }
