@@ -139,8 +139,6 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
-app.UseAuthentication();
-app.UseAuthorization();
 app.UseStaticFiles();
 
 app.Use(async (context, next) =>
@@ -170,6 +168,9 @@ app.Use(async (context, next) =>
     context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
     await context.Response.WriteAsync("Startup gate is active. Use local loopback access to complete setup.");
 });
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapControllerRoute(
