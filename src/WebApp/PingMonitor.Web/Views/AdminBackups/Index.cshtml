@@ -1,0 +1,149 @@
+@model PingMonitor.Web.ViewModels.Backups.AdminBackupsPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Configuration backups</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6f8;
+            --card: #ffffff;
+            --text: #102a43;
+            --muted: #52606d;
+            --border: #d9e2ec;
+            --accent: #0f62fe;
+            --success: #137333;
+            --error-bg: #fee4e2;
+            --error-text: #b42318;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 960px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .muted { color: var(--muted); }
+        label { display: block; font-weight: 600; margin-bottom: .35rem; }
+        input, textarea { width: 100%; border: 1px solid var(--border); border-radius: 10px; min-height: 48px; padding: .8rem; font: inherit; }
+        textarea { min-height: 96px; }
+        .check-list { display: grid; gap: .6rem; }
+        .check-item { display: flex; align-items: center; gap: .6rem; }
+        .check-item input { width: 24px; height: 24px; min-height: 24px; }
+        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+        .button, .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .8rem 1rem; border-radius: 10px; font-weight: 600; text-decoration: none; }
+        .button { border: 0; background: var(--accent); color: white; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: white; }
+        .errors { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: .8rem; }
+        .saved { border: 1px solid #c2f0c2; background: #ebffee; color: var(--success); border-radius: 10px; padding: .8rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; vertical-align: top; padding: .6rem .4rem; border-bottom: 1px solid var(--border); }
+        .field-error { color: var(--error-text); font-size: .9rem; margin-top: .25rem; }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Configuration backups</h1>
+            <p class="muted">Create and download configuration-only JSON backups. Restore is not implemented in this phase.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/admin">Back to admin settings</a>
+                <a class="button-secondary" href="/status">Back to status</a>
+            </div>
+        </section>
+
+        <form method="post" action="/admin/backups" class="stack">
+            @Html.AntiForgeryToken()
+
+            @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+            {
+                <div class="saved" role="status">@Model.StatusMessage</div>
+            }
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="errors" asp-validation-summary="ModelOnly"></div>
+            }
+
+            <section class="card">
+                <h2>Create backup</h2>
+                <div class="stack">
+                    <div>
+                        <label asp-for="Form.BackupName"></label>
+                        <input asp-for="Form.BackupName" />
+                        <div class="field-error"><span asp-validation-for="Form.BackupName"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="Form.Notes"></label>
+                        <textarea asp-for="Form.Notes"></textarea>
+                    </div>
+                    <div>
+                        <label>Sections</label>
+                        <div class="check-list">
+                            <label class="check-item"><input asp-for="Form.IncludeAgents" /> Agents</label>
+                            <label class="check-item"><input asp-for="Form.IncludeEndpoints" /> Endpoints</label>
+                            <label class="check-item"><input asp-for="Form.IncludeAssignments" /> Assignments</label>
+                            <label class="check-item"><input asp-for="Form.IncludeIdentity" /> Identity (optional; disabled by default)</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="button-row" style="margin-top:1rem;">
+                    <button class="button" type="submit">Create JSON backup</button>
+                </div>
+            </section>
+        </form>
+
+        <section class="card">
+            <h2>Stored backups</h2>
+            @if (Model.Backups.Count == 0)
+            {
+                <p class="muted">No backups found in the configured storage folder.</p>
+            }
+            else
+            {
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Backup</th>
+                            <th>Exported</th>
+                            <th>App version</th>
+                            <th>Sections</th>
+                            <th>Notes</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var backup in Model.Backups)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@backup.BackupName</strong>
+                                    <div class="muted">@backup.FileName</div>
+                                </td>
+                                <td>
+                                    @if (backup.ExportedAtUtc.HasValue)
+                                    {
+                                        @backup.ExportedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+                                    }
+                                    else
+                                    {
+                                        @backup.FileCreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+                                    }
+                                </td>
+                                <td>@(backup.AppVersion ?? "(unknown)")</td>
+                                <td>@backup.IncludedSectionsDisplay</td>
+                                <td>@(backup.NotesSummary ?? "")</td>
+                                <td><a class="button-secondary" href="/admin/backups/download?id=@Uri.EscapeDataString(backup.FileId)">Download</a></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+</main>
+</body>
+</html>

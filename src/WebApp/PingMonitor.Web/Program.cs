@@ -9,6 +9,7 @@ using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Agents;
+using PingMonitor.Web.Services.Backups;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Groups;
 using PingMonitor.Web.Services.Identity;
@@ -28,6 +29,7 @@ builder.Services.Configure<AgentApiOptions>(builder.Configuration.GetSection(Age
 builder.Services.Configure<DevelopmentSeedAgentOptions>(builder.Configuration.GetSection(DevelopmentSeedAgentOptions.SectionName));
 builder.Services.Configure<StartupGateOptions>(builder.Configuration.GetSection(StartupGateOptions.SectionName));
 builder.Services.Configure<AgentProvisioningOptions>(builder.Configuration.GetSection(AgentProvisioningOptions.SectionName));
+builder.Services.Configure<BackupOptions>(builder.Configuration.GetSection(BackupOptions.SectionName));
 
 builder.Services.AddSingleton<IDbContextFactory<PingMonitorDbContext>, DynamicPingMonitorDbContextFactory>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<PingMonitorDbContext>>().CreateDbContext());
@@ -126,6 +128,9 @@ builder.Services.AddScoped<IEndpointMetricsService, EndpointMetricsService>();
 builder.Services.AddScoped<IAgentMetricsService, AgentMetricsService>();
 builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<IConfigurationBackupFileNameGenerator, ConfigurationBackupFileNameGenerator>();
+builder.Services.AddScoped<IConfigurationBackupService, ConfigurationBackupService>();
+builder.Services.AddScoped<IConfigurationBackupQueryService, ConfigurationBackupQueryService>();
 
 var app = builder.Build();
 
