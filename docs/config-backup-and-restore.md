@@ -85,3 +85,13 @@ Example:
     "identity": [...]
   }
 }
+```
+
+## Phase 1 implementation notes
+
+- This phase implements **export only**.
+- Restore and upload workflows are intentionally not implemented yet.
+- Backup name is required for export.
+- Notes are stored in the backup document metadata (`notes`) and displayed in backup listings.
+- Backup files are stored server-side under the configured `Backup:StoragePath` location (default `App_Data/Backups`), which is outside public static web content.
+- Backup format remains JSON and configuration-only.
