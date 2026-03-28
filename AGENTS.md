@@ -14,6 +14,12 @@ Correctness, safety, and predictability take priority over elegance.
   - an explicit new issue, and
   - a corresponding update to `docs/PLATFORM_CONSTRAINTS.md`.
 
+## Implementation references (authoritative when unsure)
+
+- .NET 10 documentation: https://learn.microsoft.com/dotnet/core/whats-new/dotnet-10/overview
+- MySQL 8.0 documentation: https://dev.mysql.com/doc/refman/8.0/en/
+- Whenever you are unsure how to properly implement behavior, consult these official references first and align implementation decisions with them.
+
 ---
 
 ## Core Principles
