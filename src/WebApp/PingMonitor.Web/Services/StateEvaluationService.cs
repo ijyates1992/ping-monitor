@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.EventLogs;
+using System.Text.Json;
 
 namespace PingMonitor.Web.Services;
 
@@ -8,13 +10,16 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly ILogger<StateEvaluationService> _logger;
+    private readonly IEventLogService _eventLogService;
 
     public StateEvaluationService(
         PingMonitorDbContext dbContext,
-        ILogger<StateEvaluationService> logger)
+        ILogger<StateEvaluationService> logger,
+        IEventLogService eventLogService)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _eventLogService = eventLogService;
     }
 
     public async Task EvaluateAssignmentsAsync(IEnumerable<string> assignmentIds, CancellationToken cancellationToken)
@@ -124,6 +129,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         if (previousState != nextState)
         {
             state.LastStateChangeUtc = DateTimeOffset.UtcNow;
+            var transitionAtUtc = state.LastStateChangeUtc.Value;
             _dbContext.StateTransitions.Add(new StateTransition
             {
                 TransitionId = Guid.NewGuid().ToString(),
@@ -132,7 +138,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                 EndpointId = assignment.EndpointId,
                 PreviousState = previousState,
                 NewState = nextState,
-                TransitionAtUtc = state.LastStateChangeUtc.Value,
+                TransitionAtUtc = transitionAtUtc,
                 ReasonCode = reasonCode,
                 DependencyEndpointId = nextState == EndpointStateKind.Suppressed ? parentContext.ParentEndpointId : null
             });
@@ -143,6 +149,40 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                 previousState,
                 nextState,
                 reasonCode ?? "(none)");
+
+            var eventType = EventType.EndpointStateChanged;
+            if (previousState != EndpointStateKind.Suppressed && nextState == EndpointStateKind.Suppressed)
+            {
+                eventType = EventType.EndpointSuppressionApplied;
+            }
+            else if (previousState == EndpointStateKind.Suppressed && nextState != EndpointStateKind.Suppressed)
+            {
+                eventType = EventType.EndpointSuppressionCleared;
+            }
+
+            await _eventLogService.WriteAsync(
+                new EventLogWriteRequest
+                {
+                    OccurredAtUtc = transitionAtUtc,
+                    Category = EventCategory.Endpoint,
+                    EventType = eventType,
+                    Severity = nextState == EndpointStateKind.Down ? EventSeverity.Warning : EventSeverity.Info,
+                    AgentId = assignment.AgentId,
+                    EndpointId = assignment.EndpointId,
+                    AssignmentId = assignment.AssignmentId,
+                    Message = $"Endpoint \"{endpoint.Name}\" state changed from {previousState} to {nextState}.",
+                    DetailsJson = JsonSerializer.Serialize(new
+                    {
+                        assignment.AssignmentId,
+                        assignment.AgentId,
+                        assignment.EndpointId,
+                        previousState = previousState.ToString(),
+                        newState = nextState.ToString(),
+                        reasonCode,
+                        dependencyEndpointId = state.SuppressedByEndpointId
+                    })
+                },
+                cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

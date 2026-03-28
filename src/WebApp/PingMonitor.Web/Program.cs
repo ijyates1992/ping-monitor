@@ -14,6 +14,7 @@ using PingMonitor.Web.Services.Backups;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Groups;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.Services.Status;
@@ -110,6 +111,8 @@ builder.Services.AddScoped<IAgentConfigurationService, AgentConfigurationService
 builder.Services.AddScoped<IResultIngestionService, ResultIngestionService>();
 builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
 builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();
+builder.Services.AddScoped<IEventLogService, EventLogService>();
+builder.Services.AddScoped<IEventLogQueryService, EventLogQueryService>();
 builder.Services.AddScoped<IEndpointStatusQueryService, EndpointStatusQueryService>();
 builder.Services.AddScoped<IStartupGateService, StartupGateService>();
 builder.Services.AddSingleton<IStartupDatabaseConfigurationStore, FileStartupDatabaseConfigurationStore>();

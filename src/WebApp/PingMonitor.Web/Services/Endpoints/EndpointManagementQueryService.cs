@@ -106,6 +106,7 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 LowestRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.LowestRttMs,
                 JitterMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.JitterMs,
                 AssignmentId = row.AssignmentId,
+                EndpointId = row.EndpointId,
                 EndpointName = row.EndpointName,
                 IconKey = EndpointIconCatalog.Normalize(row.IconKey),
                 Target = row.Target,

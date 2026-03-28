@@ -29,6 +29,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<ResultBatch> ResultBatches => Set<ResultBatch>();
     public DbSet<EndpointState> EndpointStates => Set<EndpointState>();
     public DbSet<StateTransition> StateTransitions => Set<StateTransition>();
+    public DbSet<EventLog> EventLogs => Set<EventLog>();
     public DbSet<AppSchemaInfo> AppSchemaInfos => Set<AppSchemaInfo>();
     public DbSet<ApplicationSettings> ApplicationSettings => Set<ApplicationSettings>();
 
@@ -64,6 +65,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         agent.Property(x => x.Platform).HasMaxLength(50);
         agent.Property(x => x.MachineName).HasMaxLength(255);
         agent.Property(x => x.CreatedAtUtc).IsRequired();
+        agent.Property(x => x.LastHeartbeatEventLoggedAtUtc);
         agent.Property(x => x.ApiKeyCreatedAtUtc).IsRequired();
         agent.Property(x => x.Enabled).HasDefaultValue(true);
         agent.Property(x => x.ApiKeyRevoked).HasDefaultValue(false);
@@ -197,6 +199,24 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         stateTransition.Property(x => x.ReasonCode).HasMaxLength(64);
         stateTransition.Property(x => x.DependencyEndpointId).HasMaxLength(64);
         stateTransition.HasIndex(x => new { x.AssignmentId, x.TransitionAtUtc });
+
+        var eventLog = modelBuilder.Entity<EventLog>();
+        eventLog.ToTable("EventLogs");
+        eventLog.HasKey(x => x.EventLogId);
+        eventLog.Property(x => x.EventLogId).HasMaxLength(64);
+        eventLog.Property(x => x.OccurredAtUtc).IsRequired();
+        eventLog.Property(x => x.EventCategory).HasConversion<string>().HasMaxLength(32).IsRequired();
+        eventLog.Property(x => x.EventType).HasMaxLength(128).IsRequired();
+        eventLog.Property(x => x.Severity).HasConversion<string>().HasMaxLength(16).IsRequired();
+        eventLog.Property(x => x.AgentId).HasMaxLength(64);
+        eventLog.Property(x => x.EndpointId).HasMaxLength(64);
+        eventLog.Property(x => x.AssignmentId).HasMaxLength(64);
+        eventLog.Property(x => x.Message).HasMaxLength(2048).IsRequired();
+        eventLog.Property(x => x.DetailsJson).HasMaxLength(8192);
+        eventLog.HasIndex(x => x.OccurredAtUtc);
+        eventLog.HasIndex(x => new { x.EndpointId, x.OccurredAtUtc });
+        eventLog.HasIndex(x => new { x.AgentId, x.OccurredAtUtc });
+        eventLog.HasIndex(x => new { x.AssignmentId, x.OccurredAtUtc });
 
         var appSettings = modelBuilder.Entity<ApplicationSettings>();
         appSettings.ToTable("ApplicationSettings");

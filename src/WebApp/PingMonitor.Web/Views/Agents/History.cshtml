@@ -1,0 +1,153 @@
+@model PingMonitor.Web.ViewModels.EventLogs.EventLogHistoryPageViewModel
+@{
+    static string FormatDate(DateTimeOffset value) => value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
+    static string FormatRelated(string? endpointId, string? endpointName, string? agentId, string? agentName)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(endpointId))
+        {
+            parts.Add($"Endpoint: {(string.IsNullOrWhiteSpace(endpointName) ? endpointId : endpointName)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(agentId))
+        {
+            parts.Add($"Agent: {(string.IsNullOrWhiteSpace(agentName) ? agentId : agentName)}");
+        }
+
+        return parts.Count == 0 ? "None" : string.Join(" | ", parts);
+    }
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.ScopeLabel history</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 1180px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 900px; }
+        th, td { text-align: left; padding: .65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+        th { font-size: .85rem; color: var(--muted); }
+        input, select { width: 100%; padding: .65rem; border: 1px solid var(--border); border-radius: 10px; font-size: .95rem; }
+        .filter-grid { display: grid; gap: .75rem; }
+        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; margin-top:.75rem; }
+        .button, .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .7rem .95rem; border-radius: 10px; font-weight: 600; text-decoration: none; }
+        .button { border: 0; background: var(--accent); color: #fff; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: #fff; }
+        .muted { color: var(--muted); }
+        @@media (min-width: 880px) { .filter-grid { grid-template-columns: 1fr 220px 200px 200px 120px; align-items:end; } }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>@Model.ScopeLabel event history</h1>
+            <p class="muted"><strong>@Model.ScopeName</strong> (@Model.ScopeId)</p>
+            <div class="button-row">
+                <a class="button-secondary" href="@Model.BackLink">Back</a>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Filters</h2>
+            <form method="get">
+                <div class="filter-grid">
+                    <div>
+                        <label for="search">Text search</label>
+                        <input id="search" name="search" value="@Model.Filters.Search" />
+                    </div>
+                    <div>
+                        <label for="eventType">Event type</label>
+                        <select id="eventType" name="eventType">
+                            <option value="">All event types</option>
+                            @foreach (var type in Model.Filters.AvailableEventTypes)
+                            {
+                                <option value="@type" selected="@(string.Equals(Model.Filters.EventType, type, StringComparison.Ordinal))">@type</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label for="dateFromUtc">Date from (UTC)</label>
+                        <input id="dateFromUtc" type="datetime-local" name="dateFromUtc" value="@Model.Filters.DateFromUtc?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")" />
+                    </div>
+                    <div>
+                        <label for="dateToUtc">Date to (UTC)</label>
+                        <input id="dateToUtc" type="datetime-local" name="dateToUtc" value="@Model.Filters.DateToUtc?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")" />
+                    </div>
+                    <div>
+                        <label for="pageSize">Page size</label>
+                        <select id="pageSize" name="pageSize">
+                            @foreach (var size in new[] { 25, 50, 100 })
+                            {
+                                <option value="@size" selected="@(Model.Filters.PageSize == size)">@size</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="button-row">
+                    <button class="button" type="submit">Apply filters</button>
+                    <a class="button-secondary" href="?pageSize=@Model.Filters.PageSize">Clear filters</a>
+                </div>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>Events (@Model.Pagination.TotalCount)</h2>
+            @if (Model.Rows.Count == 0)
+            {
+                <p class="muted">@Model.EmptyMessage</p>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Type</th>
+                                <th>Category</th>
+                                <th>Severity</th>
+                                <th>Message</th>
+                                <th>Related</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in Model.Rows)
+                            {
+                                <tr>
+                                    <td>@FormatDate(row.OccurredAtUtc)</td>
+                                    <td>@row.EventType</td>
+                                    <td>@row.Category</td>
+                                    <td>@row.Severity</td>
+                                    <td>@row.Message</td>
+                                    <td>@FormatRelated(row.EndpointId, row.EndpointName, row.AgentId, row.AgentName)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="button-row">
+                    @if (Model.Pagination.HasPreviousPage)
+                    {
+                        <a class="button-secondary" href="?search=@Model.Filters.Search&eventType=@Model.Filters.EventType&dateFromUtc=@Model.Filters.DateFromUtc?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")&dateToUtc=@Model.Filters.DateToUtc?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")&pageSize=@Model.Pagination.PageSize&page=@(Model.Pagination.Page - 1)">Previous</a>
+                    }
+                    @if (Model.Pagination.HasNextPage)
+                    {
+                        <a class="button-secondary" href="?search=@Model.Filters.Search&eventType=@Model.Filters.EventType&dateFromUtc=@Model.Filters.DateFromUtc?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")&dateToUtc=@Model.Filters.DateToUtc?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")&pageSize=@Model.Pagination.PageSize&page=@(Model.Pagination.Page + 1)">Next</a>
+                    }
+                    <span class="muted">Page @Model.Pagination.Page of @Model.Pagination.TotalPages</span>
+                </div>
+            }
+        </section>
+    </div>
+</main>
+</body>
+</html>

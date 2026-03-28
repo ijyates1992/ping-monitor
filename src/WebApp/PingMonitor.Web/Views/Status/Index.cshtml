@@ -73,6 +73,9 @@
         .meta-item span { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .2rem; }
         .empty { text-align: center; padding: 1rem; border: 1px dashed var(--border); border-radius: 12px; }
         .inline-actions { margin-top: .85rem; }
+        .recent-events { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
+        .event-row { padding: .7rem; border-bottom: 1px solid var(--border); }
+        .event-row:last-child { border-bottom: 0; }
         .nowrap { white-space: nowrap; }
         @@media (min-width: 720px) {
             .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
@@ -100,6 +103,36 @@
                     <a class="button-secondary" href="/users">Manage users</a>
                 }
             </div>
+        </section>
+
+        <section class="card">
+            <h2>Recent events</h2>
+            @if (Model.RecentEvents.Count == 0)
+            {
+                <p class="muted">No events recorded yet.</p>
+            }
+            else
+            {
+                <div class="recent-events">
+                    @foreach (var recentEvent in Model.RecentEvents)
+                    {
+                        <div class="event-row">
+                            <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
+                            <div>@recentEvent.Message</div>
+                            <div class="muted">
+                                @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
+                                {
+                                    <span>Endpoint: @(string.IsNullOrWhiteSpace(recentEvent.EndpointName) ? recentEvent.EndpointId : recentEvent.EndpointName)</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(recentEvent.AgentId))
+                                {
+                                    <span> · Agent: @(string.IsNullOrWhiteSpace(recentEvent.AgentName) ? recentEvent.AgentId : recentEvent.AgentName)</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
         </section>
 
         <section class="card">
@@ -203,6 +236,8 @@
                             </div>
                             <div class="inline-actions">
                                 <a class="button-secondary" href="/endpoints/@row.AssignmentId/performance">View performance</a>
+                                <a class="button-secondary" href="/endpoints/@row.EndpointId/history">Endpoint history</a>
+                                <a class="button-secondary" href="/agents/@row.AgentId/history">Agent history</a>
                             </div>
                         </article>
                     }

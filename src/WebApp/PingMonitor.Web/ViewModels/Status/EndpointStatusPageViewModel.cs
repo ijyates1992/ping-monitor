@@ -1,4 +1,5 @@
 using PingMonitor.Web.Models;
+using PingMonitor.Web.ViewModels.EventLogs;
 
 namespace PingMonitor.Web.ViewModels.Status;
 
@@ -7,6 +8,7 @@ public sealed class EndpointStatusPageViewModel
     public EndpointStatusSummaryViewModel Summary { get; init; } = new();
     public EndpointStatusFiltersViewModel Filters { get; init; } = new();
     public IReadOnlyList<EndpointStatusRowViewModel> Rows { get; init; } = [];
+    public IReadOnlyList<RecentEventViewModel> RecentEvents { get; init; } = [];
 }
 
 public sealed class EndpointStatusSummaryViewModel

@@ -4,6 +4,7 @@ using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Groups;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.ViewModels.Endpoints;
 
 namespace PingMonitor.Web.Controllers;
@@ -23,6 +24,7 @@ public sealed class EndpointsController : Controller
     private readonly IGroupManagementService _groupManagementService;
     private readonly IEndpointPerformanceQueryService _endpointPerformanceQueryService;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IEventLogQueryService _eventLogQueryService;
 
     public EndpointsController(
         IEndpointCreationQueryService endpointCreationQueryService,
@@ -31,7 +33,8 @@ public sealed class EndpointsController : Controller
         IApplicationSettingsService applicationSettingsService,
         IGroupManagementService groupManagementService,
         IEndpointPerformanceQueryService endpointPerformanceQueryService,
-        IUserAccessScopeService userAccessScopeService)
+        IUserAccessScopeService userAccessScopeService,
+        IEventLogQueryService eventLogQueryService)
     {
         _endpointCreationQueryService = endpointCreationQueryService;
         _endpointManagementQueryService = endpointManagementQueryService;
@@ -40,6 +43,7 @@ public sealed class EndpointsController : Controller
         _groupManagementService = groupManagementService;
         _endpointPerformanceQueryService = endpointPerformanceQueryService;
         _userAccessScopeService = userAccessScopeService;
+        _eventLogQueryService = eventLogQueryService;
     }
 
     [HttpGet("")]
@@ -194,6 +198,26 @@ public sealed class EndpointsController : Controller
         }
 
         return View("Performance", model);
+    }
+
+    [HttpGet("{endpointId}/history")]
+    public async Task<IActionResult> History(
+        [FromRoute] string endpointId,
+        [FromQuery] string? search,
+        [FromQuery] string? eventType,
+        [FromQuery] DateTimeOffset? dateFromUtc,
+        [FromQuery] DateTimeOffset? dateToUtc,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var model = await _eventLogQueryService.GetEndpointHistoryPageAsync(endpointId, search, eventType, dateFromUtc, dateToUtc, page, pageSize, cancellationToken);
+        if (model is null)
+        {
+            return NotFound();
+        }
+
+        return View("History", model);
     }
 
     [Authorize(Roles = ApplicationRoles.Admin)]
