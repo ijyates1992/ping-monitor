@@ -32,8 +32,10 @@ public sealed class BackupRowViewModel
     public required string FileId { get; init; }
     public string BackupName { get; init; } = "(unknown)";
     public string? AppVersion { get; init; }
+    public string BackupSource { get; init; } = ConfigurationBackupSources.Manual;
     public DateTimeOffset? ExportedAtUtc { get; init; }
     public DateTimeOffset FileCreatedAtUtc { get; init; }
+    public long FileSizeBytes { get; init; }
     public string IncludedSectionsDisplay { get; init; } = string.Empty;
     public string? NotesSummary { get; init; }
 }
@@ -46,8 +48,27 @@ public sealed class AdminBackupsPageViewModel
     public string? StatusMessage { get; init; }
     public RestorePreviewForm RestorePreviewForm { get; init; } = new();
     public RestoreApplyForm RestoreApplyForm { get; init; } = new();
+    public BackupDeleteSingleForm DeleteSingleForm { get; init; } = new();
+    public BackupDeleteBulkForm DeleteBulkForm { get; init; } = new();
+    public string NameFilter { get; init; } = string.Empty;
+    public string SourceFilter { get; init; } = string.Empty;
     public BackupRestorePreviewViewModel? Preview { get; init; }
     public BackupRestoreSummaryViewModel? RestoreSummary { get; init; }
+}
+
+public sealed class BackupDeleteSingleForm
+{
+    [Required]
+    public string FileId { get; set; } = string.Empty;
+
+    public bool ConfirmDelete { get; set; }
+}
+
+public sealed class BackupDeleteBulkForm
+{
+    public List<string> SelectedFileIds { get; set; } = [];
+
+    public string? ConfirmationText { get; set; }
 }
 
 public sealed class UploadBackupPageForm

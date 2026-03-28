@@ -23,6 +23,29 @@ public static class ConfigurationRestoreModes
     public static readonly string[] All = [Merge, Replace];
 }
 
+public static class ConfigurationBackupSources
+{
+    public const string Manual = "manual";
+    public const string Uploaded = "uploaded";
+    public const string AutomaticScheduled = "automatic_scheduled";
+    public const string AutomaticConfigChange = "automatic_config_change";
+
+    public static readonly string[] All = [Manual, Uploaded, AutomaticScheduled, AutomaticConfigChange];
+
+    public static bool IsAutomatic(string source)
+    {
+        return string.Equals(source, AutomaticScheduled, StringComparison.Ordinal)
+            || string.Equals(source, AutomaticConfigChange, StringComparison.Ordinal);
+    }
+}
+
+public static class BackupDeleteModes
+{
+    public const string Single = "single";
+    public const string Bulk = "bulk";
+    public const string BulkConfirmationText = "DELETE";
+}
+
 public sealed class ConfigurationBackupMetadata
 {
     public const int CurrentFormatVersion = 1;
@@ -34,6 +57,7 @@ public sealed class ConfigurationBackupMetadata
     public DateTimeOffset ExportedAtUtc { get; init; }
     public string? ExportedBy { get; init; }
     public string MachineName { get; init; } = string.Empty;
+    public string BackupSource { get; init; } = ConfigurationBackupSources.Manual;
 }
 
 public sealed class ConfigurationBackupDocument
@@ -67,6 +91,10 @@ public sealed class ConfigurationBackupDocument
     public string MachineName { get; init; } = string.Empty;
 
     [JsonPropertyOrder(8)]
+    [JsonPropertyName("backupSource")]
+    public string BackupSource { get; init; } = ConfigurationBackupSources.Manual;
+
+    [JsonPropertyOrder(9)]
     [JsonPropertyName("sections")]
     public ConfigurationBackupSectionData Sections { get; init; } = new();
 
@@ -81,6 +109,7 @@ public sealed class ConfigurationBackupDocument
             ExportedAtUtc = metadata.ExportedAtUtc,
             ExportedBy = metadata.ExportedBy,
             MachineName = metadata.MachineName,
+            BackupSource = metadata.BackupSource,
             Sections = sections
         };
     }
@@ -184,8 +213,10 @@ public sealed class BackupFileListItem
     public DateTimeOffset? ExportedAtUtc { get; init; }
     public string? BackupName { get; init; }
     public string? AppVersion { get; init; }
+    public string BackupSource { get; init; } = ConfigurationBackupSources.Manual;
     public IReadOnlyList<string> IncludedSections { get; init; } = [];
     public string? NotesSummary { get; init; }
+    public long FileSizeBytes { get; init; }
 }
 
 public sealed class CreateConfigurationBackupRequest
@@ -198,6 +229,36 @@ public sealed class CreateConfigurationBackupRequest
     public required IReadOnlyList<string> SelectedSections { get; init; }
 
     public string? ExportedBy { get; init; }
+    public string BackupSource { get; init; } = ConfigurationBackupSources.Manual;
+}
+
+public sealed class DeleteConfigurationBackupRequest
+{
+    [Required]
+    public string FileId { get; init; } = string.Empty;
+
+    public bool ConfirmSingleDelete { get; init; }
+}
+
+public sealed class BulkDeleteConfigurationBackupsRequest
+{
+    public IReadOnlyList<string> FileIds { get; init; } = [];
+    public string? ConfirmationText { get; init; }
+}
+
+public sealed class DeleteConfigurationBackupResponse
+{
+    public string FileId { get; init; } = string.Empty;
+    public bool Deleted { get; init; }
+    public string Message { get; init; } = string.Empty;
+}
+
+public sealed class BulkDeleteConfigurationBackupsResponse
+{
+    public int RequestedCount { get; init; }
+    public int DeletedCount { get; init; }
+    public int FailedCount { get; init; }
+    public IReadOnlyList<string> Messages { get; init; } = [];
 }
 
 public sealed class CreateConfigurationBackupResponse

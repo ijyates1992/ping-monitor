@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Backups;
 using EndpointModel = PingMonitor.Web.Models.Endpoint;
 
 namespace PingMonitor.Web.Services.Endpoints;
@@ -8,10 +9,12 @@ namespace PingMonitor.Web.Services.Endpoints;
 internal sealed class EndpointManagementService : IEndpointManagementService
 {
     private readonly PingMonitorDbContext _dbContext;
+    private readonly IConfigurationChangeBackupSignal _configurationChangeBackupSignal;
 
-    public EndpointManagementService(PingMonitorDbContext dbContext)
+    public EndpointManagementService(PingMonitorDbContext dbContext, IConfigurationChangeBackupSignal configurationChangeBackupSignal)
     {
         _dbContext = dbContext;
+        _configurationChangeBackupSignal = configurationChangeBackupSignal;
     }
 
     public async Task<CreateEndpointResult> CreateEndpointWithAssignmentAsync(CreateEndpointCommand command, CancellationToken cancellationToken)
@@ -78,6 +81,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _configurationChangeBackupSignal.NotifyConfigurationChanged("endpoint-create-with-assignment");
 
         return CreateEndpointResult.Succeeded(endpointId, assignmentId);
     }
@@ -230,6 +234,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _configurationChangeBackupSignal.NotifyConfigurationChanged("endpoint-update-with-assignment");
 
         return UpdateEndpointResult.Succeeded();
     }
@@ -280,6 +285,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         if (changed)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+            _configurationChangeBackupSignal.NotifyConfigurationChanged("endpoint-remove-disable");
         }
 
         return RemoveEndpointResult.Completed(changed);

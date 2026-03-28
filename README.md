@@ -96,9 +96,10 @@ States:
 
 ### Configuration Backup and Restore
 
-- Admin backup page supports server-side JSON configuration backups.
-- Admin backup page supports uploading JSON configuration backups.
+- Admin backup page supports server-side JSON configuration backups with source classification (`manual`, `uploaded`, `automatic_scheduled`, `automatic_config_change`).
+- Admin backup page supports uploading JSON configuration backups and server-side delete management (single and bulk delete with typed confirmation for bulk).
 - Accepted uploads are validated, retained on the server, and added to the managed backup list.
+- Automatic configuration backups support a simple daily schedule plus configuration-change coalescing, with retention pruning applied to automatic backups by default.
 - Restore is explicit and preview-first from existing server-side backup files.
 - Restore supports:
   - **merge mode** (insert missing + update matching; no deletes)
