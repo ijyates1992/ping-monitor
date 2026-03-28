@@ -82,25 +82,24 @@ All events are stored in a single table.
 
 ## Event Types (Initial Set)
 
-### Endpoint Events
+### Endpoint Events (initial)
 
 | Event Type                  | Description |
 |----------------------------|------------|
 | endpoint_state_changed     | Endpoint changed state (e.g. UP → DOWN) |
-| endpoint_suppressed        | Monitoring suppressed due to dependency or rule |
-| endpoint_unsuppressed      | Suppression lifted |
+| endpoint_suppression_applied | Monitoring suppression applied due to dependency |
+| endpoint_suppression_cleared | Suppression lifted |
 
 ---
 
-### Agent Events
+### Agent Events (initial)
 
 | Event Type                  | Description |
 |----------------------------|------------|
 | agent_authenticated        | Agent successfully authenticated |
-| agent_heartbeat_received   | Heartbeat received (used sparingly if needed) |
-| agent_became_online        | Agent transitioned to online state |
-| agent_became_stale         | Agent missed expected heartbeat window |
-| agent_became_offline       | Agent considered offline |
+| agent_heartbeat_received   | Heartbeat received (rate-limited for signal) |
+| agent_online               | Agent transitioned to online state |
+| agent_config_fetched       | Agent fetched configuration (reserved for optional use) |
 
 ---
 

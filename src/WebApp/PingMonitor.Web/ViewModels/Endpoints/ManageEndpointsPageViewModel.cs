@@ -15,6 +15,7 @@ public sealed class ManageEndpointsPageViewModel
 public sealed class ManageEndpointRowViewModel
 {
     public string AssignmentId { get; init; } = string.Empty;
+    public string EndpointId { get; init; } = string.Empty;
     public string EndpointName { get; init; } = string.Empty;
     public string IconKey { get; init; } = "generic";
     public string Target { get; init; } = string.Empty;

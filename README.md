@@ -93,6 +93,10 @@ States:
 
 - No silent failures
 - All actions are traceable
+- Status page includes a recent events panel for meaningful endpoint/agent activity
+- Endpoint history is available at `/endpoints/{endpointId}/history`
+- Agent history is available at `/agents/{agentId}/history`
+- Event logging is intentionally focused on meaningful state/activity events (not every raw successful check result)
 
 ### Configuration Backup and Restore
 

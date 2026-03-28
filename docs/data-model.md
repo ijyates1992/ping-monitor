@@ -409,6 +409,37 @@ Represents a historical state change.
 
 ---
 
+### EventLog
+
+Represents a meaningful endpoint/agent operational event.
+
+#### Purpose
+
+- auditable operational timeline
+- searchable endpoint/agent activity history
+- status-page recent event visibility
+
+#### Key fields
+
+- `eventLogId`
+- `occurredAtUtc`
+- `eventCategory` (endpoint / agent)
+- `eventType`
+- `severity` (info / warning / error)
+- `agentId` (nullable)
+- `endpointId` (nullable)
+- `assignmentId` (nullable)
+- `message`
+- `detailsJson` (nullable)
+
+#### Constraints
+
+- unified single event table (no per-domain split tables)
+- intended for meaningful domain events only (not every successful check)
+- indexed by `occurredAtUtc`, (`endpointId`, `occurredAtUtc`), (`agentId`, `occurredAtUtc`), (`assignmentId`, `occurredAtUtc`)
+
+---
+
 ### AlertEvent
 
 Represents an alert lifecycle.
@@ -461,6 +492,7 @@ Represents an alert lifecycle.
 - MonitorAssignment 1 → many CheckResults  
 - MonitorAssignment 1 → 1 EndpointState  
 - MonitorAssignment 1 → many StateTransitions  
+- MonitorAssignment 1 → many EventLogs  
 - MonitorAssignment 1 → many AlertEvents  
 
 ---

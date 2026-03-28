@@ -4,6 +4,7 @@ using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.ViewModels.Status;
 
 namespace PingMonitor.Web.Services.Status;
@@ -14,13 +15,15 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
     private readonly IEndpointMetricsService _endpointMetricsService;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IEventLogQueryService _eventLogQueryService;
 
-    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService)
+    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService, IEventLogQueryService eventLogQueryService)
     {
         _dbContext = dbContext;
         _endpointMetricsService = endpointMetricsService;
         _httpContextAccessor = httpContextAccessor;
         _userAccessScopeService = userAccessScopeService;
+        _eventLogQueryService = eventLogQueryService;
     }
 
     public async Task<EndpointStatusPageViewModel> GetStatusPageAsync(
@@ -227,7 +230,8 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AvailableAgents = availableAgents,
                 AvailableGroups = availableGroups
             },
-            Rows = rowsWithMetrics
+            Rows = rowsWithMetrics,
+            RecentEvents = await _eventLogQueryService.GetRecentEventsAsync(50, cancellationToken)
         };
     }
 

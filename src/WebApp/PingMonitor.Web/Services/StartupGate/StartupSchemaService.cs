@@ -28,6 +28,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "ResultBatches",
         "EndpointStates",
         "StateTransitions",
+        "EventLogs",
         "ApplicationSettings"
     ];
     private static readonly string[] RequiredEndpointDependencyColumns =
@@ -221,6 +222,25 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 PRIMARY KEY (`ApplicationSettingsId`)
             );
             """;
+        const string createEventLogsSql = """
+            CREATE TABLE IF NOT EXISTS `EventLogs` (
+                `EventLogId` varchar(64) NOT NULL,
+                `OccurredAtUtc` datetime(6) NOT NULL,
+                `EventCategory` varchar(32) NOT NULL,
+                `EventType` varchar(128) NOT NULL,
+                `Severity` varchar(16) NOT NULL,
+                `AgentId` varchar(64) NULL,
+                `EndpointId` varchar(64) NULL,
+                `AssignmentId` varchar(64) NULL,
+                `Message` varchar(2048) NOT NULL,
+                `DetailsJson` varchar(8192) NULL,
+                PRIMARY KEY (`EventLogId`),
+                KEY `IX_EventLogs_OccurredAtUtc` (`OccurredAtUtc`),
+                KEY `IX_EventLogs_EndpointId_OccurredAtUtc` (`EndpointId`, `OccurredAtUtc`),
+                KEY `IX_EventLogs_AgentId_OccurredAtUtc` (`AgentId`, `OccurredAtUtc`),
+                KEY `IX_EventLogs_AssignmentId_OccurredAtUtc` (`AssignmentId`, `OccurredAtUtc`)
+            );
+            """;
 
         const string createEndpointDependenciesSql = """
             CREATE TABLE IF NOT EXISTS `EndpointDependencies` (
@@ -290,6 +310,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createEventLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAgentHeartbeatHistorySql, cancellationToken);
@@ -299,6 +320,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createUserEndpointAccessesSql, cancellationToken);
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
         await EnsureEndpointColumnsAsync(dbContext, cancellationToken);
+        await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }
 
@@ -464,6 +486,25 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
     }
 
+    private static async Task EnsureAgentColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await HasAgentColumnAsync(connection, "LastHeartbeatEventLoggedAtUtc", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `Agents`
+                ADD COLUMN `LastHeartbeatEventLoggedAtUtc` datetime(6) NULL;
+                """,
+                cancellationToken);
+        }
+    }
+
     private static async Task EnsureEndpointColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         await using var connection = dbContext.Database.GetDbConnection();
@@ -524,6 +565,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
               AND table_name = 'EndpointDependencies'
+              AND column_name = @columnName;
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+    private static async Task<bool> HasAgentColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'Agents'
               AND column_name = @columnName;
             """;
         var parameter = command.CreateParameter();

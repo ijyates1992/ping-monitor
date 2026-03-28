@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Agents;
+using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Agents;
 
@@ -17,13 +18,16 @@ public sealed class AgentsController : Controller
 
     private readonly IAgentProvisioningService _agentProvisioningService;
     private readonly IAgentManagementQueryService _agentManagementQueryService;
+    private readonly IEventLogQueryService _eventLogQueryService;
 
     public AgentsController(
         IAgentProvisioningService agentProvisioningService,
-        IAgentManagementQueryService agentManagementQueryService)
+        IAgentManagementQueryService agentManagementQueryService,
+        IEventLogQueryService eventLogQueryService)
     {
         _agentProvisioningService = agentProvisioningService;
         _agentManagementQueryService = agentManagementQueryService;
+        _eventLogQueryService = eventLogQueryService;
     }
 
     [HttpGet("")]
@@ -59,6 +63,26 @@ public sealed class AgentsController : Controller
     public IActionResult Deploy()
     {
         return View("Deploy", new DeployAgentPageViewModel());
+    }
+
+    [HttpGet("{id}/history")]
+    public async Task<IActionResult> History(
+        [FromRoute] string id,
+        [FromQuery] string? search,
+        [FromQuery] string? eventType,
+        [FromQuery] DateTimeOffset? dateFromUtc,
+        [FromQuery] DateTimeOffset? dateToUtc,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var model = await _eventLogQueryService.GetAgentHistoryPageAsync(id, search, eventType, dateFromUtc, dateToUtc, page, pageSize, cancellationToken);
+        if (model is null)
+        {
+            return NotFound();
+        }
+
+        return View("History", model);
     }
 
     [HttpPost("deploy")]
