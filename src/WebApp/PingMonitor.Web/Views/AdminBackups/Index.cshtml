@@ -17,7 +17,10 @@
             --success: #137333;
             --error-bg: #fee4e2;
             --error-text: #b42318;
+            --warning-bg: #fff7e6;
+            --warning-border: #f4b400;
         }
+
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
         main { max-width: 960px; margin: 0 auto; padding: 1rem; }
@@ -25,7 +28,7 @@
         .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
         .muted { color: var(--muted); }
         label { display: block; font-weight: 600; margin-bottom: .35rem; }
-        input, textarea { width: 100%; border: 1px solid var(--border); border-radius: 10px; min-height: 48px; padding: .8rem; font: inherit; }
+        input, textarea, select { width: 100%; border: 1px solid var(--border); border-radius: 10px; min-height: 48px; padding: .8rem; font: inherit; }
         textarea { min-height: 96px; }
         .check-list { display: grid; gap: .6rem; }
         .check-item { display: flex; align-items: center; gap: .6rem; }
@@ -36,9 +39,15 @@
         .button-secondary { border: 1px solid var(--border); color: var(--text); background: white; }
         .errors { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: .8rem; }
         .saved { border: 1px solid #c2f0c2; background: #ebffee; color: var(--success); border-radius: 10px; padding: .8rem; }
+        .warning { border: 1px solid var(--warning-border); background: var(--warning-bg); border-radius: 10px; padding: .8rem; }
+        .notes { border: 1px solid var(--warning-border); background: var(--warning-bg); border-radius: 10px; padding: .8rem; white-space: pre-wrap; }
         table { width: 100%; border-collapse: collapse; }
         th, td { text-align: left; vertical-align: top; padding: .6rem .4rem; border-bottom: 1px solid var(--border); }
         .field-error { color: var(--error-text); font-size: .9rem; margin-top: .25rem; }
+        .split { display: grid; gap: 1rem; }
+        @@media (min-width: 780px) {
+            .split { grid-template-columns: 1fr 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -46,26 +55,25 @@
     <div class="stack">
         <section class="card">
             <h1>Configuration backups</h1>
-            <p class="muted">Create and download configuration-only JSON backups. Restore is not implemented in this phase.</p>
+            <p class="muted">Create/download configuration-only JSON backups and restore from server-side files with explicit preview. Restore mode in this phase is <strong>MERGE only</strong> (no deletes, no replace mode).</p>
             <div class="button-row">
                 <a class="button-secondary" href="/admin">Back to admin settings</a>
                 <a class="button-secondary" href="/status">Back to status</a>
             </div>
         </section>
 
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <div class="saved" role="status">@Model.StatusMessage</div>
+        }
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="errors" asp-validation-summary="ModelOnly"></div>
+        }
+
         <form method="post" action="/admin/backups" class="stack">
             @Html.AntiForgeryToken()
-
-            @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-            {
-                <div class="saved" role="status">@Model.StatusMessage</div>
-            }
-
-            @if (!ViewData.ModelState.IsValid)
-            {
-                <div class="errors" asp-validation-summary="ModelOnly"></div>
-            }
-
             <section class="card">
                 <h2>Create backup</h2>
                 <div class="stack">
@@ -93,6 +101,130 @@
                 </div>
             </section>
         </form>
+
+        <section class="card">
+            <h2>Restore (merge mode only)</h2>
+            <div class="warning">
+                <strong>Mode:</strong> MERGE only in this phase. Existing records are updated and missing records are inserted. No records are deleted.
+            </div>
+
+            <form method="post" action="/admin/backups/preview" class="stack" style="margin-top:1rem;">
+                @Html.AntiForgeryToken()
+                <div>
+                    <label asp-for="RestorePreviewForm.SelectedFileId"></label>
+                    <select asp-for="RestorePreviewForm.SelectedFileId">
+                        <option value="">Select a stored backup...</option>
+                        @foreach (var backup in Model.Backups)
+                        {
+                            <option value="@backup.FileId">@backup.BackupName (@backup.FileName)</option>
+                        }
+                    </select>
+                </div>
+                <div class="button-row">
+                    <button class="button" type="submit">Load restore preview</button>
+                </div>
+            </form>
+
+            @if (Model.Preview is not null)
+            {
+                <div class="stack" style="margin-top:1rem;">
+                    <div class="card" style="background:#f9fcff;">
+                        <h3>Selected backup preview</h3>
+                        <p><strong>Backup:</strong> @Model.Preview.BackupName</p>
+                        <p><strong>File:</strong> @Model.Preview.FileId</p>
+                        <p><strong>Exported:</strong> @Model.Preview.ExportedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+                        <p><strong>App version:</strong> @Model.Preview.AppVersion</p>
+                        <p><strong>Format version:</strong> @Model.Preview.FormatVersion</p>
+                        <p><strong>Included sections:</strong> @string.Join(", ", Model.Preview.IncludedSections)</p>
+                        <div>
+                            <strong>Notes</strong>
+                            <div class="notes">@(string.IsNullOrWhiteSpace(Model.Preview.Notes) ? "(none)" : Model.Preview.Notes)</div>
+                        </div>
+                        <div style="overflow-x:auto; margin-top:.75rem;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Section</th>
+                                        <th>Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Agents</td><td>@Model.Preview.Counts.Agents</td></tr>
+                                    <tr><td>Endpoints</td><td>@Model.Preview.Counts.Endpoints</td></tr>
+                                    <tr><td>Assignments</td><td>@Model.Preview.Counts.Assignments</td></tr>
+                                    <tr><td>Identity users</td><td>@Model.Preview.Counts.IdentityUsers</td></tr>
+                                    <tr><td>Identity roles</td><td>@Model.Preview.Counts.IdentityRoles</td></tr>
+                                    <tr><td>Identity user-role links</td><td>@Model.Preview.Counts.IdentityUserRoles</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <form method="post" action="/admin/backups/restore" class="card stack">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" asp-for="RestoreApplyForm.SelectedFileId" value="@Model.Preview.FileId" />
+                        <h3>Apply merge restore</h3>
+                        <p class="muted">Select one or more sections. Only selected sections are restored. Replace mode is not available in this phase.</p>
+                        <div class="check-list">
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeAgents" /> Agents</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeEndpoints" /> Endpoints (includes endpoint dependency links)</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeAssignments" /> Assignments</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeIdentity" /> Identity (sensitive and optional)</label>
+                        </div>
+                        <div class="warning">Identity restore is explicit and optional. Password hashes are not restored from configuration backups.</div>
+                        <div class="button-row">
+                            <button class="button" type="submit">Run merge restore</button>
+                        </div>
+                    </form>
+                </div>
+            }
+
+            @if (Model.RestoreSummary is not null)
+            {
+                <div class="card" style="margin-top:1rem; background:#f7fffb;">
+                    <h3>Restore summary</h3>
+                    <p><strong>File restored:</strong> @Model.RestoreSummary.FileId</p>
+                    <p><strong>Backup name:</strong> @Model.RestoreSummary.BackupName</p>
+                    <p><strong>Selected sections:</strong> @string.Join(", ", Model.RestoreSummary.SelectedSections)</p>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Section</th>
+                                    <th>Inserted</th>
+                                    <th>Updated</th>
+                                    <th>Skipped</th>
+                                    <th>Errors</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var section in Model.RestoreSummary.Sections)
+                            {
+                                <tr>
+                                    <td>
+                                        @(section.Section)
+                                        @if (section.Warnings.Count > 0)
+                                        {
+                                            <ul>
+                                                @foreach (var warning in section.Warnings)
+                                                {
+                                                    <li class="muted">@warning</li>
+                                                }
+                                            </ul>
+                                        }
+                                    </td>
+                                    <td>@(section.InsertedCount)</td>
+                                    <td>@(section.UpdatedCount)</td>
+                                    <td>@(section.SkippedCount)</td>
+                                    <td>@(section.ErrorCount)</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </section>
 
         <section class="card">
             <h2>Stored backups</h2>

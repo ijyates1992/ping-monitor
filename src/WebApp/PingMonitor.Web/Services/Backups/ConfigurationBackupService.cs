@@ -138,9 +138,25 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
 
     private async Task<IReadOnlyList<BackupEndpointRecord>> LoadEndpointsAsync(CancellationToken cancellationToken)
     {
-        return await _dbContext.Endpoints
+        var dependencies = await _dbContext.EndpointDependencies
+            .AsNoTracking()
+            .OrderBy(x => x.EndpointId)
+            .ThenBy(x => x.DependsOnEndpointId)
+            .ToListAsync(cancellationToken);
+
+        var dependencyLookup = dependencies
+            .GroupBy(x => x.EndpointId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).ToArray(),
+                StringComparer.Ordinal);
+
+        var endpoints = await _dbContext.Endpoints
             .AsNoTracking()
             .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        return endpoints
             .Select(x => new BackupEndpointRecord
             {
                 EndpointId = x.EndpointId,
@@ -149,10 +165,13 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
                 IconKey = x.IconKey,
                 Enabled = x.Enabled,
                 Tags = x.Tags,
+                DependsOnEndpointIds = dependencyLookup.TryGetValue(x.EndpointId, out var dependsOnIds)
+                    ? dependsOnIds
+                    : [],
                 Notes = x.Notes,
                 CreatedAtUtc = x.CreatedAtUtc
             })
-            .ToListAsync(cancellationToken);
+            .ToArray();
     }
 
     private async Task<IReadOnlyList<BackupAssignmentRecord>> LoadAssignmentsAsync(CancellationToken cancellationToken)
