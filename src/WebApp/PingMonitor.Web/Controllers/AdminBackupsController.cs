@@ -39,7 +39,7 @@ public sealed class AdminBackupsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create([FromForm] CreateBackupPageForm form, CancellationToken cancellationToken)
+    public async Task<IActionResult> Create([FromForm, Bind(Prefix = "Form")] CreateBackupPageForm form, CancellationToken cancellationToken)
     {
         var selectedSections = GetSelectedExportSections(form);
         if (selectedSections.Count == 0)
@@ -77,7 +77,7 @@ public sealed class AdminBackupsController : Controller
 
     [HttpPost("upload")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Upload([FromForm] UploadBackupPageForm form, CancellationToken cancellationToken)
+    public async Task<IActionResult> Upload([FromForm, Bind(Prefix = "UploadForm")] UploadBackupPageForm form, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
@@ -107,7 +107,7 @@ public sealed class AdminBackupsController : Controller
 
     [HttpPost("preview")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> PreviewRestore([FromForm] RestorePreviewForm form, CancellationToken cancellationToken)
+    public async Task<IActionResult> PreviewRestore([FromForm, Bind(Prefix = "RestorePreviewForm")] RestorePreviewForm form, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
@@ -147,7 +147,7 @@ public sealed class AdminBackupsController : Controller
 
     [HttpPost("restore")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Restore([FromForm] RestoreApplyForm form, CancellationToken cancellationToken)
+    public async Task<IActionResult> Restore([FromForm, Bind(Prefix = "RestoreApplyForm")] RestoreApplyForm form, CancellationToken cancellationToken)
     {
         var selectedSections = GetSelectedRestoreSections(form);
         if (selectedSections.Count == 0)
