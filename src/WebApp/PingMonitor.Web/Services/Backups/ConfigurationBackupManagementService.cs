@@ -24,13 +24,13 @@ public sealed class ConfigurationBackupManagementService : IConfigurationBackupM
 
     public async Task<DeleteConfigurationBackupResponse> DeleteAsync(DeleteConfigurationBackupRequest request, CancellationToken cancellationToken)
     {
-        if (!request.ConfirmSingleDelete)
+        if (!string.Equals(request.ConfirmationText?.Trim(), BackupDeleteModes.SingleConfirmationText, StringComparison.Ordinal))
         {
             return new DeleteConfigurationBackupResponse
             {
                 FileId = request.FileId,
                 Deleted = false,
-                Message = "Single delete requires explicit confirmation."
+                Message = $"Single delete requires typed confirmation '{BackupDeleteModes.SingleConfirmationText}'."
             };
         }
 
@@ -78,7 +78,7 @@ public sealed class ConfigurationBackupManagementService : IConfigurationBackupM
 
         foreach (var fileId in fileIds)
         {
-            var result = await DeleteAsync(new DeleteConfigurationBackupRequest { FileId = fileId, ConfirmSingleDelete = true }, cancellationToken);
+            var result = await DeleteAsync(new DeleteConfigurationBackupRequest { FileId = fileId, ConfirmationText = BackupDeleteModes.SingleConfirmationText }, cancellationToken);
             if (result.Deleted)
             {
                 deleted++;

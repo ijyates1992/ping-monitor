@@ -296,7 +296,7 @@
             {
                 <form id="bulkDeleteForm" method="post" action="/admin/backups/delete-bulk">
                     @Html.AntiForgeryToken()
-                    <div class="warning" style="margin-bottom:.75rem;">Bulk delete requires typed confirmation <strong>DELETE</strong>. Manual and uploaded backups are never auto-pruned by default.</div>
+                    <div class="warning" style="margin-bottom:.75rem;">Single and bulk delete require typed confirmation <strong>DELETE</strong>. Manual and uploaded backups are never auto-pruned by default.</div>
                     <div class="split">
                         <div>
                             <label asp-for="DeleteBulkForm.ConfirmationText">Bulk delete confirmation</label>
@@ -356,7 +356,7 @@
                                         <form method="post" action="/admin/backups/delete" class="inline-form">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="DeleteSingleForm.FileId" value="@backup.FileId" />
-                                            <input type="hidden" name="DeleteSingleForm.ConfirmDelete" value="true" />
+                                            <input name="DeleteSingleForm.ConfirmationText" placeholder="Type DELETE" style="width:130px;min-height:40px;padding:.5rem;" />
                                             <button class="button-secondary danger" type="submit" onclick="return confirm('Delete backup @backup.BackupName? This cannot be undone.');">Delete</button>
                                         </form>
                                     </td>

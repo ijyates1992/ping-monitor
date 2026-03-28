@@ -140,7 +140,7 @@ Source classification is part of managed backup metadata and is shown in the adm
 
 Managed backups can be deleted from the admin UI with explicit confirmation:
 
-- Single-file delete requires explicit confirmation in the delete form submission
+- Single-file delete requires typed confirmation text: `DELETE`
 - Bulk delete requires typed confirmation text: `DELETE`
 - Delete operations are restricted to files in the configured `Backup:StoragePath`
 - Path traversal and arbitrary file delete attempts must be rejected
