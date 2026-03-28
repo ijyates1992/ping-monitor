@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,7 @@ using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.Services.Status;
 using PingMonitor.Web.Support;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -137,6 +139,9 @@ builder.Services.AddScoped<IConfigurationRestoreService, ConfigurationRestoreSer
 
 var app = builder.Build();
 
+var identityCookieOptionsMonitor = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>();
+var identityApplicationCookieName = identityCookieOptionsMonitor.Get(IdentityConstants.ApplicationScheme).Cookie.Name;
+
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
@@ -155,6 +160,26 @@ app.Use(async (context, next) =>
 
     if (context.Request.Path.StartsWithSegments("/startup-gate", StringComparison.OrdinalIgnoreCase))
     {
+        if (!string.IsNullOrWhiteSpace(identityApplicationCookieName) &&
+            context.Request.Headers.TryGetValue("Cookie", out var cookieHeaderValues))
+        {
+            var filteredCookieHeaders = cookieHeaderValues
+                .Select(cookieHeader => string.Join("; ", cookieHeader
+                    .Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                    .Where(cookiePart => !cookiePart.StartsWith($"{identityApplicationCookieName}=", StringComparison.Ordinal))))
+                .Where(cookieHeader => !string.IsNullOrWhiteSpace(cookieHeader))
+                .ToArray();
+
+            if (filteredCookieHeaders.Length > 0)
+            {
+                context.Request.Headers["Cookie"] = filteredCookieHeaders;
+            }
+            else
+            {
+                context.Request.Headers.Remove("Cookie");
+            }
+        }
+
         await next();
         return;
     }
