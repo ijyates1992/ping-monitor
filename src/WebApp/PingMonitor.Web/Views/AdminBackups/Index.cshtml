@@ -102,6 +102,24 @@
             </section>
         </form>
 
+        <form method="post" action="/admin/backups/upload" enctype="multipart/form-data" class="stack">
+            @Html.AntiForgeryToken()
+            <section class="card">
+                <h2>Upload existing backup</h2>
+                <p class="muted">Upload a JSON configuration backup file. Valid uploads are retained in the server backup folder and become part of the managed backup list.</p>
+                <div class="stack">
+                    <div>
+                        <label asp-for="UploadForm.BackupFile"></label>
+                        <input asp-for="UploadForm.BackupFile" type="file" accept=".json,application/json" />
+                        <div class="field-error"><span asp-validation-for="UploadForm.BackupFile"></span></div>
+                    </div>
+                </div>
+                <div class="button-row" style="margin-top:1rem;">
+                    <button class="button" type="submit">Upload JSON backup</button>
+                </div>
+            </section>
+        </form>
+
         <section class="card">
             <h2>Restore</h2>
             <div class="warning">

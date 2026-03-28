@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 using PingMonitor.Web.Services.Backups;
 
 namespace PingMonitor.Web.ViewModels.Backups;
@@ -40,12 +41,20 @@ public sealed class BackupRowViewModel
 public sealed class AdminBackupsPageViewModel
 {
     public required CreateBackupPageForm Form { get; init; }
+    public required UploadBackupPageForm UploadForm { get; init; }
     public required IReadOnlyList<BackupRowViewModel> Backups { get; init; } = [];
     public string? StatusMessage { get; init; }
     public RestorePreviewForm RestorePreviewForm { get; init; } = new();
     public RestoreApplyForm RestoreApplyForm { get; init; } = new();
     public BackupRestorePreviewViewModel? Preview { get; init; }
     public BackupRestoreSummaryViewModel? RestoreSummary { get; init; }
+}
+
+public sealed class UploadBackupPageForm
+{
+    [Required(ErrorMessage = "Backup file is required.")]
+    [Display(Name = "Backup file (.json)")]
+    public IFormFile? BackupFile { get; set; }
 }
 
 public sealed class RestorePreviewForm

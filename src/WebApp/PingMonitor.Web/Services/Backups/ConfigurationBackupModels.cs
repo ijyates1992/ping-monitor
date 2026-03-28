@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Http;
 
 namespace PingMonitor.Web.Services.Backups;
 
@@ -206,6 +207,25 @@ public sealed class CreateConfigurationBackupResponse
     public string BackupName { get; init; } = string.Empty;
     public DateTimeOffset ExportedAtUtc { get; init; }
     public IReadOnlyList<string> IncludedSections { get; init; } = [];
+}
+
+public sealed class UploadConfigurationBackupRequest
+{
+    [Required(ErrorMessage = "Backup file is required.")]
+    public IFormFile? File { get; init; }
+
+    public string? UploadedBy { get; init; }
+}
+
+public sealed class UploadConfigurationBackupResponse
+{
+    public string FileName { get; init; } = string.Empty;
+    public string FileId { get; init; } = string.Empty;
+    public string BackupName { get; init; } = string.Empty;
+    public string AppVersion { get; init; } = string.Empty;
+    public DateTimeOffset ExportedAtUtc { get; init; }
+    public DateTimeOffset UploadedAtUtc { get; init; }
+    public string? UploadedBy { get; init; }
 }
 
 public sealed class RestorePreviewMetadata
