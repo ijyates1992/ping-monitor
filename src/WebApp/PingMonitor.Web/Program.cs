@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.Extensions.Primitives;
 using Microsoft.EntityFrameworkCore;
 using MySql.EntityFrameworkCore.Extensions;
 using PingMonitor.Web.Data;
@@ -168,29 +167,6 @@ app.Use(async (context, next) =>
 
     context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
     await context.Response.WriteAsync("Startup gate is active. Use local loopback access to complete setup.");
-});
-
-app.Use(async (context, next) =>
-{
-    if (!context.Request.Path.StartsWithSegments("/startup-gate", StringComparison.OrdinalIgnoreCase))
-    {
-        await next();
-        return;
-    }
-
-    var startupGateStatus = context.Items[typeof(StartupGateStatus).FullName!] as StartupGateStatus;
-    if (startupGateStatus is null || startupGateStatus.Mode == StartupMode.Normal)
-    {
-        await next();
-        return;
-    }
-
-    if (context.Request.Headers.ContainsKey("Cookie"))
-    {
-        context.Request.Headers["Cookie"] = StringValues.Empty;
-    }
-
-    await next();
 });
 
 app.UseAuthentication();
