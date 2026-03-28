@@ -13,6 +13,15 @@ public static class ConfigurationBackupSections
     public static readonly string[] All = [Agents, Endpoints, Assignments, Identity];
 }
 
+public static class ConfigurationRestoreModes
+{
+    public const string Merge = "merge";
+    public const string Replace = "replace";
+    public const string ReplaceConfirmationText = "REPLACE";
+
+    public static readonly string[] All = [Merge, Replace];
+}
+
 public sealed class ConfigurationBackupMetadata
 {
     public const int CurrentFormatVersion = 1;
@@ -234,11 +243,17 @@ public sealed class RestoreConfigurationRequest
 
     [Required]
     public IReadOnlyList<string> SelectedSections { get; init; } = [];
+
+    [Required]
+    public string RestoreMode { get; init; } = ConfigurationRestoreModes.Merge;
+
+    public string? ConfirmationText { get; init; }
 }
 
 public sealed class RestoreSectionResult
 {
     public string Section { get; init; } = string.Empty;
+    public int DeletedCount { get; set; }
     public int InsertedCount { get; set; }
     public int UpdatedCount { get; set; }
     public int SkippedCount { get; set; }
@@ -250,6 +265,7 @@ public sealed class RestoreConfigurationResponse
 {
     public string FileId { get; init; } = string.Empty;
     public string BackupName { get; init; } = string.Empty;
+    public string RestoreMode { get; init; } = ConfigurationRestoreModes.Merge;
     public IReadOnlyList<string> SelectedSections { get; init; } = [];
     public IReadOnlyList<RestoreSectionResult> SectionResults { get; init; } = [];
 }
