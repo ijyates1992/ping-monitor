@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using PingMonitor.Web.Services.Backups;
 
 namespace PingMonitor.Web.ViewModels.Backups;
 
@@ -70,6 +71,12 @@ public sealed class RestoreApplyForm
 
     [Display(Name = "Restore identity")]
     public bool IncludeIdentity { get; set; }
+
+    [Display(Name = "Restore mode")]
+    public string RestoreMode { get; set; } = ConfigurationRestoreModes.Merge;
+
+    [Display(Name = "Typed confirmation")]
+    public string? ConfirmationText { get; set; }
 }
 
 public sealed class BackupRestorePreviewViewModel
@@ -97,6 +104,7 @@ public sealed class ConfigurationBackupSectionCountViewModel
 public sealed class BackupRestoreSectionResultViewModel
 {
     public string Section { get; init; } = string.Empty;
+    public int DeletedCount { get; init; }
     public int InsertedCount { get; init; }
     public int UpdatedCount { get; init; }
     public int SkippedCount { get; init; }
@@ -108,6 +116,7 @@ public sealed class BackupRestoreSummaryViewModel
 {
     public string FileId { get; init; } = string.Empty;
     public string BackupName { get; init; } = string.Empty;
+    public string RestoreMode { get; init; } = ConfigurationRestoreModes.Merge;
     public IReadOnlyList<string> SelectedSections { get; init; } = [];
     public IReadOnlyList<BackupRestoreSectionResultViewModel> Sections { get; init; } = [];
 }

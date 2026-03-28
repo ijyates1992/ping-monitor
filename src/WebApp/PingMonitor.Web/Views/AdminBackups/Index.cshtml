@@ -55,7 +55,7 @@
     <div class="stack">
         <section class="card">
             <h1>Configuration backups</h1>
-            <p class="muted">Create/download configuration-only JSON backups and restore from server-side files with explicit preview. Restore mode in this phase is <strong>MERGE only</strong> (no deletes, no replace mode).</p>
+            <p class="muted">Create/download configuration-only JSON backups and restore from server-side files with explicit preview. Restore supports <strong>MERGE</strong> (safe default) and <strong>REPLACE</strong> (destructive for selected sections only).</p>
             <div class="button-row">
                 <a class="button-secondary" href="/admin">Back to admin settings</a>
                 <a class="button-secondary" href="/status">Back to status</a>
@@ -103,9 +103,9 @@
         </form>
 
         <section class="card">
-            <h2>Restore (merge mode only)</h2>
+            <h2>Restore</h2>
             <div class="warning">
-                <strong>Mode:</strong> MERGE only in this phase. Existing records are updated and missing records are inserted. No records are deleted.
+                <strong>Mode notes:</strong> MERGE updates/inserts without deletes. REPLACE deletes selected sections first, then restores them from the backup.
             </div>
 
             <form method="post" action="/admin/backups/preview" class="stack" style="margin-top:1rem;">
@@ -163,17 +163,31 @@
                     <form method="post" action="/admin/backups/restore" class="card stack">
                         @Html.AntiForgeryToken()
                         <input type="hidden" asp-for="RestoreApplyForm.SelectedFileId" value="@Model.Preview.FileId" />
-                        <h3>Apply merge restore</h3>
-                        <p class="muted">Select one or more sections. Only selected sections are restored. Replace mode is not available in this phase.</p>
+                        <h3>Apply restore</h3>
+                        <p class="muted">Select one or more sections. Only selected sections are restored. Non-selected sections remain untouched.</p>
                         <div class="check-list">
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeAgents" /> Agents</label>
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeEndpoints" /> Endpoints (includes endpoint dependency links)</label>
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeAssignments" /> Assignments</label>
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeIdentity" /> Identity (sensitive and optional)</label>
                         </div>
+                        <div>
+                            <label asp-for="RestoreApplyForm.RestoreMode"></label>
+                            <select asp-for="RestoreApplyForm.RestoreMode">
+                                <option value="merge">Merge (safe default)</option>
+                                <option value="replace">Replace (destructive)</option>
+                            </select>
+                        </div>
+                        <div class="warning">
+                            Replace mode is destructive for selected sections. Type <strong>REPLACE</strong> exactly to confirm.
+                        </div>
+                        <div>
+                            <label asp-for="RestoreApplyForm.ConfirmationText"></label>
+                            <input asp-for="RestoreApplyForm.ConfirmationText" placeholder="Type REPLACE to confirm replace mode" />
+                        </div>
                         <div class="warning">Identity restore is explicit and optional. Password hashes are not restored from configuration backups.</div>
                         <div class="button-row">
-                            <button class="button" type="submit">Run merge restore</button>
+                            <button class="button" type="submit">Run restore</button>
                         </div>
                     </form>
                 </div>
@@ -185,12 +199,14 @@
                     <h3>Restore summary</h3>
                     <p><strong>File restored:</strong> @Model.RestoreSummary.FileId</p>
                     <p><strong>Backup name:</strong> @Model.RestoreSummary.BackupName</p>
+                    <p><strong>Restore mode:</strong> @Model.RestoreSummary.RestoreMode</p>
                     <p><strong>Selected sections:</strong> @string.Join(", ", Model.RestoreSummary.SelectedSections)</p>
                     <div style="overflow-x:auto;">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Section</th>
+                                    <th>Deleted</th>
                                     <th>Inserted</th>
                                     <th>Updated</th>
                                     <th>Skipped</th>
@@ -213,6 +229,7 @@
                                             </ul>
                                         }
                                     </td>
+                                    <td>@(section.DeletedCount)</td>
                                     <td>@(section.InsertedCount)</td>
                                     <td>@(section.UpdatedCount)</td>
                                     <td>@(section.SkippedCount)</td>

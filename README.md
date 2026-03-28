@@ -98,7 +98,9 @@ States:
 
 - Admin backup page supports server-side JSON configuration backups.
 - Restore is explicit and preview-first from existing server-side backup files.
-- Restore currently supports **merge mode only** (insert missing + update matching).
+- Restore supports:
+  - **merge mode** (insert missing + update matching; no deletes)
+  - **replace mode** (destructive, section-scoped delete + restore; requires typing `REPLACE`)
 - Replace mode, operational data restore, and backup upload are intentionally not implemented yet.
 - Logs are treated as first-class outputs
 

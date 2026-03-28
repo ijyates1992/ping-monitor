@@ -87,9 +87,9 @@ Example:
 }
 ```
 
-## Restore behaviour (current)
+## Restore behaviour
 
-- Restore is **configuration-only** and uses **merge mode only**.
+- Restore is **configuration-only**.
 - Restore must be **previewed before apply**.
 - Preview must display backup metadata including `notes` prominently before restore is run.
 - Restore is driven from existing **server-side backup files** in the configured `Backup:StoragePath`.
@@ -97,10 +97,19 @@ Example:
   - `agents`
   - `endpoints`
   - `assignments`
-  - `identity` (optional and explicit)
+  - `identity` (optional and explicit, sensitive)
+- Restore supports two modes:
+  - `merge`
+  - `replace`
 - Merge mode updates matching records and inserts missing records.
-- Merge mode in this phase does **not delete existing configuration**.
-- Replace mode is not implemented in this phase.
+- Merge mode does **not delete existing configuration**.
+- Replace mode is destructive for the **selected sections only**:
+  - selected sections are deleted using explicit section-specific ordering
+  - selected sections are then imported from backup data
+  - non-selected sections are not modified
+- Replace mode requires exact typed confirmation text: `REPLACE`.
+- Replace requests with missing/incorrect confirmation must be rejected.
+- Identity replace is not supported in this phase; identity restore remains merge-only and explicit.
 - Restore does **not** import operational data (results, state transitions, alerts, logs, metrics, runtime state).
 
 ## Historical phase note

@@ -92,7 +92,8 @@ public sealed class AdminBackupsController : Controller
                 IncludeAgents = preview.IncludedSections.Contains(ConfigurationBackupSections.Agents, StringComparer.Ordinal),
                 IncludeEndpoints = preview.IncludedSections.Contains(ConfigurationBackupSections.Endpoints, StringComparer.Ordinal),
                 IncludeAssignments = preview.IncludedSections.Contains(ConfigurationBackupSections.Assignments, StringComparer.Ordinal),
-                IncludeIdentity = false
+                IncludeIdentity = false,
+                RestoreMode = ConfigurationRestoreModes.Merge
             };
 
             var model = await BuildPageViewModelAsync(new CreateBackupPageForm(), form, applyForm, statusMessage: null, preview: previewViewModel, restoreSummary: null, cancellationToken);
@@ -118,7 +119,13 @@ public sealed class AdminBackupsController : Controller
         var selectedSections = GetSelectedRestoreSections(form);
         if (selectedSections.Count == 0)
         {
-            ModelState.AddModelError(string.Empty, "Select at least one section for merge restore.");
+            ModelState.AddModelError(string.Empty, "Select at least one section for restore.");
+        }
+
+        if (string.Equals(form.RestoreMode, ConfigurationRestoreModes.Replace, StringComparison.Ordinal)
+            && !string.Equals(form.ConfirmationText, ConfigurationRestoreModes.ReplaceConfirmationText, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError(string.Empty, $"Replace mode requires typed confirmation text '{ConfigurationRestoreModes.ReplaceConfirmationText}'.");
         }
 
         if (!ModelState.IsValid)
@@ -129,11 +136,13 @@ public sealed class AdminBackupsController : Controller
 
         try
         {
-            var response = await _restoreService.RestoreMergeAsync(
+            var response = await _restoreService.RestoreAsync(
                 new RestoreConfigurationRequest
                 {
                     FileId = form.SelectedFileId,
-                    SelectedSections = selectedSections
+                    SelectedSections = selectedSections,
+                    RestoreMode = string.IsNullOrWhiteSpace(form.RestoreMode) ? ConfigurationRestoreModes.Merge : form.RestoreMode,
+                    ConfirmationText = form.ConfirmationText
                 },
                 cancellationToken);
 
@@ -142,7 +151,7 @@ public sealed class AdminBackupsController : Controller
                 new CreateBackupPageForm(),
                 new RestorePreviewForm { SelectedFileId = form.SelectedFileId },
                 form,
-                statusMessage: "Merge restore completed.",
+                statusMessage: $"{response.RestoreMode.ToUpperInvariant()} restore completed.",
                 preview: ToPreviewViewModel(preview),
                 restoreSummary: ToRestoreSummaryViewModel(response),
                 cancellationToken);
@@ -300,10 +309,12 @@ public sealed class AdminBackupsController : Controller
         {
             FileId = response.FileId,
             BackupName = response.BackupName,
+            RestoreMode = response.RestoreMode,
             SelectedSections = response.SelectedSections,
             Sections = response.SectionResults.Select(x => new BackupRestoreSectionResultViewModel
             {
                 Section = x.Section,
+                DeletedCount = x.DeletedCount,
                 InsertedCount = x.InsertedCount,
                 UpdatedCount = x.UpdatedCount,
                 SkippedCount = x.SkippedCount,
