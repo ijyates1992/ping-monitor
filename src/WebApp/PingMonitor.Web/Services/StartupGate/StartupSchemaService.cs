@@ -29,6 +29,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "EndpointStates",
         "StateTransitions",
         "EventLogs",
+        "SecurityAuthLogs",
         "ApplicationSettings"
     ];
     private static readonly string[] RequiredEndpointDependencyColumns =
@@ -241,6 +242,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 KEY `IX_EventLogs_AssignmentId_OccurredAtUtc` (`AssignmentId`, `OccurredAtUtc`)
             );
             """;
+        const string createSecurityAuthLogsSql = """
+            CREATE TABLE IF NOT EXISTS `SecurityAuthLogs` (
+                `SecurityAuthLogId` varchar(64) NOT NULL,
+                `OccurredAtUtc` datetime(6) NOT NULL,
+                `AuthType` varchar(16) NOT NULL,
+                `SubjectIdentifier` varchar(255) NOT NULL,
+                `SourceIpAddress` varchar(64) NULL,
+                `Success` tinyint(1) NOT NULL,
+                `FailureReason` varchar(128) NULL,
+                `UserId` varchar(255) NULL,
+                `AgentId` varchar(64) NULL,
+                `DetailsJson` varchar(4096) NULL,
+                PRIMARY KEY (`SecurityAuthLogId`),
+                KEY `IX_SecurityAuthLogs_OccurredAtUtc` (`OccurredAtUtc`),
+                KEY `IX_SecurityAuthLogs_AuthType_OccurredAtUtc` (`AuthType`, `OccurredAtUtc`),
+                KEY `IX_SecurityAuthLogs_AuthType_Success_OccurredAtUtc` (`AuthType`, `Success`, `OccurredAtUtc`)
+            );
+            """;
 
         const string createEndpointDependenciesSql = """
             CREATE TABLE IF NOT EXISTS `EndpointDependencies` (
@@ -311,6 +330,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEventLogsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createSecurityAuthLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAgentHeartbeatHistorySql, cancellationToken);

@@ -18,6 +18,7 @@ using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.Services.Status;
+using PingMonitor.Web.Services.Security;
 using PingMonitor.Web.Support;
 using Microsoft.Extensions.Options;
 
@@ -113,6 +114,8 @@ builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
 builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();
 builder.Services.AddScoped<IEventLogService, EventLogService>();
 builder.Services.AddScoped<IEventLogQueryService, EventLogQueryService>();
+builder.Services.AddScoped<ISecurityAuthLogService, SecurityAuthLogService>();
+builder.Services.AddScoped<ISecurityAuthLogQueryService, SecurityAuthLogQueryService>();
 builder.Services.AddScoped<IEndpointStatusQueryService, EndpointStatusQueryService>();
 builder.Services.AddScoped<IStartupGateService, StartupGateService>();
 builder.Services.AddSingleton<IStartupDatabaseConfigurationStore, FileStartupDatabaseConfigurationStore>();

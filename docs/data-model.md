@@ -440,6 +440,37 @@ Represents a meaningful endpoint/agent operational event.
 
 ---
 
+### SecurityAuthLog
+
+Represents one persisted authentication attempt for user or agent access.
+
+#### Purpose
+
+- auditable authentication timeline
+- operator-facing security visibility
+- supports review of successful and failed auth attempts
+
+#### Key fields
+
+- `securityAuthLogId`
+- `occurredAtUtc`
+- `authType` (`User` / `Agent`)
+- `subjectIdentifier`
+- `sourceIpAddress` (nullable)
+- `success`
+- `failureReason` (nullable)
+- `userId` (nullable)
+- `agentId` (nullable)
+- `detailsJson` (nullable, non-secret metadata only)
+
+#### Constraints
+
+- append-only
+- secrets (passwords, bearer tokens, API keys) must not be stored
+- indexed by `occurredAtUtc`, (`authType`, `occurredAtUtc`), (`authType`, `success`, `occurredAtUtc`)
+
+---
+
 ### AlertEvent
 
 Represents an alert lifecycle.
