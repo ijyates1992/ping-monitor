@@ -256,6 +256,10 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         notificationSettings.HasKey(x => x.NotificationSettingsId);
         notificationSettings.Property(x => x.NotificationSettingsId).ValueGeneratedNever();
         notificationSettings.Property(x => x.BrowserNotificationsEnabled).IsRequired();
+        notificationSettings.Property(x => x.BrowserNotifyEndpointDown).IsRequired();
+        notificationSettings.Property(x => x.BrowserNotifyEndpointRecovered).IsRequired();
+        notificationSettings.Property(x => x.BrowserNotifyAgentOffline).IsRequired();
+        notificationSettings.Property(x => x.BrowserNotifyAgentOnline).IsRequired();
         notificationSettings.Property(x => x.BrowserNotificationsPermissionState).HasMaxLength(16);
         notificationSettings.Property(x => x.TelegramNotificationsEnabled).IsRequired();
         notificationSettings.Property(x => x.SmtpNotificationsEnabled).IsRequired();

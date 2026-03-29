@@ -44,6 +44,10 @@ public sealed class NotificationSettingsController : Controller
             new UpdateNotificationSettingsCommand
             {
                 BrowserNotificationsEnabled = model.BrowserNotificationsEnabled,
+                BrowserNotifyEndpointDown = model.BrowserNotifyEndpointDown,
+                BrowserNotifyEndpointRecovered = model.BrowserNotifyEndpointRecovered,
+                BrowserNotifyAgentOffline = model.BrowserNotifyAgentOffline,
+                BrowserNotifyAgentOnline = model.BrowserNotifyAgentOnline,
                 BrowserNotificationsPermissionState = model.BrowserNotificationsPermissionState,
                 UpdatedByUserId = User.Identity?.Name
             },
@@ -62,6 +66,10 @@ public sealed class NotificationSettingsController : Controller
         return new NotificationSettingsPageViewModel
         {
             BrowserNotificationsEnabled = settings.BrowserNotificationsEnabled,
+            BrowserNotifyEndpointDown = settings.BrowserNotifyEndpointDown,
+            BrowserNotifyEndpointRecovered = settings.BrowserNotifyEndpointRecovered,
+            BrowserNotifyAgentOffline = settings.BrowserNotifyAgentOffline,
+            BrowserNotifyAgentOnline = settings.BrowserNotifyAgentOnline,
             BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState ?? "default",
             UpdatedAtUtc = settings.UpdatedAtUtc,
             UpdatedByUserId = settings.UpdatedByUserId,

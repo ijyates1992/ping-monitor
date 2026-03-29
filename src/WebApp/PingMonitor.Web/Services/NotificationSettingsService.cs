@@ -24,6 +24,10 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         var settings = await GetOrCreateEntityAsync(cancellationToken);
 
         settings.BrowserNotificationsEnabled = command.BrowserNotificationsEnabled;
+        settings.BrowserNotifyEndpointDown = command.BrowserNotifyEndpointDown;
+        settings.BrowserNotifyEndpointRecovered = command.BrowserNotifyEndpointRecovered;
+        settings.BrowserNotifyAgentOffline = command.BrowserNotifyAgentOffline;
+        settings.BrowserNotifyAgentOnline = command.BrowserNotifyAgentOnline;
         settings.BrowserNotificationsPermissionState = NormalizePermissionState(command.BrowserNotificationsPermissionState);
         settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
         settings.UpdatedByUserId = string.IsNullOrWhiteSpace(command.UpdatedByUserId)
@@ -48,6 +52,10 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         {
             NotificationSettingsId = NotificationSettings.SingletonId,
             BrowserNotificationsEnabled = false,
+            BrowserNotifyEndpointDown = true,
+            BrowserNotifyEndpointRecovered = true,
+            BrowserNotifyAgentOffline = true,
+            BrowserNotifyAgentOnline = true,
             BrowserNotificationsPermissionState = "default",
             TelegramNotificationsEnabled = false,
             SmtpNotificationsEnabled = false,
@@ -72,6 +80,10 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         return new NotificationSettingsDto
         {
             BrowserNotificationsEnabled = settings.BrowserNotificationsEnabled,
+            BrowserNotifyEndpointDown = settings.BrowserNotifyEndpointDown,
+            BrowserNotifyEndpointRecovered = settings.BrowserNotifyEndpointRecovered,
+            BrowserNotifyAgentOffline = settings.BrowserNotifyAgentOffline,
+            BrowserNotifyAgentOnline = settings.BrowserNotifyAgentOnline,
             BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState,
             TelegramNotificationsEnabled = settings.TelegramNotificationsEnabled,
             SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,

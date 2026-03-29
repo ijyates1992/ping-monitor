@@ -67,6 +67,20 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SecurityLogAutoPruneEnabled",
         "UpdatedAtUtc"
     ];
+    private static readonly string[] RequiredNotificationSettingsColumns =
+    [
+        "NotificationSettingsId",
+        "BrowserNotificationsEnabled",
+        "BrowserNotifyEndpointDown",
+        "BrowserNotifyEndpointRecovered",
+        "BrowserNotifyAgentOffline",
+        "BrowserNotifyAgentOnline",
+        "BrowserNotificationsPermissionState",
+        "TelegramNotificationsEnabled",
+        "SmtpNotificationsEnabled",
+        "UpdatedAtUtc",
+        "UpdatedByUserId"
+    ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
@@ -142,6 +156,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"SecuritySettings table is missing required columns: {string.Join(", ", missingSecuritySettingsColumns)}.");
+            return status;
+        }
+        var missingNotificationSettingsColumns = await GetMissingNotificationSettingsColumnsAsync(connection, cancellationToken);
+        if (missingNotificationSettingsColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"NotificationSettings table is missing required columns: {string.Join(", ", missingNotificationSettingsColumns)}.");
             return status;
         }
 
@@ -291,6 +312,10 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             CREATE TABLE IF NOT EXISTS `NotificationSettings` (
                 `NotificationSettingsId` int NOT NULL,
                 `BrowserNotificationsEnabled` tinyint(1) NOT NULL,
+                `BrowserNotifyEndpointDown` tinyint(1) NOT NULL DEFAULT 1,
+                `BrowserNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1,
+                `BrowserNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1,
+                `BrowserNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1,
                 `BrowserNotificationsPermissionState` varchar(16) NULL,
                 `TelegramNotificationsEnabled` tinyint(1) NOT NULL,
                 `SmtpNotificationsEnabled` tinyint(1) NOT NULL,
@@ -422,6 +447,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
         await EnsureEndpointColumnsAsync(dbContext, cancellationToken);
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
+        await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }
@@ -488,6 +514,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
 
         return RequiredSecuritySettingsColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
+    }
+
+    private static async Task<string[]> GetMissingNotificationSettingsColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'NotificationSettings';
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return RequiredNotificationSettingsColumns
             .Where(column => !existingColumns.Contains(column))
             .ToArray();
     }
@@ -668,6 +716,55 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
     }
 
+    private static async Task EnsureNotificationSettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "BrowserNotifyEndpointDown", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `BrowserNotifyEndpointDown` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "BrowserNotifyEndpointRecovered", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `BrowserNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "BrowserNotifyAgentOffline", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `BrowserNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "BrowserNotifyAgentOnline", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `BrowserNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+    }
+
     private static async Task EnsureEndpointColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         await using var connection = dbContext.Database.GetDbConnection();
@@ -746,6 +843,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
               AND table_name = 'SecuritySettings'
+              AND column_name = @columnName;
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+    private static async Task<bool> HasNotificationSettingsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'NotificationSettings'
               AND column_name = @columnName;
             """;
         var parameter = command.CreateParameter();
