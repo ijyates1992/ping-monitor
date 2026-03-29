@@ -32,7 +32,8 @@ internal sealed class EventLogQueryService : IEventLogQueryService
                 EndpointName = x.EndpointName,
                 AgentId = x.AgentId,
                 AgentName = x.AgentName,
-                AssignmentId = x.AssignmentId
+                AssignmentId = x.AssignmentId,
+                RowKind = x.RowKind
             })
             .ToArrayAsync(cancellationToken);
     }
@@ -144,7 +145,8 @@ internal sealed class EventLogQueryService : IEventLogQueryService
                 EndpointName = x.EndpointName,
                 AgentId = x.AgentId,
                 AgentName = x.AgentName,
-                AssignmentId = x.AssignmentId
+                AssignmentId = x.AssignmentId,
+                RowKind = x.RowKind
             })
             .ToArrayAsync(cancellationToken);
 
@@ -201,7 +203,16 @@ internal sealed class EventLogQueryService : IEventLogQueryService
                 AgentName = agent != null ? (agent.Name ?? agent.InstanceId) : null,
                 EndpointId = eventLog.EndpointId,
                 EndpointName = endpoint != null ? endpoint.Name : null,
-                AssignmentId = eventLog.AssignmentId
+                AssignmentId = eventLog.AssignmentId,
+                RowKind = eventLog.EventCategory == Models.EventCategory.Endpoint &&
+                          eventLog.EventType == Models.EventType.EndpointStateChanged &&
+                          EF.Functions.Like(eventLog.Message, "Endpoint \"%\" went down.%")
+                    ? RecentEventRowKind.EndpointDown
+                    : eventLog.EventCategory == Models.EventCategory.Endpoint &&
+                      eventLog.EventType == Models.EventType.EndpointStateChanged &&
+                      EF.Functions.Like(eventLog.Message, "Endpoint \"%\" recovered%")
+                        ? RecentEventRowKind.EndpointRecovery
+                        : RecentEventRowKind.Default
             };
     }
 
@@ -223,5 +234,6 @@ internal sealed class EventLogQueryService : IEventLogQueryService
         public string? EndpointId { get; init; }
         public string? EndpointName { get; init; }
         public string? AssignmentId { get; init; }
+        public RecentEventRowKind RowKind { get; init; }
     }
 }

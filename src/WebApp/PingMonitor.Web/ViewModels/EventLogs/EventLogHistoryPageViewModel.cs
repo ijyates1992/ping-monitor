@@ -35,6 +35,7 @@ public sealed class EventLogHistoryRowViewModel
     public string? AgentId { get; init; }
     public string? AgentName { get; init; }
     public string? AssignmentId { get; init; }
+    public RecentEventRowKind RowKind { get; init; } = RecentEventRowKind.Default;
 }
 
 public sealed class EventLogHistoryPaginationViewModel
@@ -59,4 +60,12 @@ public sealed class RecentEventViewModel
     public string? AgentId { get; init; }
     public string? AgentName { get; init; }
     public string? AssignmentId { get; init; }
+    public RecentEventRowKind RowKind { get; init; } = RecentEventRowKind.Default;
+}
+
+public enum RecentEventRowKind
+{
+    Default,
+    EndpointDown,
+    EndpointRecovery
 }

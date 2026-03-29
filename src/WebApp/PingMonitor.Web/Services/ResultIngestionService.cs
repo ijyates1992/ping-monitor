@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Contracts.Results;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Support;
 
 namespace PingMonitor.Web.Services;
@@ -10,15 +11,18 @@ internal sealed class ResultIngestionService : IResultIngestionService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly IStateEvaluationService _stateEvaluationService;
+    private readonly IEventLogService _eventLogService;
     private readonly ILogger<ResultIngestionService> _logger;
 
     public ResultIngestionService(
         PingMonitorDbContext dbContext,
         IStateEvaluationService stateEvaluationService,
+        IEventLogService eventLogService,
         ILogger<ResultIngestionService> logger)
     {
         _dbContext = dbContext;
         _stateEvaluationService = stateEvaluationService;
+        _eventLogService = eventLogService;
         _logger = logger;
     }
 
@@ -129,11 +133,25 @@ internal sealed class ResultIngestionService : IResultIngestionService
             _dbContext.CheckResults.AddRange(storedResults);
             _dbContext.ResultBatches.Add(batch);
 
+            var wasOnline = agent.Status == AgentHealthStatus.Online;
             agent.LastSeenUtc = receivedAtUtc;
             agent.Status = AgentHealthStatus.Online;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            if (!wasOnline)
+            {
+                await _eventLogService.WriteAsync(new EventLogWriteRequest
+                {
+                    OccurredAtUtc = receivedAtUtc,
+                    Category = EventCategory.Agent,
+                    EventType = EventType.AgentBecameOnline,
+                    Severity = EventSeverity.Info,
+                    AgentId = agent.AgentId,
+                    Message = $"Agent \"{agent.Name ?? agent.InstanceId}\" became online."
+                }, cancellationToken);
+            }
 
             var affectedAssignmentIds = storedResults
                 .Select(x => x.AssignmentId)

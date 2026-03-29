@@ -97,8 +97,9 @@ All events are stored in a single table.
 | Event Type                  | Description |
 |----------------------------|------------|
 | agent_authenticated        | Agent successfully authenticated |
-| agent_heartbeat_received   | Heartbeat received (rate-limited for signal) |
-| agent_online               | Agent transitioned to online state |
+| agent_became_online        | Agent transitioned to online state |
+| agent_became_stale         | Agent transitioned to stale (missed heartbeat threshold) |
+| agent_became_offline       | Agent transitioned to offline (extended heartbeat loss) |
 | agent_config_fetched       | Agent fetched configuration (reserved for optional use) |
 
 ---
@@ -114,6 +115,8 @@ Messages must be:
 ### Examples
 
 - `Endpoint "Google DNS" changed state from UP to DOWN`
+- `Endpoint "DNS Server 2" went down.`
+- `Endpoint "DNS Server 2" recovered after 00:09:38 downtime.`
 - `Endpoint "API Server" suppressed due to dependency failure`
 - `Agent "Warton-Node-1" became stale (no heartbeat for 60s)`
 - `Agent "Lab-VM-3" authenticated successfully`
@@ -142,6 +145,7 @@ This field must:
 To prevent noise and database bloat, the following are explicitly excluded:
 
 - Every successful endpoint check
+- Routine successful `agent_heartbeat_received` events
 - Every retry attempt
 - Raw latency/metrics streams
 - Debug-level internal application logs
