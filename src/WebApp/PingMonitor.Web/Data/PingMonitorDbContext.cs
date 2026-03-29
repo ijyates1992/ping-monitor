@@ -30,6 +30,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<EndpointState> EndpointStates => Set<EndpointState>();
     public DbSet<StateTransition> StateTransitions => Set<StateTransition>();
     public DbSet<EventLog> EventLogs => Set<EventLog>();
+    public DbSet<SecurityAuthLog> SecurityAuthLogs => Set<SecurityAuthLog>();
     public DbSet<AppSchemaInfo> AppSchemaInfos => Set<AppSchemaInfo>();
     public DbSet<ApplicationSettings> ApplicationSettings => Set<ApplicationSettings>();
 
@@ -217,6 +218,22 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         eventLog.HasIndex(x => new { x.EndpointId, x.OccurredAtUtc });
         eventLog.HasIndex(x => new { x.AgentId, x.OccurredAtUtc });
         eventLog.HasIndex(x => new { x.AssignmentId, x.OccurredAtUtc });
+
+        var securityAuthLog = modelBuilder.Entity<SecurityAuthLog>();
+        securityAuthLog.ToTable("SecurityAuthLogs");
+        securityAuthLog.HasKey(x => x.SecurityAuthLogId);
+        securityAuthLog.Property(x => x.SecurityAuthLogId).HasMaxLength(64);
+        securityAuthLog.Property(x => x.OccurredAtUtc).IsRequired();
+        securityAuthLog.Property(x => x.AuthType).HasConversion<string>().HasMaxLength(16).IsRequired();
+        securityAuthLog.Property(x => x.SubjectIdentifier).HasMaxLength(255).IsRequired();
+        securityAuthLog.Property(x => x.SourceIpAddress).HasMaxLength(64);
+        securityAuthLog.Property(x => x.FailureReason).HasMaxLength(128);
+        securityAuthLog.Property(x => x.UserId).HasMaxLength(255);
+        securityAuthLog.Property(x => x.AgentId).HasMaxLength(64);
+        securityAuthLog.Property(x => x.DetailsJson).HasMaxLength(4096);
+        securityAuthLog.HasIndex(x => x.OccurredAtUtc);
+        securityAuthLog.HasIndex(x => new { x.AuthType, x.OccurredAtUtc });
+        securityAuthLog.HasIndex(x => new { x.AuthType, x.Success, x.OccurredAtUtc });
 
         var appSettings = modelBuilder.Entity<ApplicationSettings>();
         appSettings.ToTable("ApplicationSettings");

@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Models.Identity;
+using PingMonitor.Web.Services.Security;
 
 namespace PingMonitor.Web.Controllers;
 
@@ -11,10 +12,17 @@ namespace PingMonitor.Web.Controllers;
 public sealed class AccountController : Controller
 {
     private readonly SignInManager<ApplicationUser> _signInManager;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ISecurityAuthLogService _securityAuthLogService;
 
-    public AccountController(SignInManager<ApplicationUser> signInManager)
+    public AccountController(
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager,
+        ISecurityAuthLogService securityAuthLogService)
     {
         _signInManager = signInManager;
+        _userManager = userManager;
+        _securityAuthLogService = securityAuthLogService;
     }
 
     [HttpGet("login")]
@@ -27,19 +35,72 @@ public sealed class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Login([FromForm] LoginViewModel model)
     {
+        var normalizedUserName = model.UserName?.Trim() ?? string.Empty;
+
         if (!ModelState.IsValid)
         {
             return View("Login", model);
         }
 
-        var result = await _signInManager.PasswordSignInAsync(model.UserName, model.Password, isPersistent: false, lockoutOnFailure: true);
+        var user = await _userManager.FindByNameAsync(normalizedUserName) ??
+                   await _userManager.FindByEmailAsync(normalizedUserName);
+
+        var signInIdentifier = user?.UserName ?? normalizedUserName;
+        var result = await _signInManager.PasswordSignInAsync(signInIdentifier, model.Password, isPersistent: false, lockoutOnFailure: true);
         if (!result.Succeeded)
         {
+            await _securityAuthLogService.LogUserAttemptAsync(
+                new UserAuthLogWriteRequest
+                {
+                    SubjectIdentifier = normalizedUserName,
+                    UserId = user?.Id,
+                    SourceIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    Success = false,
+                    FailureReason = BuildFailureReason(result, user)
+                },
+                HttpContext.RequestAborted);
+
             ModelState.AddModelError(string.Empty, "Invalid credentials.");
             return View("Login", model);
         }
 
+        await _securityAuthLogService.LogUserAttemptAsync(
+            new UserAuthLogWriteRequest
+            {
+                SubjectIdentifier = normalizedUserName,
+                UserId = user?.Id,
+                SourceIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Success = true,
+                FailureReason = null
+            },
+            HttpContext.RequestAborted);
+
         return LocalRedirect(string.IsNullOrWhiteSpace(model.ReturnUrl) ? "/status" : model.ReturnUrl);
+    }
+
+    private static string BuildFailureReason(Microsoft.AspNetCore.Identity.SignInResult result, ApplicationUser? user)
+    {
+        if (result.IsLockedOut)
+        {
+            return "account_locked";
+        }
+
+        if (result.IsNotAllowed)
+        {
+            return "login_not_allowed";
+        }
+
+        if (result.RequiresTwoFactor)
+        {
+            return "two_factor_required";
+        }
+
+        if (user is null)
+        {
+            return "unknown_user";
+        }
+
+        return "invalid_password";
     }
 
     [HttpPost("logout")]
