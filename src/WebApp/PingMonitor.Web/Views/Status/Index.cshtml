@@ -420,5 +420,99 @@
         </section>
     </div>
 </main>
+<script>
+(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+        return;
+    }
+
+    const pollIntervalMs = 8000;
+    const maxShownIds = 200;
+    const shownEventIds = [];
+    const shownEventLookup = new Set();
+    let lastEventId = null;
+    let isPolling = false;
+
+    function trackShownEvent(eventId) {
+        if (!eventId || shownEventLookup.has(eventId)) {
+            return;
+        }
+
+        shownEventLookup.add(eventId);
+        shownEventIds.push(eventId);
+
+        if (shownEventIds.length > maxShownIds) {
+            const removedEventId = shownEventIds.shift();
+            if (removedEventId) {
+                shownEventLookup.delete(removedEventId);
+            }
+        }
+    }
+
+    async function pollBrowserNotifications() {
+        if (isPolling) {
+            return;
+        }
+
+        if (Notification.permission !== 'granted') {
+            return;
+        }
+
+        isPolling = true;
+        try {
+            const feedUrl = lastEventId
+                ? `/api/notifications/browser-feed?lastEventId=${encodeURIComponent(lastEventId)}`
+                : '/api/notifications/browser-feed';
+            const response = await fetch(feedUrl, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const feed = await response.json();
+            if (!feed || feed.browserNotificationsEnabled !== true || !Array.isArray(feed.items)) {
+                return;
+            }
+
+            for (const item of feed.items) {
+                if (!item || typeof item.eventId !== 'string' || shownEventLookup.has(item.eventId)) {
+                    continue;
+                }
+
+                const notification = new Notification(item.title || 'Ping Monitor', {
+                    body: item.body || '',
+                    tag: item.eventId
+                });
+
+                if (item.url && typeof item.url === 'string') {
+                    notification.onclick = () => {
+                        window.focus();
+                        window.location.href = item.url;
+                    };
+                }
+
+                trackShownEvent(item.eventId);
+            }
+
+            if (typeof feed.lastEventId === 'string' && feed.lastEventId.length > 0) {
+                lastEventId = feed.lastEventId;
+            }
+        } catch {
+            // Intentionally quiet for phase 1 browser polling.
+        } finally {
+            isPolling = false;
+        }
+    }
+
+    pollBrowserNotifications();
+    window.setInterval(pollBrowserNotifications, pollIntervalMs);
+})();
+</script>
 </body>
 </html>
