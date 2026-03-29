@@ -60,7 +60,15 @@
 
     <section class="card">
         <h2>Currently locked-out user accounts</h2>
-        <p class="muted">User temporary lockout is enforced through ASP.NET Identity lockout timing.</p>
+        <p class="muted">User temporary lockout is enforced through ASP.NET Identity lockout timing. Unlock requires explicit typed confirmation.</p>
+        @if (Model.UnlockSaved)
+        {
+            <div class="saved" role="status">User unlocked successfully.</div>
+        }
+        @if (TempData["SecurityUserUnlockError"] is string unlockError && !string.IsNullOrWhiteSpace(unlockError))
+        {
+            <div class="errors" role="alert">@unlockError</div>
+        }
         <div class="table-wrap">
             <table>
                 <thead>
@@ -68,13 +76,14 @@
                     <th>User name</th>
                     <th>Email</th>
                     <th>Lockout ends (UTC)</th>
+                    <th>Action</th>
                 </tr>
                 </thead>
                 <tbody>
                 @if (!Model.LockedOutUsers.Any())
                 {
                     <tr>
-                        <td colspan="3" class="muted">No users are currently locked out.</td>
+                        <td colspan="4" class="muted">No users are currently locked out.</td>
                     </tr>
                 }
                 else
@@ -85,6 +94,9 @@
                             <td>@user.UserName</td>
                             <td>@(string.IsNullOrWhiteSpace(user.Email) ? "n/a" : user.Email)</td>
                             <td>@user.LockoutEndUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>
+                                <a class="button-secondary" href="/admin/security/users/@user.UserId/unlock?includeSuccessfulUsers=@Model.IncludeSuccessfulUserAttempts.ToString().ToLowerInvariant()&includeSuccessfulAgents=@Model.IncludeSuccessfulAgentAttempts.ToString().ToLowerInvariant()">Unlock user</a>
+                            </td>
                         </tr>
                     }
                 }
@@ -235,12 +247,7 @@
                             <td>@(block.ExpiresAtUtc.HasValue ? block.ExpiresAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") : "n/a")</td>
                             <td>@(string.IsNullOrWhiteSpace(block.Reason) ? "n/a" : block.Reason)</td>
                             <td>
-                                <form method="post" action="/admin/security/ip-blocks/@block.SecurityIpBlockId/remove">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="includeSuccessfulUsers" value="@Model.IncludeSuccessfulUserAttempts.ToString().ToLowerInvariant()" />
-                                    <input type="hidden" name="includeSuccessfulAgents" value="@Model.IncludeSuccessfulAgentAttempts.ToString().ToLowerInvariant()" />
-                                    <button type="submit">Remove</button>
-                                </form>
+                                <a class="button-secondary" href="/admin/security/ip-blocks/@block.SecurityIpBlockId/remove?includeSuccessfulUsers=@Model.IncludeSuccessfulUserAttempts.ToString().ToLowerInvariant()&includeSuccessfulAgents=@Model.IncludeSuccessfulAgentAttempts.ToString().ToLowerInvariant()">Remove block</a>
                             </td>
                         </tr>
                     }

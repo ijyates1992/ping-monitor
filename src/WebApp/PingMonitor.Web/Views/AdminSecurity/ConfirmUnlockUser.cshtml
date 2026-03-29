@@ -1,0 +1,38 @@
+@model PingMonitor.Web.ViewModels.Admin.ConfirmUnlockUserViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Confirm unlock user</title>
+</head>
+<body>
+<main style="max-width:700px;margin:1rem auto;padding:1rem;font-family:Arial,sans-serif;">
+    <h1>Confirm manual user unlock</h1>
+    <p>This action clears an active Identity lockout immediately and is audited.</p>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div style="border:1px solid #fda29b;background:#fee4e2;color:#b42318;padding:.75rem;border-radius:10px;margin-bottom:.75rem;">@Model.ErrorMessage</div>
+    }
+
+    <dl>
+        <dt>User name</dt><dd>@Model.UserName</dd>
+        <dt>Email</dt><dd>@(string.IsNullOrWhiteSpace(Model.Email) ? "n/a" : Model.Email)</dd>
+        <dt>Lockout ends (UTC)</dt><dd>@Model.LockoutEndUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</dd>
+    </dl>
+
+    <form method="post" action="/admin/security/users/@Model.UserId/unlock" style="display:grid;gap:.6rem;">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="IncludeSuccessfulUsers" value="@Model.IncludeSuccessfulUsers.ToString().ToLowerInvariant()" />
+        <input type="hidden" name="IncludeSuccessfulAgents" value="@Model.IncludeSuccessfulAgents.ToString().ToLowerInvariant()" />
+        <label asp-for="ConfirmationText">Type <strong>@Model.RequiredConfirmationText</strong> to confirm.</label>
+        <input asp-for="ConfirmationText" autocomplete="off" style="min-height:44px;padding:.5rem;" />
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+            <button type="submit" style="min-height:44px;padding:.6rem 1rem;">Confirm unlock user</button>
+            <a href="/admin/security?includeSuccessfulUsers=@Model.IncludeSuccessfulUsers.ToString().ToLowerInvariant()&includeSuccessfulAgents=@Model.IncludeSuccessfulAgents.ToString().ToLowerInvariant()" style="min-height:44px;display:inline-flex;align-items:center;">Cancel</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

@@ -17,20 +17,26 @@ namespace PingMonitor.Web.Controllers;
 public sealed class AdminSecurityController : Controller
 {
     private const int DefaultLogLimit = 100;
+    private const string UnblockConfirmationKeyword = "UNBLOCK";
+    private const string UnlockConfirmationKeyword = "UNLOCK";
+
     private readonly ISecurityAuthLogQueryService _securityAuthLogQueryService;
     private readonly ISecuritySettingsService _securitySettingsService;
     private readonly ISecurityIpBlockService _securityIpBlockService;
+    private readonly ISecurityOperatorActionService _securityOperatorActionService;
     private readonly UserManager<ApplicationUser> _userManager;
 
     public AdminSecurityController(
         ISecurityAuthLogQueryService securityAuthLogQueryService,
         ISecuritySettingsService securitySettingsService,
         ISecurityIpBlockService securityIpBlockService,
+        ISecurityOperatorActionService securityOperatorActionService,
         UserManager<ApplicationUser> userManager)
     {
         _securityAuthLogQueryService = securityAuthLogQueryService;
         _securitySettingsService = securitySettingsService;
         _securityIpBlockService = securityIpBlockService;
+        _securityOperatorActionService = securityOperatorActionService;
         _userManager = userManager;
     }
 
@@ -43,6 +49,7 @@ public sealed class AdminSecurityController : Controller
             settingsSaved: false,
             blockSaved: false,
             unblockSaved: false,
+            unlockSaved: false,
             settingsFormOverride: null,
             manualIpBlockFormOverride: null,
             cancellationToken: cancellationToken);
@@ -66,6 +73,7 @@ public sealed class AdminSecurityController : Controller
                 settingsSaved: false,
                 blockSaved: false,
                 unblockSaved: false,
+                unlockSaved: false,
                 settingsFormOverride: settingsForm,
                 manualIpBlockFormOverride: null,
                 cancellationToken);
@@ -113,6 +121,7 @@ public sealed class AdminSecurityController : Controller
                 settingsSaved: false,
                 blockSaved: false,
                 unblockSaved: false,
+                unlockSaved: false,
                 settingsFormOverride: null,
                 manualIpBlockFormOverride: manualIpBlockForm,
                 cancellationToken);
@@ -139,6 +148,7 @@ public sealed class AdminSecurityController : Controller
                 settingsSaved: false,
                 blockSaved: false,
                 unblockSaved: false,
+                unlockSaved: false,
                 settingsFormOverride: null,
                 manualIpBlockFormOverride: manualIpBlockForm,
                 cancellationToken);
@@ -148,15 +158,56 @@ public sealed class AdminSecurityController : Controller
         return RedirectToAction(nameof(Index), new { includeSuccessfulUsers, includeSuccessfulAgents, blockSaved = true });
     }
 
-    [HttpPost("ip-blocks/{securityIpBlockId}/remove")]
-    [ValidateAntiForgeryToken]
+    [HttpGet("ip-blocks/{securityIpBlockId}/remove")]
     public async Task<IActionResult> RemoveIpBlock(
         string securityIpBlockId,
-        [FromForm] bool includeSuccessfulUsers = false,
-        [FromForm] bool includeSuccessfulAgents = false,
+        [FromQuery] bool includeSuccessfulUsers = false,
+        [FromQuery] bool includeSuccessfulAgents = false,
         CancellationToken cancellationToken = default)
     {
-        var result = await _securityIpBlockService.RemoveAsync(new RemoveSecurityIpBlockRequest
+        var details = await _securityOperatorActionService.GetActiveIpBlockAsync(securityIpBlockId, cancellationToken);
+        if (details is null)
+        {
+            TempData["SecurityIpBlockRemoveError"] = "Blocked IP record is not active or no longer exists.";
+            return RedirectToAction(nameof(Index), new { includeSuccessfulUsers, includeSuccessfulAgents });
+        }
+
+        return View("ConfirmUnblockIp", new ConfirmUnblockIpViewModel
+        {
+            IncludeSuccessfulUsers = includeSuccessfulUsers,
+            IncludeSuccessfulAgents = includeSuccessfulAgents,
+            SecurityIpBlockId = details.SecurityIpBlockId,
+            AuthType = details.AuthType,
+            IpAddress = details.IpAddress,
+            BlockType = details.BlockType,
+            BlockedAtUtc = details.BlockedAtUtc,
+            ExpiresAtUtc = details.ExpiresAtUtc,
+            RequiredConfirmationText = UnblockConfirmationKeyword
+        });
+    }
+
+    [HttpPost("ip-blocks/{securityIpBlockId}/remove")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveIpBlockConfirmed(
+        string securityIpBlockId,
+        [FromForm] ConfirmUnblockIpViewModel model,
+        CancellationToken cancellationToken = default)
+    {
+        var details = await _securityOperatorActionService.GetActiveIpBlockAsync(securityIpBlockId, cancellationToken);
+        if (details is null)
+        {
+            TempData["SecurityIpBlockRemoveError"] = "Blocked IP record is not active or no longer exists.";
+            return RedirectToAction(nameof(Index), new { model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents });
+        }
+
+        var viewModel = BuildConfirmUnblockViewModel(details, model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents, model.ConfirmationText);
+        if (!string.Equals(model.ConfirmationText?.Trim(), UnblockConfirmationKeyword, StringComparison.Ordinal))
+        {
+            viewModel.ErrorMessage = $"Type {UnblockConfirmationKeyword} to confirm removing this active block.";
+            return View("ConfirmUnblockIp", viewModel);
+        }
+
+        var result = await _securityOperatorActionService.RemoveIpBlockAsync(new RemoveSecurityIpBlockRequest
         {
             SecurityIpBlockId = securityIpBlockId,
             RemovedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -165,10 +216,72 @@ public sealed class AdminSecurityController : Controller
         if (!result.Succeeded)
         {
             TempData["SecurityIpBlockRemoveError"] = result.Error ?? "Unable to remove blocked IP.";
+            return RedirectToAction(nameof(Index), new { model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents });
+        }
+
+        return RedirectToAction(nameof(Index), new { model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents, unblockSaved = true });
+    }
+
+    [HttpGet("users/{userId}/unlock")]
+    public async Task<IActionResult> UnlockUser(
+        string userId,
+        [FromQuery] bool includeSuccessfulUsers = false,
+        [FromQuery] bool includeSuccessfulAgents = false,
+        CancellationToken cancellationToken = default)
+    {
+        var details = await _securityOperatorActionService.GetLockedOutUserAsync(userId, cancellationToken);
+        if (details is null)
+        {
+            TempData["SecurityUserUnlockError"] = "User is not currently locked out or no longer exists.";
             return RedirectToAction(nameof(Index), new { includeSuccessfulUsers, includeSuccessfulAgents });
         }
 
-        return RedirectToAction(nameof(Index), new { includeSuccessfulUsers, includeSuccessfulAgents, unblockSaved = true });
+        return View("ConfirmUnlockUser", new ConfirmUnlockUserViewModel
+        {
+            IncludeSuccessfulUsers = includeSuccessfulUsers,
+            IncludeSuccessfulAgents = includeSuccessfulAgents,
+            UserId = details.UserId,
+            UserName = details.UserName,
+            Email = details.Email,
+            LockoutEndUtc = details.LockoutEndUtc,
+            RequiredConfirmationText = UnlockConfirmationKeyword
+        });
+    }
+
+    [HttpPost("users/{userId}/unlock")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UnlockUserConfirmed(
+        string userId,
+        [FromForm] ConfirmUnlockUserViewModel model,
+        CancellationToken cancellationToken = default)
+    {
+        var details = await _securityOperatorActionService.GetLockedOutUserAsync(userId, cancellationToken);
+        if (details is null)
+        {
+            TempData["SecurityUserUnlockError"] = "User is not currently locked out or no longer exists.";
+            return RedirectToAction(nameof(Index), new { model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents });
+        }
+
+        var viewModel = BuildConfirmUnlockViewModel(details, model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents, model.ConfirmationText);
+        if (!string.Equals(model.ConfirmationText?.Trim(), UnlockConfirmationKeyword, StringComparison.Ordinal))
+        {
+            viewModel.ErrorMessage = $"Type {UnlockConfirmationKeyword} to confirm unlocking this user.";
+            return View("ConfirmUnlockUser", viewModel);
+        }
+
+        var result = await _securityOperatorActionService.UnlockUserAsync(new UnlockSecurityUserRequest
+        {
+            UserId = userId,
+            OperatorUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+        }, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            TempData["SecurityUserUnlockError"] = result.Error ?? "Unable to unlock user.";
+            return RedirectToAction(nameof(Index), new { model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents });
+        }
+
+        return RedirectToAction(nameof(Index), new { model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents, unlockSaved = true });
     }
 
     private async Task<AdminSecurityPageViewModel> BuildViewModelAsync(
@@ -177,6 +290,7 @@ public sealed class AdminSecurityController : Controller
         bool settingsSaved,
         bool blockSaved,
         bool unblockSaved,
+        bool unlockSaved,
         SecuritySettingsForm? settingsFormOverride,
         ManualIpBlockForm? manualIpBlockFormOverride,
         CancellationToken cancellationToken)
@@ -227,6 +341,7 @@ public sealed class AdminSecurityController : Controller
             SettingsSaved = settingsSaved || string.Equals(Request.Query["settingsSaved"], "true", StringComparison.OrdinalIgnoreCase),
             BlockSaved = blockSaved || string.Equals(Request.Query["blockSaved"], "true", StringComparison.OrdinalIgnoreCase),
             UnblockSaved = unblockSaved || string.Equals(Request.Query["unblockSaved"], "true", StringComparison.OrdinalIgnoreCase),
+            UnlockSaved = unlockSaved || string.Equals(Request.Query["unlockSaved"], "true", StringComparison.OrdinalIgnoreCase),
             SettingsForm = settingsFormOverride ?? new SecuritySettingsForm
             {
                 AgentFailedAttemptsBeforeTemporaryIpBlock = settings.AgentFailedAttemptsBeforeTemporaryIpBlock,
@@ -240,6 +355,38 @@ public sealed class AdminSecurityController : Controller
                 UpdatedAtUtc = settings.UpdatedAtUtc
             },
             ManualIpBlockForm = manualIpBlockFormOverride ?? new ManualIpBlockForm()
+        };
+    }
+
+    private static ConfirmUnblockIpViewModel BuildConfirmUnblockViewModel(ActiveSecurityIpBlockDetails details, bool includeSuccessfulUsers, bool includeSuccessfulAgents, string? confirmationText = null)
+    {
+        return new ConfirmUnblockIpViewModel
+        {
+            IncludeSuccessfulUsers = includeSuccessfulUsers,
+            IncludeSuccessfulAgents = includeSuccessfulAgents,
+            SecurityIpBlockId = details.SecurityIpBlockId,
+            AuthType = details.AuthType,
+            IpAddress = details.IpAddress,
+            BlockType = details.BlockType,
+            BlockedAtUtc = details.BlockedAtUtc,
+            ExpiresAtUtc = details.ExpiresAtUtc,
+            ConfirmationText = confirmationText,
+            RequiredConfirmationText = UnblockConfirmationKeyword
+        };
+    }
+
+    private static ConfirmUnlockUserViewModel BuildConfirmUnlockViewModel(LockedOutUserDetails details, bool includeSuccessfulUsers, bool includeSuccessfulAgents, string? confirmationText = null)
+    {
+        return new ConfirmUnlockUserViewModel
+        {
+            IncludeSuccessfulUsers = includeSuccessfulUsers,
+            IncludeSuccessfulAgents = includeSuccessfulAgents,
+            UserId = details.UserId,
+            UserName = details.UserName,
+            Email = details.Email,
+            LockoutEndUtc = details.LockoutEndUtc,
+            ConfirmationText = confirmationText,
+            RequiredConfirmationText = UnlockConfirmationKeyword
         };
     }
 }

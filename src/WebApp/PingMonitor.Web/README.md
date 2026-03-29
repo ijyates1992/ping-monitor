@@ -87,7 +87,9 @@ In normal startup mode, `GET /admin/security` provides:
 
 - persisted agent auth and user auth threshold/duration settings
 - active blocked IP list for `User` and `Agent` auth types
-- manual block and manual remove operations for blocked IP entries
+- manual block and manual remove operations for active blocked IP entries
+- manual unlock operation for currently locked-out users
+- explicit typed confirmations for unblock/unlock actions (`UNBLOCK` / `UNLOCK`)
 - read-only recent authentication-attempt logs
 
-In this phase, settings and blocked-IP management are persisted and operator-facing. Automatic enforcement of IP block thresholds and user lockout policy remains a follow-up phase.
+Automatic enforcement of IP block thresholds and user lockout policy is active. Manual unblock/unlock actions are audited through security event logs.
