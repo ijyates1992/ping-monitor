@@ -1,0 +1,220 @@
+<script>
+(function () {
+    var storageKey = 'pingmonitor.themeMode';
+    var cookieKey = 'pm_theme_mode';
+
+    function readCookie(name) {
+        var nameWithEquals = name + '=';
+        var cookies = document.cookie ? document.cookie.split(';') : [];
+        for (var i = 0; i < cookies.length; i++) {
+            var cookie = cookies[i].trim();
+            if (cookie.indexOf(nameWithEquals) === 0) {
+                return decodeURIComponent(cookie.substring(nameWithEquals.length));
+            }
+        }
+
+        return null;
+    }
+
+    function getMode() {
+        var value = null;
+
+        try {
+            value = window.localStorage.getItem(storageKey);
+        } catch (error) {
+            value = null;
+        }
+
+        if (!value) {
+            value = readCookie(cookieKey);
+        }
+
+        if (value !== 'on' && value !== 'off' && value !== 'system') {
+            return 'system';
+        }
+
+        return value;
+    }
+
+    function resolveTheme(mode) {
+        if (mode === 'on') {
+            return 'dark';
+        }
+
+        if (mode === 'off') {
+            return 'light';
+        }
+
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+    }
+
+    var mode = getMode();
+    var theme = resolveTheme(mode);
+
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-theme-mode', mode);
+})();
+</script>
+<style>
+    :root {
+        --surface-0: #f3f6f8;
+        --surface-1: #ffffff;
+        --surface-2: #f8fafc;
+        --surface-strong: #ffffff;
+        --text-strong: #102a43;
+        --text-muted: #52606d;
+        --border-default: #d9e2ec;
+        --accent-default: #0f62fe;
+        --accent-contrast: #ffffff;
+        --success-soft: #e8f6ec;
+        --error-soft: #fee4e2;
+        --warning-soft: #fff7e6;
+
+        --bg: var(--surface-0);
+        --card: var(--surface-1);
+        --text: var(--text-strong);
+        --muted: var(--text-muted);
+        --border: var(--border-default);
+        --accent: var(--accent-default);
+        --error-bg: var(--error-soft);
+        --warning-bg: var(--warning-soft);
+    }
+
+    html[data-theme='dark'] {
+        color-scheme: dark;
+        --surface-0: #0b1320;
+        --surface-1: #101a2b;
+        --surface-2: #162235;
+        --surface-strong: #1b2a42;
+        --text-strong: #e5edf5;
+        --text-muted: #a2b4c8;
+        --border-default: #2a3a52;
+        --accent-default: #63a4ff;
+        --accent-contrast: #081422;
+        --success-soft: #0f2b1c;
+        --error-soft: #3a1516;
+        --warning-soft: #3a2c12;
+
+        --bg: var(--surface-0);
+        --card: var(--surface-1);
+        --text: var(--text-strong);
+        --muted: var(--text-muted);
+        --border: var(--border-default);
+        --accent: var(--accent-default);
+        --error-bg: var(--error-soft);
+        --warning-bg: var(--warning-soft);
+    }
+
+    html[data-theme='light'] {
+        color-scheme: light;
+    }
+
+    body {
+        background: var(--bg);
+        color: var(--text);
+    }
+
+    a {
+        color: var(--accent);
+    }
+
+    input,
+    select,
+    textarea {
+        background: var(--surface-1);
+        color: var(--text);
+        border-color: var(--border);
+    }
+
+    button {
+        background: var(--accent);
+        color: var(--accent-contrast);
+    }
+
+    table {
+        border-collapse: collapse;
+    }
+
+    th,
+    td {
+        border: 1px solid var(--border);
+        padding: .45rem;
+        color: var(--text);
+    }
+
+    th {
+        background: var(--surface-2);
+    }
+
+    html[data-theme='dark'] body,
+    html[data-theme='dark'] .card,
+    html[data-theme='dark'] .status-row,
+    html[data-theme='dark'] .button-secondary,
+    html[data-theme='dark'] input,
+    html[data-theme='dark'] select,
+    html[data-theme='dark'] textarea,
+    html[data-theme='dark'] table,
+    html[data-theme='dark'] th,
+    html[data-theme='dark'] td,
+    html[data-theme='dark'] details,
+    html[data-theme='dark'] pre,
+    html[data-theme='dark'] code {
+        border-color: var(--border) !important;
+    }
+
+    html[data-theme='dark'] .card,
+    html[data-theme='dark'] .status-row,
+    html[data-theme='dark'] .button-secondary,
+    html[data-theme='dark'] .banner,
+    html[data-theme='dark'] .saved,
+    html[data-theme='dark'] .errors,
+    html[data-theme='dark'] .event-row,
+    html[data-theme='dark'] .summary-item {
+        background: var(--surface-1) !important;
+        color: var(--text) !important;
+    }
+
+    html[data-theme='dark'] .event-row-down,
+    html[data-theme='dark'] .state-down {
+        background: #3a1516 !important;
+    }
+
+    html[data-theme='dark'] .event-row-recovery,
+    html[data-theme='dark'] .state-up {
+        background: #123221 !important;
+    }
+
+    html[data-theme='dark'] .state-suppressed {
+        background: #352313 !important;
+    }
+
+    html[data-theme='dark'] .state-unknown {
+        background: #1d283a !important;
+    }
+
+    html[data-theme='dark'] .state-degraded {
+        background: #33260f !important;
+    }
+
+    html[data-theme='dark'] .status-row.status-up {
+        background: #112b1d !important;
+    }
+
+    html[data-theme='dark'] .status-row.status-down {
+        background: #3a1516 !important;
+    }
+
+    html[data-theme='dark'] .status-row.status-degraded {
+        background: #33260f !important;
+    }
+
+    html[data-theme='dark'] .status-row.status-unknown {
+        background: #1d283a !important;
+    }
+
+    html[data-theme='dark'] .status-row.status-suppressed {
+        background: #1b2434 !important;
+    }
+</style>

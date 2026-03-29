@@ -1,0 +1,158 @@
+<div class="theme-selector" aria-label="Theme selector">
+    <label for="theme-mode-select">Theme</label>
+    <select id="theme-mode-select" name="theme-mode">
+        <option value="on">On</option>
+        <option value="off">Off</option>
+        <option value="system">System</option>
+    </select>
+    <span id="theme-mode-effective" class="theme-selector-muted"></span>
+</div>
+<style>
+    .theme-selector {
+        position: fixed;
+        top: .75rem;
+        right: .75rem;
+        z-index: 1000;
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        flex-wrap: wrap;
+        padding: .5rem .65rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--card);
+        color: var(--text);
+        box-shadow: 0 1px 3px rgba(16, 24, 40, .2);
+        font-family: Arial, sans-serif;
+        font-size: .9rem;
+    }
+
+    .theme-selector label { font-weight: 600; margin: 0; }
+
+    .theme-selector select {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--card);
+        color: var(--text);
+        min-height: 34px;
+        padding: .25rem .4rem;
+        font-size: .9rem;
+        width: auto;
+    }
+
+    .theme-selector-muted {
+        color: var(--muted);
+        font-size: .8rem;
+        white-space: nowrap;
+    }
+</style>
+<script>
+(function () {
+    var storageKey = 'pingmonitor.themeMode';
+    var cookieKey = 'pm_theme_mode';
+    var select = document.getElementById('theme-mode-select');
+    var effective = document.getElementById('theme-mode-effective');
+
+    if (!select) {
+        return;
+    }
+
+    function isValid(mode) {
+        return mode === 'on' || mode === 'off' || mode === 'system';
+    }
+
+    function readCookie(name) {
+        var nameWithEquals = name + '=';
+        var cookies = document.cookie ? document.cookie.split(';') : [];
+        for (var i = 0; i < cookies.length; i++) {
+            var cookie = cookies[i].trim();
+            if (cookie.indexOf(nameWithEquals) === 0) {
+                return decodeURIComponent(cookie.substring(nameWithEquals.length));
+            }
+        }
+
+        return null;
+    }
+
+    function writeCookie(mode) {
+        document.cookie = cookieKey + '=' + encodeURIComponent(mode) + '; path=/; max-age=31536000; samesite=lax';
+    }
+
+    function getSavedMode() {
+        var value = null;
+
+        try {
+            value = window.localStorage.getItem(storageKey);
+        } catch (error) {
+            value = null;
+        }
+
+        if (!value) {
+            value = readCookie(cookieKey);
+        }
+
+        return isValid(value) ? value : 'system';
+    }
+
+    function resolveTheme(mode) {
+        if (mode === 'on') {
+            return 'dark';
+        }
+
+        if (mode === 'off') {
+            return 'light';
+        }
+
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+    }
+
+    function applyMode(mode) {
+        var effectiveTheme = resolveTheme(mode);
+        document.documentElement.setAttribute('data-theme-mode', mode);
+        document.documentElement.setAttribute('data-theme', effectiveTheme);
+
+        if (mode === 'system') {
+            effective.textContent = 'Using ' + effectiveTheme;
+        } else {
+            effective.textContent = '';
+        }
+    }
+
+    function persistMode(mode) {
+        try {
+            window.localStorage.setItem(storageKey, mode);
+        } catch (error) {
+            // Ignore storage exceptions and rely on cookie fallback.
+        }
+
+        writeCookie(mode);
+    }
+
+    var initialMode = getSavedMode();
+    select.value = initialMode;
+    applyMode(initialMode);
+
+    select.addEventListener('change', function () {
+        var mode = isValid(select.value) ? select.value : 'system';
+        persistMode(mode);
+        applyMode(mode);
+    });
+
+    if (window.matchMedia) {
+        var media = window.matchMedia('(prefers-color-scheme: dark)');
+        var listener = function () {
+            if (select.value === 'system') {
+                applyMode('system');
+            }
+        };
+
+        if (typeof media.addEventListener === 'function') {
+            media.addEventListener('change', listener);
+        } else if (typeof media.addListener === 'function') {
+            media.addListener(listener);
+        }
+    }
+})();
+</script>
