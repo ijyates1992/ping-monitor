@@ -294,7 +294,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 PRIMARY KEY (`SecurityAuthLogId`),
                 KEY `IX_SecurityAuthLogs_OccurredAtUtc` (`OccurredAtUtc`),
                 KEY `IX_SecurityAuthLogs_AuthType_OccurredAtUtc` (`AuthType`, `OccurredAtUtc`),
-                KEY `IX_SecurityAuthLogs_AuthType_Success_OccurredAtUtc` (`AuthType`, `Success`, `OccurredAtUtc`)
+                KEY `IX_SecurityAuthLogs_AuthType_Success_OccurredAtUtc` (`AuthType`, `Success`, `OccurredAtUtc`),
+                KEY `IX_SecurityAuthLogs_AuthType_SourceIpAddress_OccurredAtUtc` (`AuthType`, `SourceIpAddress`, `OccurredAtUtc`)
             );
             """;
 

@@ -95,7 +95,7 @@
                             <td>@(string.IsNullOrWhiteSpace(user.Email) ? "n/a" : user.Email)</td>
                             <td>@user.LockoutEndUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
                             <td>
-                                <a class="button-secondary" href="/admin/security/users/@user.UserId/unlock?includeSuccessfulUsers=@Model.IncludeSuccessfulUserAttempts.ToString().ToLowerInvariant()&includeSuccessfulAgents=@Model.IncludeSuccessfulAgentAttempts.ToString().ToLowerInvariant()">Unlock user</a>
+                                <a class="button-secondary" href="/admin/security/users/@user.UserId/unlock?includeSuccessfulUsers=@Model.LogFilterForm.IncludeSuccessfulUsers.ToString().ToLowerInvariant()&includeSuccessfulAgents=@Model.LogFilterForm.IncludeSuccessfulAgents.ToString().ToLowerInvariant()">Unlock user</a>
                             </td>
                         </tr>
                     }
@@ -113,8 +113,11 @@
         }
         <form method="post" action="/admin/security/settings">
             @Html.AntiForgeryToken()
-            <input type="hidden" name="includeSuccessfulUsers" value="@Model.IncludeSuccessfulUserAttempts.ToString().ToLowerInvariant()" />
-            <input type="hidden" name="includeSuccessfulAgents" value="@Model.IncludeSuccessfulAgentAttempts.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="LogFilterForm.IncludeSuccessfulUsers" value="@Model.LogFilterForm.IncludeSuccessfulUsers.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="LogFilterForm.IncludeSuccessfulAgents" value="@Model.LogFilterForm.IncludeSuccessfulAgents.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="LogFilterForm.SearchText" value="@Model.LogFilterForm.SearchText" />
+            <input type="hidden" name="LogFilterForm.FromUtc" value="@Model.LogFilterForm.FromUtc" />
+            <input type="hidden" name="LogFilterForm.ToUtc" value="@Model.LogFilterForm.ToUtc" />
 
             <div class="grid-two">
                 <section>
@@ -189,8 +192,11 @@
 
         <form method="post" action="/admin/security/ip-blocks" class="grid-two" style="margin-bottom: 1rem;">
             @Html.AntiForgeryToken()
-            <input type="hidden" name="includeSuccessfulUsers" value="@Model.IncludeSuccessfulUserAttempts.ToString().ToLowerInvariant()" />
-            <input type="hidden" name="includeSuccessfulAgents" value="@Model.IncludeSuccessfulAgentAttempts.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="LogFilterForm.IncludeSuccessfulUsers" value="@Model.LogFilterForm.IncludeSuccessfulUsers.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="LogFilterForm.IncludeSuccessfulAgents" value="@Model.LogFilterForm.IncludeSuccessfulAgents.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="LogFilterForm.SearchText" value="@Model.LogFilterForm.SearchText" />
+            <input type="hidden" name="LogFilterForm.FromUtc" value="@Model.LogFilterForm.FromUtc" />
+            <input type="hidden" name="LogFilterForm.ToUtc" value="@Model.LogFilterForm.ToUtc" />
             <div class="field">
                 <label asp-for="ManualIpBlockForm.AuthType"></label>
                 <select asp-for="ManualIpBlockForm.AuthType">
@@ -247,7 +253,7 @@
                             <td>@(block.ExpiresAtUtc.HasValue ? block.ExpiresAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") : "n/a")</td>
                             <td>@(string.IsNullOrWhiteSpace(block.Reason) ? "n/a" : block.Reason)</td>
                             <td>
-                                <a class="button-secondary" href="/admin/security/ip-blocks/@block.SecurityIpBlockId/remove?includeSuccessfulUsers=@Model.IncludeSuccessfulUserAttempts.ToString().ToLowerInvariant()&includeSuccessfulAgents=@Model.IncludeSuccessfulAgentAttempts.ToString().ToLowerInvariant()">Remove block</a>
+                                <a class="button-secondary" href="/admin/security/ip-blocks/@block.SecurityIpBlockId/remove?LogFilterForm.IncludeSuccessfulUsers=@Model.LogFilterForm.IncludeSuccessfulUsers.ToString().ToLowerInvariant()&LogFilterForm.IncludeSuccessfulAgents=@Model.LogFilterForm.IncludeSuccessfulAgents.ToString().ToLowerInvariant()&LogFilterForm.SearchText=@Model.LogFilterForm.SearchText&LogFilterForm.FromUtc=@Model.LogFilterForm.FromUtc&LogFilterForm.ToUtc=@Model.LogFilterForm.ToUtc">Remove block</a>
                             </td>
                         </tr>
                     }
@@ -258,19 +264,48 @@
     </section>
 
     <section class="card">
-        <h2>User authentication attempts</h2>
-        <form method="get" action="/admin/security" class="button-row" style="margin-bottom: .8rem;">
-            <label>
-                <input type="checkbox" name="includeSuccessfulUsers" value="true" @(Model.IncludeSuccessfulUserAttempts ? "checked" : null) />
-                Show successful user attempts
-            </label>
-            <input type="hidden" name="includeSuccessfulAgents" value="@Model.IncludeSuccessfulAgentAttempts.ToString().ToLowerInvariant()" />
-            <button type="submit">Apply user filter</button>
+        <h2>Authentication log filters</h2>
+        <p class="muted">All log filters use UTC values and apply to both user and agent authentication panels.</p>
+        <form method="get" action="/admin/security" class="grid-two" style="margin-bottom: .8rem;">
+            <div class="field">
+                <label asp-for="LogFilterForm.FromUtc"></label>
+                <input asp-for="LogFilterForm.FromUtc" type="datetime-local" />
+                <div class="field-error"><span asp-validation-for="LogFilterForm.FromUtc"></span></div>
+            </div>
+            <div class="field">
+                <label asp-for="LogFilterForm.ToUtc"></label>
+                <input asp-for="LogFilterForm.ToUtc" type="datetime-local" />
+                <div class="field-error"><span asp-validation-for="LogFilterForm.ToUtc"></span></div>
+            </div>
+            <div class="field" style="grid-column: 1 / -1;">
+                <label asp-for="LogFilterForm.SearchText"></label>
+                <input asp-for="LogFilterForm.SearchText" maxlength="128" placeholder="Search subject, source IP, failure reason, user id, agent id" />
+                <div class="field-error"><span asp-validation-for="LogFilterForm.SearchText"></span></div>
+            </div>
+            <div class="field">
+                <label>
+                    <input asp-for="LogFilterForm.IncludeSuccessfulUsers" type="checkbox" />
+                    Show successful attempts (users)
+                </label>
+            </div>
+            <div class="field">
+                <label>
+                    <input asp-for="LogFilterForm.IncludeSuccessfulAgents" type="checkbox" />
+                    Show successful attempts (agents)
+                </label>
+            </div>
+            <div class="button-row" style="grid-column: 1 / -1;">
+                <button type="submit">Apply log filters</button>
+            </div>
         </form>
+    </section>
+
+    <section class="card">
+        <h2>User authentication attempts</h2>
         <div class="log-box" role="region" aria-label="User authentication attempts">
             @if (!Model.UserAttempts.Any())
             {
-                <div class="empty">No user authentication attempts match the current filter.</div>
+                <div class="empty">No matching authentication attempts found.</div>
             }
             else
             {
@@ -295,18 +330,10 @@
 
     <section class="card">
         <h2>Agent authentication attempts</h2>
-        <form method="get" action="/admin/security" class="button-row" style="margin-bottom: .8rem;">
-            <input type="hidden" name="includeSuccessfulUsers" value="@Model.IncludeSuccessfulUserAttempts.ToString().ToLowerInvariant()" />
-            <label>
-                <input type="checkbox" name="includeSuccessfulAgents" value="true" @(Model.IncludeSuccessfulAgentAttempts ? "checked" : null) />
-                Show successful agent attempts
-            </label>
-            <button type="submit">Apply agent filter</button>
-        </form>
         <div class="log-box" role="region" aria-label="Agent authentication attempts">
             @if (!Model.AgentAttempts.Any())
             {
-                <div class="empty">No agent authentication attempts match the current filter.</div>
+                <div class="empty">No matching authentication attempts found.</div>
             }
             else
             {

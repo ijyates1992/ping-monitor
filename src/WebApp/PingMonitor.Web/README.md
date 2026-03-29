@@ -81,7 +81,7 @@ Per-agent actions include:
 
 Credential rotation replaces the stored API key hash and returns a ZIP with a new `.env` file. The new package must be redeployed to the agent host for continued connectivity.
 
-## Security settings page (phase 1)
+## Security settings page
 
 In normal startup mode, `GET /admin/security` provides:
 
@@ -90,6 +90,8 @@ In normal startup mode, `GET /admin/security` provides:
 - manual block and manual remove operations for active blocked IP entries
 - manual unlock operation for currently locked-out users
 - explicit typed confirmations for unblock/unlock actions (`UNBLOCK` / `UNLOCK`)
-- read-only recent authentication-attempt logs
+- read-only recent authentication-attempt logs with server-side UTC date range, search text, and success visibility filters for both user and agent panels
+
+Authentication log defaults stay failure-focused: successful attempts remain hidden unless the operator explicitly enables "Show successful attempts" controls.
 
 Automatic enforcement of IP block thresholds and user lockout policy is active. Manual unblock/unlock actions are audited through security event logs.

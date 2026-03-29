@@ -12,6 +12,7 @@ It covers:
 - manual unlock of currently locked-out users from the admin security page
 - automatic enforcement of temporary/permanent IP blocking
 - automatic enforcement of temporary user account lockout
+- operator filtering of user/agent authentication attempt logs by UTC range, search text, and success visibility (successful attempts hidden by default)
 
 ## Authentication settings
 

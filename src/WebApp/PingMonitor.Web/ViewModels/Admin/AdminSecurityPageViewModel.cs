@@ -6,8 +6,7 @@ namespace PingMonitor.Web.ViewModels.Admin;
 
 public sealed class AdminSecurityPageViewModel
 {
-    public bool IncludeSuccessfulUserAttempts { get; init; }
-    public bool IncludeSuccessfulAgentAttempts { get; init; }
+    public SecurityAuthLogFilterForm LogFilterForm { get; init; } = new();
     public IReadOnlyList<SecurityAuthLogListItem> UserAttempts { get; init; } = [];
     public IReadOnlyList<SecurityAuthLogListItem> AgentAttempts { get; init; } = [];
     public IReadOnlyList<SecurityIpBlockListItem> ActiveIpBlocks { get; init; } = [];
@@ -18,6 +17,26 @@ public sealed class AdminSecurityPageViewModel
     public bool BlockSaved { get; init; }
     public bool UnblockSaved { get; init; }
     public bool UnlockSaved { get; init; }
+}
+
+
+public sealed class SecurityAuthLogFilterForm
+{
+    [Display(Name = "From date/time (UTC)")]
+    public string? FromUtc { get; set; }
+
+    [Display(Name = "To date/time (UTC)")]
+    public string? ToUtc { get; set; }
+
+    [StringLength(128, ErrorMessage = "Search text must be 128 characters or fewer.")]
+    [Display(Name = "Search text")]
+    public string? SearchText { get; set; }
+
+    [Display(Name = "Show successful user attempts")]
+    public bool IncludeSuccessfulUsers { get; set; }
+
+    [Display(Name = "Show successful agent attempts")]
+    public bool IncludeSuccessfulAgents { get; set; }
 }
 
 public sealed class LockedOutUserListItem

@@ -236,6 +236,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         securityAuthLog.HasIndex(x => x.OccurredAtUtc);
         securityAuthLog.HasIndex(x => new { x.AuthType, x.OccurredAtUtc });
         securityAuthLog.HasIndex(x => new { x.AuthType, x.Success, x.OccurredAtUtc });
+        securityAuthLog.HasIndex(x => new { x.AuthType, x.SourceIpAddress, x.OccurredAtUtc });
 
         var appSettings = modelBuilder.Entity<ApplicationSettings>();
         appSettings.ToTable("ApplicationSettings");
