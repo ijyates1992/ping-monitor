@@ -2,6 +2,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    @await Html.PartialAsync("Shared/_ThemeHead")
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Create group</title>
@@ -22,6 +23,7 @@
     </style>
 </head>
 <body>
+@await Html.PartialAsync("Shared/_ThemeSelector")
 <main>
     <form method="post" asp-controller="Groups" asp-action="New" class="stack">
         @Html.AntiForgeryToken()
