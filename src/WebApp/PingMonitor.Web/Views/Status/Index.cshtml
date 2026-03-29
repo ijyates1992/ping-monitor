@@ -34,23 +34,23 @@
         {
             if (isEndpointCategory)
             {
-                return $"/endpoints/{recentEvent.EndpointId}";
+                return $"/endpoints/{recentEvent.EndpointId}/history";
             }
 
             if (isAgentCategory)
             {
-                return $"/agents/{recentEvent.AgentId}";
+                return $"/agents/{recentEvent.AgentId}/history";
             }
 
-            return $"/endpoints/{recentEvent.EndpointId}";
+            return $"/endpoints/{recentEvent.EndpointId}/history";
         }
 
         if (hasEndpoint)
         {
-            return $"/endpoints/{recentEvent.EndpointId}";
+            return $"/endpoints/{recentEvent.EndpointId}/history";
         }
 
-        return $"/agents/{recentEvent.AgentId}";
+        return $"/agents/{recentEvent.AgentId}/history";
     }
     static string StateClass(EndpointStateKind state) => state switch
     {
