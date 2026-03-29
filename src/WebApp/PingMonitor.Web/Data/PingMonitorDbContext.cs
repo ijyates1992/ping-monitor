@@ -33,6 +33,8 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<SecurityAuthLog> SecurityAuthLogs => Set<SecurityAuthLog>();
     public DbSet<AppSchemaInfo> AppSchemaInfos => Set<AppSchemaInfo>();
     public DbSet<ApplicationSettings> ApplicationSettings => Set<ApplicationSettings>();
+    public DbSet<SecuritySettings> SecuritySettings => Set<SecuritySettings>();
+    public DbSet<SecurityIpBlock> SecurityIpBlocks => Set<SecurityIpBlock>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -246,5 +248,34 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         appSettings.Property(x => x.DefaultFailureThreshold).IsRequired();
         appSettings.Property(x => x.DefaultRecoveryThreshold).IsRequired();
         appSettings.Property(x => x.UpdatedAtUtc).IsRequired();
+
+        var securitySettings = modelBuilder.Entity<SecuritySettings>();
+        securitySettings.ToTable("SecuritySettings");
+        securitySettings.HasKey(x => x.SecuritySettingsId);
+        securitySettings.Property(x => x.SecuritySettingsId).ValueGeneratedNever();
+        securitySettings.Property(x => x.AgentFailedAttemptsBeforeTemporaryIpBlock).IsRequired();
+        securitySettings.Property(x => x.AgentTemporaryIpBlockDurationMinutes).IsRequired();
+        securitySettings.Property(x => x.AgentFailedAttemptsBeforePermanentIpBlock).IsRequired();
+        securitySettings.Property(x => x.UserFailedAttemptsBeforeTemporaryIpBlock).IsRequired();
+        securitySettings.Property(x => x.UserTemporaryIpBlockDurationMinutes).IsRequired();
+        securitySettings.Property(x => x.UserFailedAttemptsBeforePermanentIpBlock).IsRequired();
+        securitySettings.Property(x => x.UserFailedAttemptsBeforeTemporaryAccountLockout).IsRequired();
+        securitySettings.Property(x => x.UserTemporaryAccountLockoutDurationMinutes).IsRequired();
+        securitySettings.Property(x => x.UpdatedAtUtc).IsRequired();
+
+        var securityIpBlock = modelBuilder.Entity<SecurityIpBlock>();
+        securityIpBlock.ToTable("SecurityIpBlocks");
+        securityIpBlock.HasKey(x => x.SecurityIpBlockId);
+        securityIpBlock.Property(x => x.SecurityIpBlockId).HasMaxLength(64);
+        securityIpBlock.Property(x => x.AuthType).HasConversion<string>().HasMaxLength(16).IsRequired();
+        securityIpBlock.Property(x => x.IpAddress).HasMaxLength(64).IsRequired();
+        securityIpBlock.Property(x => x.BlockType).HasConversion<string>().HasMaxLength(16).IsRequired();
+        securityIpBlock.Property(x => x.BlockedAtUtc).IsRequired();
+        securityIpBlock.Property(x => x.Reason).HasMaxLength(512);
+        securityIpBlock.Property(x => x.CreatedByUserId).HasMaxLength(255);
+        securityIpBlock.Property(x => x.RemovedByUserId).HasMaxLength(255);
+        securityIpBlock.HasIndex(x => new { x.AuthType, x.IpAddress, x.RemovedAtUtc });
+        securityIpBlock.HasIndex(x => x.BlockedAtUtc);
+
     }
 }

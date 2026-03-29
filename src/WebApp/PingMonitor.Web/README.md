@@ -80,3 +80,14 @@ Per-agent actions include:
 - `POST /agents/{id}/rotate-package` to rotate the agent API credential and download a fresh package
 
 Credential rotation replaces the stored API key hash and returns a ZIP with a new `.env` file. The new package must be redeployed to the agent host for continued connectivity.
+
+## Security settings page (phase 1)
+
+In normal startup mode, `GET /admin/security` provides:
+
+- persisted agent auth and user auth threshold/duration settings
+- active blocked IP list for `User` and `Agent` auth types
+- manual block and manual remove operations for blocked IP entries
+- read-only recent authentication-attempt logs
+
+In this phase, settings and blocked-IP management are persisted and operator-facing. Automatic enforcement of IP block thresholds and user lockout policy remains a follow-up phase.

@@ -30,7 +30,9 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "StateTransitions",
         "EventLogs",
         "SecurityAuthLogs",
-        "ApplicationSettings"
+        "ApplicationSettings",
+        "SecuritySettings",
+        "SecurityIpBlocks"
     ];
     private static readonly string[] RequiredEndpointDependencyColumns =
     [
@@ -223,6 +225,41 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 PRIMARY KEY (`ApplicationSettingsId`)
             );
             """;
+
+        const string createSecuritySettingsSql = """
+            CREATE TABLE IF NOT EXISTS `SecuritySettings` (
+                `SecuritySettingsId` int NOT NULL,
+                `AgentFailedAttemptsBeforeTemporaryIpBlock` int NOT NULL,
+                `AgentTemporaryIpBlockDurationMinutes` int NOT NULL,
+                `AgentFailedAttemptsBeforePermanentIpBlock` int NOT NULL,
+                `UserFailedAttemptsBeforeTemporaryIpBlock` int NOT NULL,
+                `UserTemporaryIpBlockDurationMinutes` int NOT NULL,
+                `UserFailedAttemptsBeforePermanentIpBlock` int NOT NULL,
+                `UserFailedAttemptsBeforeTemporaryAccountLockout` int NOT NULL,
+                `UserTemporaryAccountLockoutDurationMinutes` int NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`SecuritySettingsId`)
+            );
+            """;
+
+        const string createSecurityIpBlocksSql = """
+            CREATE TABLE IF NOT EXISTS `SecurityIpBlocks` (
+                `SecurityIpBlockId` varchar(64) NOT NULL,
+                `AuthType` varchar(16) NOT NULL,
+                `IpAddress` varchar(64) NOT NULL,
+                `BlockType` varchar(16) NOT NULL,
+                `BlockedAtUtc` datetime(6) NOT NULL,
+                `ExpiresAtUtc` datetime(6) NULL,
+                `Reason` varchar(512) NULL,
+                `CreatedByUserId` varchar(255) NULL,
+                `RemovedAtUtc` datetime(6) NULL,
+                `RemovedByUserId` varchar(255) NULL,
+                PRIMARY KEY (`SecurityIpBlockId`),
+                KEY `IX_SecurityIpBlocks_AuthType_IpAddress_RemovedAtUtc` (`AuthType`, `IpAddress`, `RemovedAtUtc`),
+                KEY `IX_SecurityIpBlocks_BlockedAtUtc` (`BlockedAtUtc`)
+            );
+            """;
+
         const string createEventLogsSql = """
             CREATE TABLE IF NOT EXISTS `EventLogs` (
                 `EventLogId` varchar(64) NOT NULL,
@@ -332,6 +369,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createEventLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityAuthLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createSecuritySettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createSecurityIpBlocksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAgentHeartbeatHistorySql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createGroupsSql, cancellationToken);

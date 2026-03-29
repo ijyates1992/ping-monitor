@@ -10,7 +10,7 @@ This phase covers:
 - agent authentication attempts
 - a read-only admin page for reviewing recent attempts
 
-This phase does **not** add active controls (lockouts, blocking, rate limiting, firewall actions).
+This phase does **not** add automatic active controls (automatic lockouts, automatic blocking, rate limiting, firewall actions). Manual block management and security setting persistence are covered in `docs/security-settings.md`.
 
 ---
 
