@@ -15,6 +15,9 @@ public sealed class SecuritySettings
     public int UserFailedAttemptsBeforePermanentIpBlock { get; set; } = 20;
     public int UserFailedAttemptsBeforeTemporaryAccountLockout { get; set; } = 5;
     public int UserTemporaryAccountLockoutDurationMinutes { get; set; } = 15;
+    public bool SecurityLogRetentionEnabled { get; set; } = false;
+    public int SecurityLogRetentionDays { get; set; } = 90;
+    public bool SecurityLogAutoPruneEnabled { get; set; } = false;
 
     public DateTimeOffset UpdatedAtUtc { get; set; }
 }

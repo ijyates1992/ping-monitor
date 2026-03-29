@@ -166,6 +166,23 @@
                         <input asp-for="SettingsForm.UserTemporaryAccountLockoutDurationMinutes" type="number" min="1" />
                         <div class="field-error"><span asp-validation-for="SettingsForm.UserTemporaryAccountLockoutDurationMinutes"></span></div>
                     </div>
+                    <div class="field">
+                        <label>
+                            <input asp-for="SettingsForm.SecurityLogRetentionEnabled" type="checkbox" />
+                            Enable security auth log retention
+                        </label>
+                    </div>
+                    <div class="field">
+                        <label asp-for="SettingsForm.SecurityLogRetentionDays"></label>
+                        <input asp-for="SettingsForm.SecurityLogRetentionDays" type="number" min="1" />
+                        <div class="field-error"><span asp-validation-for="SettingsForm.SecurityLogRetentionDays"></span></div>
+                    </div>
+                    <div class="field">
+                        <label>
+                            <input asp-for="SettingsForm.SecurityLogAutoPruneEnabled" type="checkbox" />
+                            Enable automatic security auth log prune (not yet implemented)
+                        </label>
+                    </div>
                 </section>
             </div>
             <p class="muted">Last updated: @Model.SettingsForm.UpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
@@ -261,6 +278,50 @@
                 </tbody>
             </table>
         </div>
+    </section>
+
+    <section class="card">
+        <h2>Security auth log retention and prune</h2>
+        <p class="muted">Pruning is destructive and irreversible. This action only prunes authentication-attempt logs older than the cutoff. It does not modify active IP blocks or active user lockouts.</p>
+        @if (Model.PruneSaved && TempData["SecurityLogPruneSummary"] is string pruneSummary && !string.IsNullOrWhiteSpace(pruneSummary))
+        {
+            <div class="saved" role="status">@pruneSummary</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.PruneError))
+        {
+            <div class="errors" role="alert">@Model.PruneError</div>
+        }
+        @if (Model.RetentionPreview is not null)
+        {
+            <div class="grid-two">
+                <div><strong>Retention enabled:</strong> @(Model.RetentionPreview.RetentionEnabled ? "Yes" : "No")</div>
+                <div><strong>Retention days:</strong> @Model.RetentionPreview.RetentionDays</div>
+                <div><strong>Auto-prune enabled:</strong> @(Model.RetentionPreview.AutoPruneEnabled ? "Yes" : "No")</div>
+                <div><strong>Eligible auth log rows:</strong> @Model.RetentionPreview.EligibleAuthLogRows</div>
+                <div style="grid-column: 1 / -1;"><strong>Current cutoff (UTC):</strong> @(Model.RetentionPreview.CutoffUtc.HasValue ? Model.RetentionPreview.CutoffUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") : "n/a")</div>
+                @if (Model.RetentionPreview.PruneSkipped && !string.IsNullOrWhiteSpace(Model.RetentionPreview.SkipReason))
+                {
+                    <div class="muted" style="grid-column: 1 / -1;">Prune preview skipped: @Model.RetentionPreview.SkipReason</div>
+                }
+            </div>
+        }
+
+        <form method="post" action="/admin/security/logs/prune" style="margin-top: 1rem;">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="LogFilterForm.IncludeSuccessfulUsers" value="@Model.LogFilterForm.IncludeSuccessfulUsers.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="LogFilterForm.IncludeSuccessfulAgents" value="@Model.LogFilterForm.IncludeSuccessfulAgents.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="LogFilterForm.SearchText" value="@Model.LogFilterForm.SearchText" />
+            <input type="hidden" name="LogFilterForm.FromUtc" value="@Model.LogFilterForm.FromUtc" />
+            <input type="hidden" name="LogFilterForm.ToUtc" value="@Model.LogFilterForm.ToUtc" />
+            <div class="field">
+                <label asp-for="PruneForm.ConfirmationText"></label>
+                <input asp-for="PruneForm.ConfirmationText" placeholder="PRUNE" />
+                <div class="field-error"><span asp-validation-for="PruneForm.ConfirmationText"></span></div>
+            </div>
+            <div class="button-row">
+                <button type="submit">Prune old security auth logs</button>
+            </div>
+        </form>
     </section>
 
     <section class="card">

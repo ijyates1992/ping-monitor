@@ -262,6 +262,9 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         securitySettings.Property(x => x.UserFailedAttemptsBeforePermanentIpBlock).IsRequired();
         securitySettings.Property(x => x.UserFailedAttemptsBeforeTemporaryAccountLockout).IsRequired();
         securitySettings.Property(x => x.UserTemporaryAccountLockoutDurationMinutes).IsRequired();
+        securitySettings.Property(x => x.SecurityLogRetentionEnabled).IsRequired();
+        securitySettings.Property(x => x.SecurityLogRetentionDays).IsRequired();
+        securitySettings.Property(x => x.SecurityLogAutoPruneEnabled).IsRequired();
         securitySettings.Property(x => x.UpdatedAtUtc).IsRequired();
 
         var securityIpBlock = modelBuilder.Entity<SecurityIpBlock>();

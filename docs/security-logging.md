@@ -12,6 +12,8 @@ It covers:
 
 Automatic active controls for temporary/permanent IP blocking and temporary user lockout are enforced as defined in `docs/security-settings.md`.
 
+Security auth log retention/pruning is configurable and applies **only** to authentication-attempt logs (`SecurityAuthLog` rows).
+
 ---
 
 ## What is logged
@@ -111,3 +113,38 @@ At minimum, event records include:
 - success/failure outcome and failure reason for rejected requests
 
 These records are written without secrets and are intended for operator audit trails and incident review.
+
+## Security auth log retention and pruning
+
+Security auth log retention is controlled by security settings:
+
+- `SecurityLogRetentionEnabled`
+- `SecurityLogRetentionDays`
+- `SecurityLogAutoPruneEnabled` (setting exists; automatic execution may be disabled/deferred by implementation)
+
+### Prune eligibility (in scope)
+
+Rows are eligible for prune when all are true:
+
+- row is from `SecurityAuthLogs`
+- row type is an authentication attempt log (user or agent auth)
+- `OccurredAtUtc` is older than `UTC now - SecurityLogRetentionDays`
+- retention is enabled and settings are valid
+
+### Not eligible (out of scope)
+
+Pruning must **not** touch:
+
+- active blocked IP records (`SecurityIpBlocks`)
+- user lockout enforcement state (ASP.NET Identity lockout fields)
+- event logs
+- monitoring results/state/history
+- backup files
+
+### Manual prune behavior
+
+- Admin security page shows the current prune cutoff and eligible row count preview.
+- Manual prune requires explicit typed confirmation: `PRUNE`.
+- Confirmation is enforced server-side.
+- Manual prune is destructive and irreversible.
+- Manual prune writes auditable security events (request + completion) including cutoff and deleted row count.

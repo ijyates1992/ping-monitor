@@ -19,4 +19,7 @@ public static class EventType
     public const string SecurityManualIpBlockRemoveRejected = "security_manual_ip_block_remove_rejected";
     public const string SecurityManualUserUnlockApplied = "security_manual_user_unlock_applied";
     public const string SecurityManualUserUnlockRejected = "security_manual_user_unlock_rejected";
+    public const string SecurityAuthLogManualPruneRequested = "security_auth_log_manual_prune_requested";
+    public const string SecurityAuthLogManualPruneCompleted = "security_auth_log_manual_prune_completed";
+    public const string SecurityAuthLogAutomaticPruneCompleted = "security_auth_log_automatic_prune_completed";
 }
