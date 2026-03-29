@@ -1,10 +1,11 @@
-<div class="theme-selector" aria-label="Theme selector">
-    <label for="theme-mode-select">Theme</label>
-    <select id="theme-mode-select" name="theme-mode">
+<div class="theme-selector" aria-label="Dark mode selector">
+    <label for="theme-mode-select" title="On = always dark; Off = always light; System = follows your OS/browser preference.">Dark mode</label>
+    <select id="theme-mode-select" name="theme-mode" aria-describedby="theme-mode-help" title="On = always dark; Off = always light; System = follows your OS/browser preference.">
         <option value="on">On</option>
         <option value="off">Off</option>
         <option value="system">System</option>
     </select>
+    <span id="theme-mode-help" class="theme-selector-muted">On = always dark · Off = always light · System = follows OS/browser</span>
     <span id="theme-mode-effective" class="theme-selector-muted"></span>
 </div>
 <style>
