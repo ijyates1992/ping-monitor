@@ -32,6 +32,14 @@ Security settings are stored as explicit fields in minutes/counts.
 - `UserFailedAttemptsBeforeTemporaryAccountLockout`
 - `UserTemporaryAccountLockoutDurationMinutes`
 
+### Security auth log retention settings
+
+- `SecurityLogRetentionEnabled`
+- `SecurityLogRetentionDays`
+- `SecurityLogAutoPruneEnabled`
+
+Retention settings apply only to authentication-attempt logs (`SecurityAuthLogs`) and must not change active enforcement state.
+
 ## IP block vs account lockout
 
 - **IP block** applies to requests coming from a source IP address for a selected auth type (`User` or `Agent`).
@@ -97,3 +105,12 @@ User login request order:
 Manual and automatic block/unblock actions are persisted as security IP block records and event log entries.
 Manual user unlock actions (success and rejected attempts) are event logged with operator identity context when available.
 Settings updates are also event logged.
+
+## Security auth log prune controls
+
+- Security page exposes current retention values, computed cutoff, and current eligible auth-log count.
+- Manual prune requires typed confirmation (`PRUNE`) before deletion.
+- Manual prune deletes only `SecurityAuthLogs` rows older than cutoff.
+- Pruning is destructive and irreversible.
+- Pruning does not remove active IP block rows and does not unlock users.
+- If `SecurityLogAutoPruneEnabled` is present but not wired to automatic execution in the current release, operators must use manual prune.

@@ -117,6 +117,7 @@ builder.Services.AddScoped<IEventLogQueryService, EventLogQueryService>();
 builder.Services.AddScoped<ISecurityAuthLogService, SecurityAuthLogService>();
 builder.Services.AddScoped<ISecurityAuthLogQueryService, SecurityAuthLogQueryService>();
 builder.Services.AddScoped<ISecuritySettingsService, SecuritySettingsService>();
+builder.Services.AddScoped<ISecurityLogRetentionService, SecurityLogRetentionService>();
 builder.Services.AddScoped<ISecurityIpBlockService, SecurityIpBlockService>();
 builder.Services.AddScoped<ISecurityOperatorActionService, SecurityOperatorActionService>();
 builder.Services.AddScoped<ISecurityEnforcementService, SecurityEnforcementService>();

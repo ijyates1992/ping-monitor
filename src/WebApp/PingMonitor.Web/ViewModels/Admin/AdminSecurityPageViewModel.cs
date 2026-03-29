@@ -17,6 +17,10 @@ public sealed class AdminSecurityPageViewModel
     public bool BlockSaved { get; init; }
     public bool UnblockSaved { get; init; }
     public bool UnlockSaved { get; init; }
+    public bool PruneSaved { get; init; }
+    public string? PruneError { get; init; }
+    public SecurityLogRetentionPreview? RetentionPreview { get; init; }
+    public SecurityLogPruneForm PruneForm { get; init; } = new();
 }
 
 
@@ -47,7 +51,7 @@ public sealed class LockedOutUserListItem
     public DateTimeOffset LockoutEndUtc { get; init; }
 }
 
-public sealed class SecuritySettingsForm
+public sealed class SecuritySettingsForm : IValidatableObject
 {
     [Range(1, int.MaxValue, ErrorMessage = "Agent failed attempts before temporary IP block must be at least 1.")]
     [Display(Name = "Failed attempts before temporary IP block")]
@@ -81,7 +85,26 @@ public sealed class SecuritySettingsForm
     [Display(Name = "Temporary account lockout duration (minutes)")]
     public int UserTemporaryAccountLockoutDurationMinutes { get; set; }
 
+    [Display(Name = "Enable security auth log retention")]
+    public bool SecurityLogRetentionEnabled { get; set; }
+
+    [Display(Name = "Security auth log retention days")]
+    public int SecurityLogRetentionDays { get; set; }
+
+    [Display(Name = "Enable automatic security auth log prune")]
+    public bool SecurityLogAutoPruneEnabled { get; set; }
+
     public DateTimeOffset UpdatedAtUtc { get; set; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (SecurityLogRetentionEnabled && SecurityLogRetentionDays < 1)
+        {
+            yield return new ValidationResult(
+                "Security auth log retention days must be greater than 0 when retention is enabled.",
+                [nameof(SecurityLogRetentionDays)]);
+        }
+    }
 }
 
 public sealed class ManualIpBlockForm
@@ -97,4 +120,10 @@ public sealed class ManualIpBlockForm
     [StringLength(512, ErrorMessage = "Reason must be 512 characters or fewer.")]
     [Display(Name = "Reason")]
     public string? Reason { get; set; }
+}
+
+public sealed class SecurityLogPruneForm
+{
+    [Display(Name = "Type PRUNE to confirm")]
+    public string? ConfirmationText { get; set; }
 }

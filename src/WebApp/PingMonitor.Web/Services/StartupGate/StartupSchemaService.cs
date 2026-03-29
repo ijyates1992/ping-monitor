@@ -50,6 +50,22 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "Tags",
         "IconKey"
     ];
+    private static readonly string[] RequiredSecuritySettingsColumns =
+    [
+        "SecuritySettingsId",
+        "AgentFailedAttemptsBeforeTemporaryIpBlock",
+        "AgentTemporaryIpBlockDurationMinutes",
+        "AgentFailedAttemptsBeforePermanentIpBlock",
+        "UserFailedAttemptsBeforeTemporaryIpBlock",
+        "UserTemporaryIpBlockDurationMinutes",
+        "UserFailedAttemptsBeforePermanentIpBlock",
+        "UserFailedAttemptsBeforeTemporaryAccountLockout",
+        "UserTemporaryAccountLockoutDurationMinutes",
+        "SecurityLogRetentionEnabled",
+        "SecurityLogRetentionDays",
+        "SecurityLogAutoPruneEnabled",
+        "UpdatedAtUtc"
+    ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
@@ -118,6 +134,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"Endpoints table is missing required columns: {string.Join(", ", missingEndpointColumns)}.");
+            return status;
+        }
+        var missingSecuritySettingsColumns = await GetMissingSecuritySettingsColumnsAsync(connection, cancellationToken);
+        if (missingSecuritySettingsColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"SecuritySettings table is missing required columns: {string.Join(", ", missingSecuritySettingsColumns)}.");
             return status;
         }
 
@@ -237,6 +260,9 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `UserFailedAttemptsBeforePermanentIpBlock` int NOT NULL,
                 `UserFailedAttemptsBeforeTemporaryAccountLockout` int NOT NULL,
                 `UserTemporaryAccountLockoutDurationMinutes` int NOT NULL,
+                `SecurityLogRetentionEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `SecurityLogRetentionDays` int NOT NULL DEFAULT 90,
+                `SecurityLogAutoPruneEnabled` tinyint(1) NOT NULL DEFAULT 0,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 PRIMARY KEY (`SecuritySettingsId`)
             );
@@ -380,6 +406,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createUserEndpointAccessesSql, cancellationToken);
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
         await EnsureEndpointColumnsAsync(dbContext, cancellationToken);
+        await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }
@@ -424,6 +451,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
 
         return RequiredEndpointColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
+    }
+
+    private static async Task<string[]> GetMissingSecuritySettingsColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'SecuritySettings';
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return RequiredSecuritySettingsColumns
             .Where(column => !existingColumns.Contains(column))
             .ToArray();
     }
@@ -565,6 +614,45 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
     }
 
+    private static async Task EnsureSecuritySettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await HasSecuritySettingsColumnAsync(connection, "SecurityLogRetentionEnabled", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `SecuritySettings`
+                ADD COLUMN `SecurityLogRetentionEnabled` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasSecuritySettingsColumnAsync(connection, "SecurityLogRetentionDays", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `SecuritySettings`
+                ADD COLUMN `SecurityLogRetentionDays` int NOT NULL DEFAULT 90;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasSecuritySettingsColumnAsync(connection, "SecurityLogAutoPruneEnabled", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `SecuritySettings`
+                ADD COLUMN `SecurityLogAutoPruneEnabled` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+    }
+
     private static async Task EnsureEndpointColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         await using var connection = dbContext.Database.GetDbConnection();
@@ -625,6 +713,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
               AND table_name = 'EndpointDependencies'
+              AND column_name = @columnName;
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+    private static async Task<bool> HasSecuritySettingsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'SecuritySettings'
               AND column_name = @columnName;
             """;
         var parameter = command.CreateParameter();

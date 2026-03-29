@@ -35,6 +35,9 @@ internal sealed class SecuritySettingsService : ISecuritySettingsService
         settings.UserFailedAttemptsBeforePermanentIpBlock = command.UserFailedAttemptsBeforePermanentIpBlock;
         settings.UserFailedAttemptsBeforeTemporaryAccountLockout = command.UserFailedAttemptsBeforeTemporaryAccountLockout;
         settings.UserTemporaryAccountLockoutDurationMinutes = command.UserTemporaryAccountLockoutDurationMinutes;
+        settings.SecurityLogRetentionEnabled = command.SecurityLogRetentionEnabled;
+        settings.SecurityLogRetentionDays = command.SecurityLogRetentionDays;
+        settings.SecurityLogAutoPruneEnabled = command.SecurityLogAutoPruneEnabled;
         settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -44,7 +47,7 @@ internal sealed class SecuritySettingsService : ISecuritySettingsService
             EventType = EventType.SecuritySettingsUpdated,
             Severity = EventSeverity.Info,
             Message = "Security settings were updated.",
-            DetailsJson = $"{{\"updatedAtUtc\":\"{settings.UpdatedAtUtc:O}\"}}"
+            DetailsJson = $"{{\"updatedAtUtc\":\"{settings.UpdatedAtUtc:O}\",\"securityLogRetentionEnabled\":{settings.SecurityLogRetentionEnabled.ToString().ToLowerInvariant()},\"securityLogRetentionDays\":{settings.SecurityLogRetentionDays},\"securityLogAutoPruneEnabled\":{settings.SecurityLogAutoPruneEnabled.ToString().ToLowerInvariant()}}}"
         }, cancellationToken);
 
         return ToDto(settings);
@@ -81,6 +84,10 @@ internal sealed class SecuritySettingsService : ISecuritySettingsService
         EnsurePositive(command.UserFailedAttemptsBeforePermanentIpBlock, nameof(command.UserFailedAttemptsBeforePermanentIpBlock));
         EnsurePositive(command.UserFailedAttemptsBeforeTemporaryAccountLockout, nameof(command.UserFailedAttemptsBeforeTemporaryAccountLockout));
         EnsurePositive(command.UserTemporaryAccountLockoutDurationMinutes, nameof(command.UserTemporaryAccountLockoutDurationMinutes));
+        if (command.SecurityLogRetentionEnabled)
+        {
+            EnsurePositive(command.SecurityLogRetentionDays, nameof(command.SecurityLogRetentionDays));
+        }
     }
 
     private static void EnsurePositive(int value, string name)
@@ -103,6 +110,9 @@ internal sealed class SecuritySettingsService : ISecuritySettingsService
             UserFailedAttemptsBeforePermanentIpBlock = settings.UserFailedAttemptsBeforePermanentIpBlock,
             UserFailedAttemptsBeforeTemporaryAccountLockout = settings.UserFailedAttemptsBeforeTemporaryAccountLockout,
             UserTemporaryAccountLockoutDurationMinutes = settings.UserTemporaryAccountLockoutDurationMinutes,
+            SecurityLogRetentionEnabled = settings.SecurityLogRetentionEnabled,
+            SecurityLogRetentionDays = settings.SecurityLogRetentionDays,
+            SecurityLogAutoPruneEnabled = settings.SecurityLogAutoPruneEnabled,
             UpdatedAtUtc = settings.UpdatedAtUtc
         };
     }

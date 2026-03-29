@@ -20,11 +20,13 @@ public sealed class AdminSecurityController : Controller
     private const int DefaultLogLimit = 100;
     private const string UnblockConfirmationKeyword = "UNBLOCK";
     private const string UnlockConfirmationKeyword = "UNLOCK";
+    private const string PruneConfirmationKeyword = SecurityLogRetentionService.ManualPruneConfirmationKeyword;
 
     private readonly ISecurityAuthLogQueryService _securityAuthLogQueryService;
     private readonly ISecuritySettingsService _securitySettingsService;
     private readonly ISecurityIpBlockService _securityIpBlockService;
     private readonly ISecurityOperatorActionService _securityOperatorActionService;
+    private readonly ISecurityLogRetentionService _securityLogRetentionService;
     private readonly UserManager<ApplicationUser> _userManager;
 
     public AdminSecurityController(
@@ -32,12 +34,14 @@ public sealed class AdminSecurityController : Controller
         ISecuritySettingsService securitySettingsService,
         ISecurityIpBlockService securityIpBlockService,
         ISecurityOperatorActionService securityOperatorActionService,
+        ISecurityLogRetentionService securityLogRetentionService,
         UserManager<ApplicationUser> userManager)
     {
         _securityAuthLogQueryService = securityAuthLogQueryService;
         _securitySettingsService = securitySettingsService;
         _securityIpBlockService = securityIpBlockService;
         _securityOperatorActionService = securityOperatorActionService;
+        _securityLogRetentionService = securityLogRetentionService;
         _userManager = userManager;
     }
 
@@ -76,8 +80,11 @@ public sealed class AdminSecurityController : Controller
             blockSaved: false,
             unblockSaved: false,
             unlockSaved: false,
+            pruneSaved: false,
+            pruneError: null,
             settingsFormOverride: null,
             manualIpBlockFormOverride: null,
+            pruneFormOverride: null,
             cancellationToken: cancellationToken);
 
         return View("Index", viewModel);
@@ -98,8 +105,11 @@ public sealed class AdminSecurityController : Controller
                 blockSaved: false,
                 unblockSaved: false,
                 unlockSaved: false,
+                pruneSaved: false,
+                pruneError: null,
                 settingsFormOverride: settingsForm,
                 manualIpBlockFormOverride: null,
+                pruneFormOverride: null,
                 cancellationToken);
             return View("Index", invalidViewModel);
         }
@@ -113,7 +123,10 @@ public sealed class AdminSecurityController : Controller
             UserTemporaryIpBlockDurationMinutes = settingsForm.UserTemporaryIpBlockDurationMinutes,
             UserFailedAttemptsBeforePermanentIpBlock = settingsForm.UserFailedAttemptsBeforePermanentIpBlock,
             UserFailedAttemptsBeforeTemporaryAccountLockout = settingsForm.UserFailedAttemptsBeforeTemporaryAccountLockout,
-            UserTemporaryAccountLockoutDurationMinutes = settingsForm.UserTemporaryAccountLockoutDurationMinutes
+            UserTemporaryAccountLockoutDurationMinutes = settingsForm.UserTemporaryAccountLockoutDurationMinutes,
+            SecurityLogRetentionEnabled = settingsForm.SecurityLogRetentionEnabled,
+            SecurityLogRetentionDays = settingsForm.SecurityLogRetentionDays,
+            SecurityLogAutoPruneEnabled = settingsForm.SecurityLogAutoPruneEnabled
         }, cancellationToken);
 
         return RedirectToAction(nameof(Index), BuildRouteValues(logFilterForm, settingsSaved: true));
@@ -144,8 +157,11 @@ public sealed class AdminSecurityController : Controller
                 blockSaved: false,
                 unblockSaved: false,
                 unlockSaved: false,
+                pruneSaved: false,
+                pruneError: null,
                 settingsFormOverride: null,
                 manualIpBlockFormOverride: manualIpBlockForm,
+                pruneFormOverride: null,
                 cancellationToken);
             return View("Index", invalidViewModel);
         }
@@ -170,8 +186,11 @@ public sealed class AdminSecurityController : Controller
                 blockSaved: false,
                 unblockSaved: false,
                 unlockSaved: false,
+                pruneSaved: false,
+                pruneError: null,
                 settingsFormOverride: null,
                 manualIpBlockFormOverride: manualIpBlockForm,
+                pruneFormOverride: null,
                 cancellationToken);
             return View("Index", invalidViewModel);
         }
@@ -315,14 +334,57 @@ public sealed class AdminSecurityController : Controller
         return RedirectToAction(nameof(Index), new { model.IncludeSuccessfulUsers, model.IncludeSuccessfulAgents, unlockSaved = true });
     }
 
+    [HttpPost("logs/prune")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PruneSecurityLogs(
+        [FromForm(Name = "PruneForm")] SecurityLogPruneForm pruneForm,
+        [FromForm(Name = "LogFilterForm")] SecurityAuthLogFilterForm logFilterForm,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _securityLogRetentionService.PruneAsync(new SecurityLogPruneRequest
+        {
+            ConfirmationText = pruneForm.ConfirmationText ?? string.Empty,
+            RequestedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier),
+            IsManual = true
+        }, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            if (!string.Equals(pruneForm.ConfirmationText?.Trim(), PruneConfirmationKeyword, StringComparison.Ordinal))
+            {
+                ModelState.AddModelError($"{nameof(SecurityLogPruneForm)}.{nameof(SecurityLogPruneForm.ConfirmationText)}", $"Type {PruneConfirmationKeyword} to confirm pruning security auth logs.");
+            }
+
+            var invalidViewModel = await BuildViewModelAsync(
+                logFilterForm,
+                settingsSaved: false,
+                blockSaved: false,
+                unblockSaved: false,
+                unlockSaved: false,
+                pruneSaved: false,
+                pruneError: result.Error ?? "Security auth log prune failed.",
+                settingsFormOverride: null,
+                manualIpBlockFormOverride: null,
+                pruneFormOverride: pruneForm,
+                cancellationToken: cancellationToken);
+            return View("Index", invalidViewModel);
+        }
+
+        TempData["SecurityLogPruneSummary"] = $"Manual prune completed. Deleted {result.RowsDeleted} security auth log records older than cutoff.";
+        return RedirectToAction(nameof(Index), BuildRouteValues(logFilterForm, pruneSaved: true));
+    }
+
     private async Task<AdminSecurityPageViewModel> BuildViewModelAsync(
         SecurityAuthLogFilterForm logFilterForm,
         bool settingsSaved,
         bool blockSaved,
         bool unblockSaved,
         bool unlockSaved,
+        bool pruneSaved,
+        string? pruneError,
         SecuritySettingsForm? settingsFormOverride,
         ManualIpBlockForm? manualIpBlockFormOverride,
+        SecurityLogPruneForm? pruneFormOverride,
         CancellationToken cancellationToken)
     {
         var fromUtc = ParseUtcValue(logFilterForm.FromUtc, nameof(SecurityAuthLogFilterForm.FromUtc));
@@ -358,6 +420,7 @@ public sealed class AdminSecurityController : Controller
             cancellationToken);
 
         var settings = await _securitySettingsService.GetCurrentAsync(cancellationToken);
+        var retentionPreview = await _securityLogRetentionService.GetPreviewAsync(cancellationToken);
         var activeBlocks = await _securityIpBlockService.ListActiveAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var lockedOutUsers = await _userManager.Users
@@ -385,6 +448,9 @@ public sealed class AdminSecurityController : Controller
             BlockSaved = blockSaved || string.Equals(Request.Query["blockSaved"], "true", StringComparison.OrdinalIgnoreCase),
             UnblockSaved = unblockSaved || string.Equals(Request.Query["unblockSaved"], "true", StringComparison.OrdinalIgnoreCase),
             UnlockSaved = unlockSaved || string.Equals(Request.Query["unlockSaved"], "true", StringComparison.OrdinalIgnoreCase),
+            PruneSaved = pruneSaved || string.Equals(Request.Query["pruneSaved"], "true", StringComparison.OrdinalIgnoreCase),
+            PruneError = pruneError,
+            RetentionPreview = retentionPreview,
             SettingsForm = settingsFormOverride ?? new SecuritySettingsForm
             {
                 AgentFailedAttemptsBeforeTemporaryIpBlock = settings.AgentFailedAttemptsBeforeTemporaryIpBlock,
@@ -395,9 +461,13 @@ public sealed class AdminSecurityController : Controller
                 UserFailedAttemptsBeforePermanentIpBlock = settings.UserFailedAttemptsBeforePermanentIpBlock,
                 UserFailedAttemptsBeforeTemporaryAccountLockout = settings.UserFailedAttemptsBeforeTemporaryAccountLockout,
                 UserTemporaryAccountLockoutDurationMinutes = settings.UserTemporaryAccountLockoutDurationMinutes,
+                SecurityLogRetentionEnabled = settings.SecurityLogRetentionEnabled,
+                SecurityLogRetentionDays = settings.SecurityLogRetentionDays,
+                SecurityLogAutoPruneEnabled = settings.SecurityLogAutoPruneEnabled,
                 UpdatedAtUtc = settings.UpdatedAtUtc
             },
-            ManualIpBlockForm = manualIpBlockFormOverride ?? new ManualIpBlockForm()
+            ManualIpBlockForm = manualIpBlockFormOverride ?? new ManualIpBlockForm(),
+            PruneForm = pruneFormOverride ?? new SecurityLogPruneForm()
         };
     }
 
@@ -427,7 +497,7 @@ public sealed class AdminSecurityController : Controller
         return null;
     }
 
-    private static object BuildRouteValues(SecurityAuthLogFilterForm logFilterForm, bool settingsSaved = false, bool blockSaved = false)
+    private static object BuildRouteValues(SecurityAuthLogFilterForm logFilterForm, bool settingsSaved = false, bool blockSaved = false, bool pruneSaved = false)
     {
         return new
         {
@@ -437,7 +507,8 @@ public sealed class AdminSecurityController : Controller
             fromUtc = logFilterForm.FromUtc,
             toUtc = logFilterForm.ToUtc,
             settingsSaved,
-            blockSaved
+            blockSaved,
+            pruneSaved
         };
     }
 
