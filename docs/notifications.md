@@ -46,6 +46,7 @@ The system will support notification settings.
 Initial settings scope:
 
 - browser notifications enabled/disabled
+- browser notifications enabled/disabled per supported event type
 - test notification action for operator verification
 
 Future settings scope:
@@ -71,6 +72,13 @@ Supported browser-deliverable event types in phase 1:
 - endpoint recovered
 - agent offline
 - agent online
+
+Phase 1 browser settings are explicit and require both:
+
+- global browser notifications enabled in app settings, and
+- the specific event type enabled in app settings.
+
+Browser permission remains separate and must still be granted by the operator in the browser.
 
 This phase does not include background push delivery when the app/browser is closed.
 

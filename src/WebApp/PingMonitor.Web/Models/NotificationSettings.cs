@@ -8,6 +8,10 @@ public sealed class NotificationSettings
 
     // Phase 1 uses explicit global settings to keep notification scope unambiguous.
     public bool BrowserNotificationsEnabled { get; set; }
+    public bool BrowserNotifyEndpointDown { get; set; }
+    public bool BrowserNotifyEndpointRecovered { get; set; }
+    public bool BrowserNotifyAgentOffline { get; set; }
+    public bool BrowserNotifyAgentOnline { get; set; }
 
     public string? BrowserNotificationsPermissionState { get; set; }
 

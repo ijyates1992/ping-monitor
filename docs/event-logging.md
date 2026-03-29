@@ -169,6 +169,15 @@ Only a small, explicit subset of meaningful events is eligible for browser notif
 
 Routine heartbeat and other noisy/non-actionable events are intentionally excluded from browser notification delivery.
 
+Browser notification delivery for these eligible event types is additionally gated by explicit app-level per-event-type settings:
+
+- endpoint down setting
+- endpoint recovered setting
+- agent offline setting
+- agent online setting
+
+Global browser notifications must also be enabled, and browser permission must be granted.
+
 ### Status Page
 
 - Displays **recent events**

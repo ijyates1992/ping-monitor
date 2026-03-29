@@ -66,10 +66,31 @@
             <section class="card stack">
                 <h2>Browser notifications (phase 1)</h2>
                 <p class="muted">Works while this app is open in your browser. Background push/service workers are not included in this phase.</p>
+                <p class="muted">These settings apply only while the app is open and browser permission is granted.</p>
 
                 <div class="switch-row">
                     <input asp-for="BrowserNotificationsEnabled" type="checkbox" />
                     <label asp-for="BrowserNotificationsEnabled"></label>
+                </div>
+
+                <div class="stack" style="margin-top:.5rem;">
+                    <p class="muted">Event types (used only when browser notifications are enabled):</p>
+                    <div class="switch-row">
+                        <input asp-for="BrowserNotifyEndpointDown" type="checkbox" />
+                        <label asp-for="BrowserNotifyEndpointDown"></label>
+                    </div>
+                    <div class="switch-row">
+                        <input asp-for="BrowserNotifyEndpointRecovered" type="checkbox" />
+                        <label asp-for="BrowserNotifyEndpointRecovered"></label>
+                    </div>
+                    <div class="switch-row">
+                        <input asp-for="BrowserNotifyAgentOffline" type="checkbox" />
+                        <label asp-for="BrowserNotifyAgentOffline"></label>
+                    </div>
+                    <div class="switch-row">
+                        <input asp-for="BrowserNotifyAgentOnline" type="checkbox" />
+                        <label asp-for="BrowserNotifyAgentOnline"></label>
+                    </div>
                 </div>
 
                 <div class="field-error"><span asp-validation-for="BrowserNotificationsPermissionState"></span></div>

@@ -43,7 +43,7 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
         var rows = await GetFeedRowsAsync(lastEventId, boundedMaxItems, cancellationToken);
 
         var items = rows
-            .Select(MapNotification)
+            .Select(row => MapNotification(row, settings))
             .Where(x => x is not null)
             .Cast<BrowserNotificationEventDto>()
             .ToArray();
@@ -119,18 +119,34 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
         });
     }
 
-    private static BrowserNotificationEventDto? MapNotification(EventRow row)
+    private static BrowserNotificationEventDto? MapNotification(EventRow row, NotificationSettings settings)
+    {
+        var mappedEvent = MapSupportedEventType(row);
+        if (mappedEvent is null)
+        {
+            return null;
+        }
+
+        if (!IsEventTypeEnabled(mappedEvent.Value.EventKind, settings))
+        {
+            return null;
+        }
+
+        return Build(row, mappedEvent.Value.Title);
+    }
+
+    private static SupportedBrowserEventType? MapSupportedEventType(EventRow row)
     {
         if (row.EventType == EventType.EndpointStateChanged)
         {
             if (row.Message.Contains("went down.", StringComparison.Ordinal))
             {
-                return Build(row, "Endpoint Down");
+                return new SupportedBrowserEventType(BrowserNotificationEventKind.EndpointDown, "Endpoint Down");
             }
 
             if (row.Message.Contains("recovered", StringComparison.Ordinal))
             {
-                return Build(row, "Endpoint Recovered");
+                return new SupportedBrowserEventType(BrowserNotificationEventKind.EndpointRecovered, "Endpoint Recovered");
             }
 
             return null;
@@ -138,15 +154,27 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
 
         if (row.EventType == EventType.AgentBecameOffline)
         {
-            return Build(row, "Agent Offline");
+            return new SupportedBrowserEventType(BrowserNotificationEventKind.AgentOffline, "Agent Offline");
         }
 
         if (row.EventType == EventType.AgentBecameOnline)
         {
-            return Build(row, "Agent Online");
+            return new SupportedBrowserEventType(BrowserNotificationEventKind.AgentOnline, "Agent Online");
         }
 
         return null;
+    }
+
+    private static bool IsEventTypeEnabled(BrowserNotificationEventKind eventKind, NotificationSettings settings)
+    {
+        return eventKind switch
+        {
+            BrowserNotificationEventKind.EndpointDown => settings.BrowserNotifyEndpointDown,
+            BrowserNotificationEventKind.EndpointRecovered => settings.BrowserNotifyEndpointRecovered,
+            BrowserNotificationEventKind.AgentOffline => settings.BrowserNotifyAgentOffline,
+            BrowserNotificationEventKind.AgentOnline => settings.BrowserNotifyAgentOnline,
+            _ => false
+        };
     }
 
     private static BrowserNotificationEventDto Build(EventRow row, string title)
@@ -190,4 +218,14 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
         public string? EndpointId { get; init; }
         public string? AgentId { get; init; }
     }
+
+    private enum BrowserNotificationEventKind
+    {
+        EndpointDown,
+        EndpointRecovered,
+        AgentOffline,
+        AgentOnline
+    }
+
+    private readonly record struct SupportedBrowserEventType(BrowserNotificationEventKind EventKind, string Title);
 }
