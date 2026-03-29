@@ -306,6 +306,7 @@
                                 <div class="meta-item"><span>Check type</span><div>@row.CheckType</div></div>
                                 <div class="meta-item"><span>Last check</span><div class="nowrap">@FormatDate(row.LastCheckUtc)</div></div>
                                 <div class="meta-item"><span>Last state change</span><div class="nowrap">@FormatDate(row.LastStateChangeUtc)</div></div>
+                                <div class="meta-item"><span>Current state duration</span><div>@row.CurrentStateDurationDisplay</div></div>
                                 <div class="meta-item"><span>Consecutive failures</span><div>@row.ConsecutiveFailureCount</div></div>
                                 <div class="meta-item"><span>Consecutive successes</span><div>@row.ConsecutiveSuccessCount</div></div>
                                 <div class="meta-item"><span>Endpoint uptime (24h)</span><div>@FormatPercent(row.UptimePercent)</div></div>
