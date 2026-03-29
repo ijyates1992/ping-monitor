@@ -89,6 +89,26 @@
         .stack { display: grid; gap: 1rem; }
         .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
         .summary-grid, .filter-grid, .row-meta { display: grid; gap: .75rem; }
+        .page-header {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+        .page-header-main {
+            flex: 1 1 320px;
+            min-width: 0;
+        }
+        .page-header-main h1 {
+            margin-top: 0;
+        }
+        .page-header-theme {
+            flex: 1 1 280px;
+            min-width: 0;
+            display: flex;
+            justify-content: flex-start;
+        }
         .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .summary-item { border: 1px solid var(--border); border-radius: 12px; padding: .85rem; }
         .summary-item strong { display: block; font-size: 1.4rem; margin-top: .25rem; }
@@ -156,6 +176,13 @@
         .event-row-recovery { background: #e8f6ec; }
         .nowrap { white-space: nowrap; }
         @@media (min-width: 720px) {
+            .page-header {
+                flex-wrap: nowrap;
+            }
+            .page-header-theme {
+                flex: 0 1 auto;
+                justify-content: flex-end;
+            }
             .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
             .filter-grid { grid-template-columns: 1fr 220px 220px 220px; align-items: end; }
             .status-details > summary { padding: .95rem 1rem; }
@@ -168,12 +195,18 @@
     </style>
 </head>
 <body>
-@await Html.PartialAsync("_ThemeSelector")
 <main>
     <div class="stack">
         <section class="card">
-            <h1>Operational endpoint status</h1>
-            <p class="muted">Current assignment-scoped status derived by the server state engine. Missing state rows are shown as <strong>UNKNOWN</strong> until trusted server-side state exists.</p>
+            <div class="page-header">
+                <div class="page-header-main">
+                    <h1>Operational endpoint status</h1>
+                    <p class="muted">Current assignment-scoped status derived by the server state engine. Missing state rows are shown as <strong>UNKNOWN</strong> until trusted server-side state exists.</p>
+                </div>
+                <div class="page-header-theme">
+                    @await Html.PartialAsync("_ThemeSelector")
+                </div>
+            </div>
             <div class="button-row">
                 <a class="button-secondary" href="/endpoints">Endpoints</a>
                 @if (User.IsInRole("Admin"))

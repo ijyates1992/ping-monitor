@@ -10,15 +10,14 @@
 </div>
 <style>
     .theme-selector {
-        position: fixed;
-        top: .75rem;
-        right: .75rem;
-        z-index: 1000;
-        display: inline-flex;
-        align-items: center;
-        gap: .45rem;
+        display: flex;
+        align-items: flex-start;
+        gap: .5rem .6rem;
         flex-wrap: wrap;
-        padding: .5rem .65rem;
+        justify-content: flex-start;
+        width: fit-content;
+        max-width: 100%;
+        padding: .6rem .75rem;
         border: 1px solid var(--border);
         border-radius: 10px;
         background: var(--card);
@@ -44,7 +43,15 @@
     .theme-selector-muted {
         color: var(--muted);
         font-size: .8rem;
-        white-space: nowrap;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        flex-basis: 100%;
+    }
+
+    @media (min-width: 720px) {
+        .theme-selector {
+            justify-content: flex-end;
+        }
     }
 </style>
 <script>
