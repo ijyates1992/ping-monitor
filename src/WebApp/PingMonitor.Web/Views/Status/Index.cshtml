@@ -17,6 +17,41 @@
         PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointRecovery => "event-row event-row-recovery",
         _ => "event-row"
     };
+    static string? GetRecentEventDestination(PingMonitor.Web.ViewModels.EventLogs.RecentEventViewModel recentEvent)
+    {
+        var hasEndpoint = !string.IsNullOrWhiteSpace(recentEvent.EndpointId);
+        var hasAgent = !string.IsNullOrWhiteSpace(recentEvent.AgentId);
+
+        if (!hasEndpoint && !hasAgent)
+        {
+            return null;
+        }
+
+        var isEndpointCategory = string.Equals(recentEvent.Category, EventCategory.Endpoint.ToString(), StringComparison.Ordinal);
+        var isAgentCategory = string.Equals(recentEvent.Category, EventCategory.Agent.ToString(), StringComparison.Ordinal);
+
+        if (hasEndpoint && hasAgent)
+        {
+            if (isEndpointCategory)
+            {
+                return $"/endpoints/{recentEvent.EndpointId}";
+            }
+
+            if (isAgentCategory)
+            {
+                return $"/agents/{recentEvent.AgentId}";
+            }
+
+            return $"/endpoints/{recentEvent.EndpointId}";
+        }
+
+        if (hasEndpoint)
+        {
+            return $"/endpoints/{recentEvent.EndpointId}";
+        }
+
+        return $"/agents/{recentEvent.AgentId}";
+    }
     static string StateClass(EndpointStateKind state) => state switch
     {
         EndpointStateKind.Up => "state-up",
@@ -80,8 +115,10 @@
         .empty { text-align: center; padding: 1rem; border: 1px dashed var(--border); border-radius: 12px; }
         .inline-actions { margin-top: .85rem; }
         .recent-events { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
-        .event-row { padding: .7rem; border-bottom: 1px solid var(--border); }
+        .event-row { display: block; padding: .7rem; border-bottom: 1px solid var(--border); color: inherit; text-decoration: none; }
         .event-row:last-child { border-bottom: 0; }
+        .event-row-clickable { cursor: pointer; }
+        .event-row-clickable:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
         .event-row-down { background: #fdecec; }
         .event-row-recovery { background: #e8f6ec; }
         .nowrap { white-space: nowrap; }
@@ -124,20 +161,45 @@
                 <div class="recent-events">
                     @foreach (var recentEvent in Model.RecentEvents)
                     {
-                        <div class="@EventRowClass(recentEvent.RowKind)">
-                            <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
-                            <div>@recentEvent.Message</div>
-                            <div class="muted">
-                                @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
-                                {
-                                    <span>Endpoint: @(string.IsNullOrWhiteSpace(recentEvent.EndpointName) ? recentEvent.EndpointId : recentEvent.EndpointName)</span>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(recentEvent.AgentId))
-                                {
-                                    <span> · Agent: @(string.IsNullOrWhiteSpace(recentEvent.AgentName) ? recentEvent.AgentId : recentEvent.AgentName)</span>
-                                }
+                        var destination = GetRecentEventDestination(recentEvent);
+                        var rowClassName = destination is null
+                            ? EventRowClass(recentEvent.RowKind)
+                            : $"{EventRowClass(recentEvent.RowKind)} event-row-clickable";
+
+                        if (destination is null)
+                        {
+                            <div class="@rowClassName">
+                                <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
+                                <div>@recentEvent.Message</div>
+                                <div class="muted">
+                                    @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
+                                    {
+                                        <span>Endpoint: @(string.IsNullOrWhiteSpace(recentEvent.EndpointName) ? recentEvent.EndpointId : recentEvent.EndpointName)</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(recentEvent.AgentId))
+                                    {
+                                        <span> · Agent: @(string.IsNullOrWhiteSpace(recentEvent.AgentName) ? recentEvent.AgentId : recentEvent.AgentName)</span>
+                                    }
+                                </div>
                             </div>
-                        </div>
+                        }
+                        else
+                        {
+                            <a class="@rowClassName" href="@destination" aria-label="Open details for @recentEvent.EventType event at @recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")">
+                                <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
+                                <div>@recentEvent.Message</div>
+                                <div class="muted">
+                                    @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
+                                    {
+                                        <span>Endpoint: @(string.IsNullOrWhiteSpace(recentEvent.EndpointName) ? recentEvent.EndpointId : recentEvent.EndpointName)</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(recentEvent.AgentId))
+                                    {
+                                        <span> · Agent: @(string.IsNullOrWhiteSpace(recentEvent.AgentName) ? recentEvent.AgentId : recentEvent.AgentName)</span>
+                                    }
+                                </div>
+                            </a>
+                        }
                     }
                 </div>
             }
