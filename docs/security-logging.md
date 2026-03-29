@@ -90,3 +90,18 @@ Default behavior is failure-focused:
 
 - successful attempts are hidden by default
 - operator can enable a simple toggle to include successful attempts
+
+
+## Operator manual enforcement-clear actions
+
+Manual unblock and manual unlock workflows must generate auditable security records.
+
+At minimum, event records include:
+
+- timestamp (event log occurrence time)
+- operator identity when available
+- action type (`manual_ip_unblock`, `manual_user_unlock`)
+- target identifier (IP block id/IP address or user id/user name)
+- success/failure outcome and failure reason for rejected requests
+
+These records are written without secrets and are intended for operator audit trails and incident review.

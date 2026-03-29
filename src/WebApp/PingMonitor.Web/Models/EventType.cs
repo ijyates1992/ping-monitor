@@ -16,4 +16,7 @@ public static class EventType
     public const string SecurityAutomaticTemporaryIpBlockAdded = "security_automatic_temporary_ip_block_added";
     public const string SecurityAutomaticPermanentIpBlockAdded = "security_automatic_permanent_ip_block_added";
     public const string SecurityAutomaticUserLockoutApplied = "security_automatic_user_lockout_applied";
+    public const string SecurityManualIpBlockRemoveRejected = "security_manual_ip_block_remove_rejected";
+    public const string SecurityManualUserUnlockApplied = "security_manual_user_unlock_applied";
+    public const string SecurityManualUserUnlockRejected = "security_manual_user_unlock_rejected";
 }

@@ -9,6 +9,7 @@ It covers:
 - persisted security settings for **agent authentication** and **user authentication**
 - persistent blocked IP records for agent/user auth types
 - manual IP block and unblock from the admin security page
+- manual unlock of currently locked-out users from the admin security page
 - automatic enforcement of temporary/permanent IP blocking
 - automatic enforcement of temporary user account lockout
 
@@ -42,7 +43,16 @@ Account lockout is enforced through ASP.NET Identity lockout fields (`LockoutEnd
 - Operators can manually add a block for a valid IP address and selected auth type.
 - Block type for manual blocks is recorded as `Manual`.
 - Existing active blocks for the same `(AuthType, IpAddress)` are not duplicated.
+- Manual unblock is allowed only for currently active blocks (not already removed and not expired).
 - Unblock is implemented as an audited soft-removal (`RemovedAtUtc`, `RemovedByUserId`) rather than hard deletion.
+- Manual unblock requires explicit typed confirmation (`UNBLOCK`) before mutation.
+
+## Manual user unlock behaviour
+
+- Manual unlock is allowed only for users currently in an active lockout state (`LockoutEnd > now`).
+- Unlock uses ASP.NET Identity lockout fields directly (`SetLockoutEndDateAsync(..., null)`).
+- Access-failed count is reset after a successful manual unlock to avoid immediate re-lock from stale counters.
+- Manual unlock requires explicit typed confirmation (`UNLOCK`) before mutation.
 
 ## Automatic enforcement behavior
 
@@ -84,4 +94,5 @@ User login request order:
 ## Auditability
 
 Manual and automatic block/unblock actions are persisted as security IP block records and event log entries.
+Manual user unlock actions (success and rejected attempts) are event logged with operator identity context when available.
 Settings updates are also event logged.

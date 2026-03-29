@@ -17,6 +17,7 @@ public sealed class AdminSecurityPageViewModel
     public bool SettingsSaved { get; init; }
     public bool BlockSaved { get; init; }
     public bool UnblockSaved { get; init; }
+    public bool UnlockSaved { get; init; }
 }
 
 public sealed class LockedOutUserListItem

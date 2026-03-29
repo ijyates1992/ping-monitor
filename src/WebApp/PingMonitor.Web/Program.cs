@@ -118,6 +118,7 @@ builder.Services.AddScoped<ISecurityAuthLogService, SecurityAuthLogService>();
 builder.Services.AddScoped<ISecurityAuthLogQueryService, SecurityAuthLogQueryService>();
 builder.Services.AddScoped<ISecuritySettingsService, SecuritySettingsService>();
 builder.Services.AddScoped<ISecurityIpBlockService, SecurityIpBlockService>();
+builder.Services.AddScoped<ISecurityOperatorActionService, SecurityOperatorActionService>();
 builder.Services.AddScoped<ISecurityEnforcementService, SecurityEnforcementService>();
 builder.Services.AddScoped<IEndpointStatusQueryService, EndpointStatusQueryService>();
 builder.Services.AddScoped<IStartupGateService, StartupGateService>();
