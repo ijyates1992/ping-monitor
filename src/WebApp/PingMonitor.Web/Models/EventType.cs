@@ -13,4 +13,7 @@ public static class EventType
     public const string SecuritySettingsUpdated = "security_settings_updated";
     public const string SecurityManualIpBlockAdded = "security_manual_ip_block_added";
     public const string SecurityIpBlockRemoved = "security_ip_block_removed";
+    public const string SecurityAutomaticTemporaryIpBlockAdded = "security_automatic_temporary_ip_block_added";
+    public const string SecurityAutomaticPermanentIpBlockAdded = "security_automatic_permanent_ip_block_added";
+    public const string SecurityAutomaticUserLockoutApplied = "security_automatic_user_lockout_applied";
 }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using PingMonitor.Web.Models;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Services.Security;
 
@@ -14,15 +15,18 @@ public sealed class AccountController : Controller
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISecurityAuthLogService _securityAuthLogService;
+    private readonly ISecurityEnforcementService _securityEnforcementService;
 
     public AccountController(
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
-        ISecurityAuthLogService securityAuthLogService)
+        ISecurityAuthLogService securityAuthLogService,
+        ISecurityEnforcementService securityEnforcementService)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _securityAuthLogService = securityAuthLogService;
+        _securityEnforcementService = securityEnforcementService;
     }
 
     [HttpGet("login")]
@@ -45,20 +49,72 @@ public sealed class AccountController : Controller
         var user = await _userManager.FindByNameAsync(normalizedUserName) ??
                    await _userManager.FindByEmailAsync(normalizedUserName);
 
-        var signInIdentifier = user?.UserName ?? normalizedUserName;
-        var result = await _signInManager.PasswordSignInAsync(signInIdentifier, model.Password, isPersistent: false, lockoutOnFailure: true);
-        if (!result.Succeeded)
+        // Enforcement order:
+        // 1) source IP block check
+        // 2) user lockout check (if user identified)
+        // 3) password validation
+        // 4) failed-attempt threshold evaluation for IP and user lockout
+        var sourceIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ipBlockStatus = await _securityEnforcementService.GetIpBlockStatusAsync(SecurityAuthType.User, sourceIpAddress, HttpContext.RequestAborted);
+        if (ipBlockStatus.IsBlocked)
         {
             await _securityAuthLogService.LogUserAttemptAsync(
                 new UserAuthLogWriteRequest
                 {
                     SubjectIdentifier = normalizedUserName,
                     UserId = user?.Id,
-                    SourceIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    SourceIpAddress = sourceIpAddress,
                     Success = false,
-                    FailureReason = BuildFailureReason(result, user)
+                    FailureReason = ipBlockStatus.FailureReason
                 },
                 HttpContext.RequestAborted);
+
+            ModelState.AddModelError(string.Empty, "Authentication attempt denied.");
+            return View("Login", model);
+        }
+
+        if (user is not null)
+        {
+            var lockoutStatus = await _securityEnforcementService.GetUserLockoutStatusAsync(user, HttpContext.RequestAborted);
+            if (lockoutStatus.IsLockedOut)
+            {
+                await _securityAuthLogService.LogUserAttemptAsync(
+                    new UserAuthLogWriteRequest
+                    {
+                        SubjectIdentifier = normalizedUserName,
+                        UserId = user.Id,
+                        SourceIpAddress = sourceIpAddress,
+                        Success = false,
+                        FailureReason = "account_temporarily_locked"
+                    },
+                    HttpContext.RequestAborted);
+
+                ModelState.AddModelError(string.Empty, "Your account is temporarily locked.");
+                return View("Login", model);
+            }
+        }
+
+        var signInIdentifier = user?.UserName ?? normalizedUserName;
+        var result = await _signInManager.PasswordSignInAsync(signInIdentifier, model.Password, isPersistent: false, lockoutOnFailure: false);
+        if (!result.Succeeded)
+        {
+            var failureReason = BuildFailureReason(result, user);
+            await _securityAuthLogService.LogUserAttemptAsync(
+                new UserAuthLogWriteRequest
+                {
+                    SubjectIdentifier = normalizedUserName,
+                    UserId = user?.Id,
+                    SourceIpAddress = sourceIpAddress,
+                    Success = false,
+                    FailureReason = failureReason
+                },
+                HttpContext.RequestAborted);
+
+            await _securityEnforcementService.EvaluateFailedAttemptAsync(SecurityAuthType.User, sourceIpAddress, HttpContext.RequestAborted);
+            if (user is not null)
+            {
+                await _securityEnforcementService.EvaluateFailedUserLockoutAsync(user, HttpContext.RequestAborted);
+            }
 
             ModelState.AddModelError(string.Empty, "Invalid credentials.");
             return View("Login", model);
@@ -69,7 +125,7 @@ public sealed class AccountController : Controller
             {
                 SubjectIdentifier = normalizedUserName,
                 UserId = user?.Id,
-                SourceIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                SourceIpAddress = sourceIpAddress,
                 Success = true,
                 FailureReason = null
             },

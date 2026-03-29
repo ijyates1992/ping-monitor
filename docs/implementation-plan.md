@@ -7,6 +7,9 @@ The platform foundation is in place:
 - startup gate exists for MySQL-backed application startup
 - authenticated agent API endpoints exist for hello/config/heartbeat/results
 - result ingestion and core control-plane/execution-plane wiring exist
+- automatic authentication enforcement exists for security settings:
+  - temporary/permanent IP blocking for agent and user auth paths
+  - temporary user account lockout via Identity lockout timing
 - server-side state engine and alert lifecycle are still pending
 
 ---

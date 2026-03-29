@@ -1,16 +1,16 @@
-# Security logging (phase 1)
+# Security logging
 
 ## Purpose
 
-Phase 1 adds auditable, persistent authentication-attempt logging for operators.
+Security logging provides auditable, persistent authentication-attempt logging for operators.
 
-This phase covers:
+It covers:
 
 - user authentication attempts
 - agent authentication attempts
 - a read-only admin page for reviewing recent attempts
 
-This phase does **not** add automatic active controls (automatic lockouts, automatic blocking, rate limiting, firewall actions). Manual block management and security setting persistence are covered in `docs/security-settings.md`.
+Automatic active controls for temporary/permanent IP blocking and temporary user lockout are enforced as defined in `docs/security-settings.md`.
 
 ---
 
@@ -44,6 +44,9 @@ Expected failure-reason examples:
 - `account_locked`
 - `login_not_allowed`
 - `two_factor_required`
+- `ip_temporarily_blocked`
+- `ip_permanently_blocked`
+- `account_temporarily_locked`
 
 No passwords or secret material are logged.
 
@@ -61,6 +64,8 @@ Expected failure-reason examples:
 - `disabled_agent`
 - `revoked_key`
 - `invalid_key`
+- `ip_temporarily_blocked`
+- `ip_permanently_blocked`
 
 No bearer tokens, API keys, or secret material are logged.
 
@@ -85,4 +90,3 @@ Default behavior is failure-focused:
 
 - successful attempts are hidden by default
 - operator can enable a simple toggle to include successful attempts
-

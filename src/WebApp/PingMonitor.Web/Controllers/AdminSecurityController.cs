@@ -1,8 +1,11 @@
 using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.Security;
 using PingMonitor.Web.ViewModels.Admin;
@@ -17,15 +20,18 @@ public sealed class AdminSecurityController : Controller
     private readonly ISecurityAuthLogQueryService _securityAuthLogQueryService;
     private readonly ISecuritySettingsService _securitySettingsService;
     private readonly ISecurityIpBlockService _securityIpBlockService;
+    private readonly UserManager<ApplicationUser> _userManager;
 
     public AdminSecurityController(
         ISecurityAuthLogQueryService securityAuthLogQueryService,
         ISecuritySettingsService securitySettingsService,
-        ISecurityIpBlockService securityIpBlockService)
+        ISecurityIpBlockService securityIpBlockService,
+        UserManager<ApplicationUser> userManager)
     {
         _securityAuthLogQueryService = securityAuthLogQueryService;
         _securitySettingsService = securitySettingsService;
         _securityIpBlockService = securityIpBlockService;
+        _userManager = userManager;
     }
 
     [HttpGet]
@@ -195,6 +201,20 @@ public sealed class AdminSecurityController : Controller
 
         var settings = await _securitySettingsService.GetCurrentAsync(cancellationToken);
         var activeBlocks = await _securityIpBlockService.ListActiveAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var lockedOutUsers = await _userManager.Users
+            .AsNoTracking()
+            .Where(x => x.LockoutEnd != null && x.LockoutEnd > now)
+            .OrderBy(x => x.LockoutEnd)
+            .Take(100)
+            .Select(x => new LockedOutUserListItem
+            {
+                UserId = x.Id,
+                UserName = x.UserName ?? string.Empty,
+                Email = x.Email ?? string.Empty,
+                LockoutEndUtc = x.LockoutEnd!.Value
+            })
+            .ToListAsync(cancellationToken);
 
         return new AdminSecurityPageViewModel
         {
@@ -203,6 +223,7 @@ public sealed class AdminSecurityController : Controller
             UserAttempts = userAttempts,
             AgentAttempts = agentAttempts,
             ActiveIpBlocks = activeBlocks,
+            LockedOutUsers = lockedOutUsers,
             SettingsSaved = settingsSaved || string.Equals(Request.Query["settingsSaved"], "true", StringComparison.OrdinalIgnoreCase),
             BlockSaved = blockSaved || string.Equals(Request.Query["blockSaved"], "true", StringComparison.OrdinalIgnoreCase),
             UnblockSaved = unblockSaved || string.Equals(Request.Query["unblockSaved"], "true", StringComparison.OrdinalIgnoreCase),
