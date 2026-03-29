@@ -151,7 +151,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationAutoB
 var app = builder.Build();
 
 var identityCookieOptionsMonitor = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>();
-var identityApplicationCookieName = identityCookieOptionsMonitor.Get(IdentityConstants.ApplicationScheme).Cookie.Name;
+var identityApplicationCookieName = identityCookieOptionsMonitor.Get(IdentityConstants.ApplicationScheme).Cookie?.Name;
 
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
@@ -175,9 +175,13 @@ app.Use(async (context, next) =>
             context.Request.Headers.TryGetValue("Cookie", out var cookieHeaderValues))
         {
             var filteredCookieHeaders = cookieHeaderValues
-                .Select(cookieHeader => string.Join("; ", cookieHeader
-                    .Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-                    .Where(cookiePart => !cookiePart.StartsWith($"{identityApplicationCookieName}=", StringComparison.Ordinal))))
+                .Select(cookieHeader =>
+                {
+                    var nonNullCookieHeader = cookieHeader ?? string.Empty;
+                    return string.Join("; ", nonNullCookieHeader
+                        .Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                        .Where(cookiePart => !cookiePart.StartsWith($"{identityApplicationCookieName}=", StringComparison.Ordinal)));
+                })
                 .Where(cookieHeader => !string.IsNullOrWhiteSpace(cookieHeader))
                 .ToArray();
 
