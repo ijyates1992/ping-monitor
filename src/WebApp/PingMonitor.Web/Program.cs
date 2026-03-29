@@ -19,6 +19,7 @@ using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.Services.Status;
 using PingMonitor.Web.Services.Security;
+using PingMonitor.Web.Services.BrowserNotifications;
 using PingMonitor.Web.Support;
 using Microsoft.Extensions.Options;
 
@@ -132,6 +133,7 @@ builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<INotificationSettingsService, NotificationSettingsService>();
+builder.Services.AddScoped<IBrowserNotificationQueryService, BrowserNotificationQueryService>();
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();

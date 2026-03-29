@@ -156,6 +156,19 @@ These belong in **metrics or telemetry systems**, not event logs.
 
 ## UI Integration
 
+## Browser notification integration (phase 1)
+
+The browser notification feed uses event-log records as its source of truth.
+
+Only a small, explicit subset of meaningful events is eligible for browser notification delivery in phase 1:
+
+- endpoint down
+- endpoint recovered
+- agent became offline
+- agent became online
+
+Routine heartbeat and other noisy/non-actionable events are intentionally excluded from browser notification delivery.
+
 ### Status Page
 
 - Displays **recent events**

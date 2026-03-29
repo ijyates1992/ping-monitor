@@ -35,6 +35,8 @@ Initial intended notification event types:
 
 Future scope may include security-oriented notifications (for example, authentication/security events), but these are not part of the first implementation.
 
+For phase 1 browser delivery, notification events are sourced from the persisted event log (not raw check-result ingestion). Only meaningful event types are eligible for browser delivery.
+
 ---
 
 ## Settings model
@@ -59,8 +61,16 @@ Phase 1 browser notifications are intentionally simple:
 
 - work while the web app is open in the browser
 - require browser notification permission from the operator
+- require browser notifications to be enabled in app settings
 - do not require service workers or full push infrastructure yet
 - provide the first, lowest-complexity notification channel
+
+Supported browser-deliverable event types in phase 1:
+
+- endpoint down
+- endpoint recovered
+- agent offline
+- agent online
 
 This phase does not include background push delivery when the app/browser is closed.
 
