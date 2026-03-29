@@ -71,7 +71,7 @@ No bearer tokens, API keys, or secret material are logged.
 
 ---
 
-## Security logs/settings page (phase 1)
+## Security logs/settings page
 
 A read-only admin page exposes recent authentication attempts in two panels:
 
@@ -86,10 +86,16 @@ Each entry shows:
 - success/failure
 - failure reason (if present)
 
-Default behavior is failure-focused:
+Filtering is explicit and server-side for both user and agent auth panels:
+
+- UTC from/to date-time range (`OccurredAtUtc`)
+- text search over practical fields (`SubjectIdentifier`, source IP, failure reason, related user/agent identifiers when available)
+- success/failure visibility controls
+
+Default behavior remains failure-focused:
 
 - successful attempts are hidden by default
-- operator can enable a simple toggle to include successful attempts
+- operators can opt in to show successful attempts when required
 
 
 ## Operator manual enforcement-clear actions

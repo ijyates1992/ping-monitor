@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -41,11 +42,36 @@ public sealed class AdminSecurityController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index([FromQuery] bool includeSuccessfulUsers = false, [FromQuery] bool includeSuccessfulAgents = false, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Index(
+        [FromQuery] bool includeSuccessfulUsers = false,
+        [FromQuery] bool includeSuccessfulAgents = false,
+        [FromQuery] string? searchText = null,
+        [FromQuery] string? fromUtc = null,
+        [FromQuery] string? toUtc = null,
+        [FromQuery(Name = "LogFilterForm.IncludeSuccessfulUsers")] bool? includeSuccessfulUsersFilter = null,
+        [FromQuery(Name = "LogFilterForm.IncludeSuccessfulAgents")] bool? includeSuccessfulAgentsFilter = null,
+        [FromQuery(Name = "LogFilterForm.SearchText")] string? searchTextFilter = null,
+        [FromQuery(Name = "LogFilterForm.FromUtc")] string? fromUtcFilter = null,
+        [FromQuery(Name = "LogFilterForm.ToUtc")] string? toUtcFilter = null,
+        CancellationToken cancellationToken = default)
     {
+        includeSuccessfulUsers = includeSuccessfulUsersFilter ?? includeSuccessfulUsers;
+        includeSuccessfulAgents = includeSuccessfulAgentsFilter ?? includeSuccessfulAgents;
+        searchText = searchTextFilter ?? searchText;
+        fromUtc = fromUtcFilter ?? fromUtc;
+        toUtc = toUtcFilter ?? toUtc;
+
+        var logFilterForm = new SecurityAuthLogFilterForm
+        {
+            IncludeSuccessfulUsers = includeSuccessfulUsers,
+            IncludeSuccessfulAgents = includeSuccessfulAgents,
+            SearchText = searchText,
+            FromUtc = fromUtc,
+            ToUtc = toUtc
+        };
+
         var viewModel = await BuildViewModelAsync(
-            includeSuccessfulUsers,
-            includeSuccessfulAgents,
+            logFilterForm,
             settingsSaved: false,
             blockSaved: false,
             unblockSaved: false,
@@ -61,15 +87,13 @@ public sealed class AdminSecurityController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateSettings(
         [FromForm(Name = "SettingsForm")] SecuritySettingsForm settingsForm,
-        [FromForm] bool includeSuccessfulUsers = false,
-        [FromForm] bool includeSuccessfulAgents = false,
+        [FromForm(Name = "LogFilterForm")] SecurityAuthLogFilterForm logFilterForm,
         CancellationToken cancellationToken = default)
     {
         if (!ModelState.IsValid)
         {
             var invalidViewModel = await BuildViewModelAsync(
-                includeSuccessfulUsers,
-                includeSuccessfulAgents,
+                logFilterForm,
                 settingsSaved: false,
                 blockSaved: false,
                 unblockSaved: false,
@@ -92,15 +116,14 @@ public sealed class AdminSecurityController : Controller
             UserTemporaryAccountLockoutDurationMinutes = settingsForm.UserTemporaryAccountLockoutDurationMinutes
         }, cancellationToken);
 
-        return RedirectToAction(nameof(Index), new { includeSuccessfulUsers, includeSuccessfulAgents, settingsSaved = true });
+        return RedirectToAction(nameof(Index), BuildRouteValues(logFilterForm, settingsSaved: true));
     }
 
     [HttpPost("ip-blocks")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddManualIpBlock(
         [FromForm(Name = "ManualIpBlockForm")] ManualIpBlockForm manualIpBlockForm,
-        [FromForm] bool includeSuccessfulUsers = false,
-        [FromForm] bool includeSuccessfulAgents = false,
+        [FromForm(Name = "LogFilterForm")] SecurityAuthLogFilterForm logFilterForm,
         CancellationToken cancellationToken = default)
     {
         if (!manualIpBlockForm.AuthType.HasValue)
@@ -116,8 +139,7 @@ public sealed class AdminSecurityController : Controller
         if (!ModelState.IsValid)
         {
             var invalidViewModel = await BuildViewModelAsync(
-                includeSuccessfulUsers,
-                includeSuccessfulAgents,
+                logFilterForm,
                 settingsSaved: false,
                 blockSaved: false,
                 unblockSaved: false,
@@ -143,8 +165,7 @@ public sealed class AdminSecurityController : Controller
             ModelState.AddModelError($"{nameof(ManualIpBlockForm)}.{nameof(ManualIpBlockForm.IpAddress)}", result.Error ?? "Unable to add IP block.");
 
             var invalidViewModel = await BuildViewModelAsync(
-                includeSuccessfulUsers,
-                includeSuccessfulAgents,
+                logFilterForm,
                 settingsSaved: false,
                 blockSaved: false,
                 unblockSaved: false,
@@ -155,21 +176,31 @@ public sealed class AdminSecurityController : Controller
             return View("Index", invalidViewModel);
         }
 
-        return RedirectToAction(nameof(Index), new { includeSuccessfulUsers, includeSuccessfulAgents, blockSaved = true });
+        return RedirectToAction(nameof(Index), BuildRouteValues(logFilterForm, blockSaved: true));
     }
 
     [HttpGet("ip-blocks/{securityIpBlockId}/remove")]
     public async Task<IActionResult> RemoveIpBlock(
         string securityIpBlockId,
-        [FromQuery] bool includeSuccessfulUsers = false,
-        [FromQuery] bool includeSuccessfulAgents = false,
+        [FromQuery(Name = "LogFilterForm.IncludeSuccessfulUsers")] bool includeSuccessfulUsers = false,
+        [FromQuery(Name = "LogFilterForm.IncludeSuccessfulAgents")] bool includeSuccessfulAgents = false,
+        [FromQuery(Name = "LogFilterForm.SearchText")] string? searchText = null,
+        [FromQuery(Name = "LogFilterForm.FromUtc")] string? fromUtc = null,
+        [FromQuery(Name = "LogFilterForm.ToUtc")] string? toUtc = null,
         CancellationToken cancellationToken = default)
     {
         var details = await _securityOperatorActionService.GetActiveIpBlockAsync(securityIpBlockId, cancellationToken);
         if (details is null)
         {
             TempData["SecurityIpBlockRemoveError"] = "Blocked IP record is not active or no longer exists.";
-            return RedirectToAction(nameof(Index), new { includeSuccessfulUsers, includeSuccessfulAgents });
+            return RedirectToAction(nameof(Index), BuildRouteValues(new SecurityAuthLogFilterForm
+            {
+                IncludeSuccessfulUsers = includeSuccessfulUsers,
+                IncludeSuccessfulAgents = includeSuccessfulAgents,
+                SearchText = searchText,
+                FromUtc = fromUtc,
+                ToUtc = toUtc
+            }));
         }
 
         return View("ConfirmUnblockIp", new ConfirmUnblockIpViewModel
@@ -285,8 +316,7 @@ public sealed class AdminSecurityController : Controller
     }
 
     private async Task<AdminSecurityPageViewModel> BuildViewModelAsync(
-        bool includeSuccessfulUsers,
-        bool includeSuccessfulAgents,
+        SecurityAuthLogFilterForm logFilterForm,
         bool settingsSaved,
         bool blockSaved,
         bool unblockSaved,
@@ -295,11 +325,22 @@ public sealed class AdminSecurityController : Controller
         ManualIpBlockForm? manualIpBlockFormOverride,
         CancellationToken cancellationToken)
     {
+        var fromUtc = ParseUtcValue(logFilterForm.FromUtc, nameof(SecurityAuthLogFilterForm.FromUtc));
+        var toUtc = ParseUtcValue(logFilterForm.ToUtc, nameof(SecurityAuthLogFilterForm.ToUtc));
+
+        if (fromUtc.HasValue && toUtc.HasValue && fromUtc > toUtc)
+        {
+            ModelState.AddModelError("LogFilterForm.ToUtc", "To date/time (UTC) must be greater than or equal to From date/time (UTC).");
+        }
+
         var userAttempts = await _securityAuthLogQueryService.GetRecentAsync(
             new SecurityAuthLogQuery
             {
                 AuthType = SecurityAuthType.User,
-                IncludeSuccessful = includeSuccessfulUsers,
+                IncludeSuccessful = logFilterForm.IncludeSuccessfulUsers,
+                SearchText = logFilterForm.SearchText,
+                FromUtc = fromUtc,
+                ToUtc = toUtc,
                 Limit = DefaultLogLimit
             },
             cancellationToken);
@@ -308,7 +349,10 @@ public sealed class AdminSecurityController : Controller
             new SecurityAuthLogQuery
             {
                 AuthType = SecurityAuthType.Agent,
-                IncludeSuccessful = includeSuccessfulAgents,
+                IncludeSuccessful = logFilterForm.IncludeSuccessfulAgents,
+                SearchText = logFilterForm.SearchText,
+                FromUtc = fromUtc,
+                ToUtc = toUtc,
                 Limit = DefaultLogLimit
             },
             cancellationToken);
@@ -332,8 +376,7 @@ public sealed class AdminSecurityController : Controller
 
         return new AdminSecurityPageViewModel
         {
-            IncludeSuccessfulUserAttempts = includeSuccessfulUsers,
-            IncludeSuccessfulAgentAttempts = includeSuccessfulAgents,
+            LogFilterForm = logFilterForm,
             UserAttempts = userAttempts,
             AgentAttempts = agentAttempts,
             ActiveIpBlocks = activeBlocks,
@@ -355,6 +398,46 @@ public sealed class AdminSecurityController : Controller
                 UpdatedAtUtc = settings.UpdatedAtUtc
             },
             ManualIpBlockForm = manualIpBlockFormOverride ?? new ManualIpBlockForm()
+        };
+    }
+
+    private DateTimeOffset? ParseUtcValue(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsedOffset))
+        {
+            return parsedOffset;
+        }
+
+        if (DateTime.TryParseExact(
+                value,
+                ["yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss"],
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsedDateTime))
+        {
+            return new DateTimeOffset(DateTime.SpecifyKind(parsedDateTime, DateTimeKind.Utc));
+        }
+
+        ModelState.AddModelError($"LogFilterForm.{fieldName}", "Enter a valid UTC date/time value.");
+        return null;
+    }
+
+    private static object BuildRouteValues(SecurityAuthLogFilterForm logFilterForm, bool settingsSaved = false, bool blockSaved = false)
+    {
+        return new
+        {
+            includeSuccessfulUsers = logFilterForm.IncludeSuccessfulUsers,
+            includeSuccessfulAgents = logFilterForm.IncludeSuccessfulAgents,
+            searchText = logFilterForm.SearchText,
+            fromUtc = logFilterForm.FromUtc,
+            toUtc = logFilterForm.ToUtc,
+            settingsSaved,
+            blockSaved
         };
     }
 

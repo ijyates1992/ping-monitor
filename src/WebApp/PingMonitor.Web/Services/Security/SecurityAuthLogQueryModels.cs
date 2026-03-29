@@ -17,5 +17,8 @@ public sealed class SecurityAuthLogQuery
 {
     public required SecurityAuthType AuthType { get; init; }
     public required bool IncludeSuccessful { get; init; }
+    public string? SearchText { get; init; }
+    public DateTimeOffset? FromUtc { get; init; }
+    public DateTimeOffset? ToUtc { get; init; }
     public required int Limit { get; init; }
 }
