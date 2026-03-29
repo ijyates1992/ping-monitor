@@ -106,7 +106,22 @@
         .state-degraded { color: var(--degraded); background: #fff7e6; }
         .muted { color: var(--muted); }
         .row-list { display: grid; gap: .9rem; }
-        .status-row { border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+        .status-row {
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            background: #fff;
+            transition: box-shadow .15s ease, border-color .15s ease;
+        }
+        .status-row:hover {
+            box-shadow: 0 2px 8px rgba(16,24,40,.08);
+        }
+        .status-row.status-up { background: #f1fbf4; border-left-color: #1f8f4b; }
+        .status-row.status-down { background: #fff3f2; border-left-color: #d92d20; }
+        .status-row.status-degraded { background: #fff8ec; border-left-color: #dc6803; }
+        .status-row.status-unknown { background: #fffdf0; border-left-color: #ca8504; }
+        .status-row.status-suppressed { background: #f7f8fa; border-left-color: #667085; }
         .status-row h2 { margin: 0; font-size: 1.1rem; }
         .row-header { display: flex; flex-direction: column; gap: .75rem; margin-bottom: .85rem; }
         .row-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -277,7 +292,7 @@
                 <div class="row-list">
                     @foreach (var row in Model.Rows)
                     {
-                        <article class="status-row">
+                        <article class="status-row @row.StatusCssClass">
                             <div class="row-header">
                                 <div>
                                     <h2>@EndpointIconCatalog.GetSymbol(row.IconKey) @row.EndpointName</h2>

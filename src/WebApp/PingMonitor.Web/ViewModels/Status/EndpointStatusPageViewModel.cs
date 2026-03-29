@@ -50,6 +50,7 @@ public sealed class EndpointStatusRowViewModel
     public string AgentInstanceId { get; init; } = string.Empty;
     public string AgentName { get; init; } = string.Empty;
     public EndpointStateKind CurrentState { get; init; } = EndpointStateKind.Unknown;
+    public string StatusCssClass { get; init; } = "status-unknown";
     public DateTimeOffset? LastCheckUtc { get; init; }
     public DateTimeOffset? LastStateChangeUtc { get; init; }
     public int ConsecutiveFailureCount { get; init; }
