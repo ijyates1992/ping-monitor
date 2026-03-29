@@ -18,9 +18,9 @@ The first implementation phase is browser notifications delivered while an opera
 
 Telegram delivery is planned as a future notification channel.
 
-### Email (future)
+### SMTP email (future)
 
-Email delivery is planned as a future notification channel.
+SMTP-backed email delivery is planned as a future notification channel.
 
 ---
 
@@ -48,7 +48,7 @@ Initial settings scope:
 
 Future settings scope:
 
-- channel-specific settings for Telegram and email
+- channel-specific settings for Telegram and SMTP email
 - additional controls as new channels are introduced
 
 ---
@@ -84,4 +84,4 @@ Future channel additions should reuse a common event model and avoid coupling no
 
 The next implementation step is a dedicated notification settings page in the web application.
 
-That page should start with browser notification controls and provide clear placeholders for future Telegram and email settings.
+That page should start with browser notification controls and provide clear placeholders for future Telegram and SMTP email settings.
