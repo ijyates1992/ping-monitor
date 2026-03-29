@@ -11,11 +11,20 @@ public sealed class AdminSecurityPageViewModel
     public IReadOnlyList<SecurityAuthLogListItem> UserAttempts { get; init; } = [];
     public IReadOnlyList<SecurityAuthLogListItem> AgentAttempts { get; init; } = [];
     public IReadOnlyList<SecurityIpBlockListItem> ActiveIpBlocks { get; init; } = [];
+    public IReadOnlyList<LockedOutUserListItem> LockedOutUsers { get; init; } = [];
     public SecuritySettingsForm SettingsForm { get; init; } = new();
     public ManualIpBlockForm ManualIpBlockForm { get; init; } = new();
     public bool SettingsSaved { get; init; }
     public bool BlockSaved { get; init; }
     public bool UnblockSaved { get; init; }
+}
+
+public sealed class LockedOutUserListItem
+{
+    public string UserId { get; init; } = string.Empty;
+    public string UserName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public DateTimeOffset LockoutEndUtc { get; init; }
 }
 
 public sealed class SecuritySettingsForm

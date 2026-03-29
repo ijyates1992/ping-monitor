@@ -51,10 +51,45 @@
 <main>
     <section class="card">
         <h1>Security logs and settings</h1>
-        <p class="muted">Configure user/agent authentication thresholds, manage manual blocked IPs, and review authentication attempts.</p>
+        <p class="muted">Configure user/agent authentication thresholds, manage blocked IPs, and review authentication attempts. IP blocking and temporary account lockout settings are enforced automatically.</p>
         <div class="button-row">
             <a class="button-secondary" href="/admin">Back to admin settings</a>
             <a class="button-secondary" href="/status">Back to status</a>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Currently locked-out user accounts</h2>
+        <p class="muted">User temporary lockout is enforced through ASP.NET Identity lockout timing.</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>User name</th>
+                    <th>Email</th>
+                    <th>Lockout ends (UTC)</th>
+                </tr>
+                </thead>
+                <tbody>
+                @if (!Model.LockedOutUsers.Any())
+                {
+                    <tr>
+                        <td colspan="3" class="muted">No users are currently locked out.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var user in Model.LockedOutUsers)
+                    {
+                        <tr>
+                            <td>@user.UserName</td>
+                            <td>@(string.IsNullOrWhiteSpace(user.Email) ? "n/a" : user.Email)</td>
+                            <td>@user.LockoutEndUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
         </div>
     </section>
 
