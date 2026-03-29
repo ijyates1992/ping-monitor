@@ -170,7 +170,13 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                     AgentId = assignment.AgentId,
                     EndpointId = assignment.EndpointId,
                     AssignmentId = assignment.AssignmentId,
-                    Message = $"Endpoint \"{endpoint.Name}\" state changed from {previousState} to {nextState}.",
+                    Message = await BuildStateChangeMessageAsync(
+                        assignment.AssignmentId,
+                        endpoint.Name,
+                        previousState,
+                        nextState,
+                        transitionAtUtc,
+                        cancellationToken),
                     DetailsJson = JsonSerializer.Serialize(new
                     {
                         assignment.AssignmentId,
@@ -355,6 +361,46 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         var previousWasDown = previousState == EndpointStateKind.Down;
         var newIsDown = newState == EndpointStateKind.Down;
         return previousWasDown != newIsDown;
+    }
+
+    private async Task<string> BuildStateChangeMessageAsync(
+        string assignmentId,
+        string endpointName,
+        EndpointStateKind previousState,
+        EndpointStateKind nextState,
+        DateTimeOffset transitionAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (nextState == EndpointStateKind.Down)
+        {
+            return $"Endpoint \"{endpointName}\" went down.";
+        }
+
+        if (previousState == EndpointStateKind.Down && nextState == EndpointStateKind.Up)
+        {
+            var downTransitionAtUtc = await _dbContext.StateTransitions.AsNoTracking()
+                .Where(x => x.AssignmentId == assignmentId && x.NewState == EndpointStateKind.Down)
+                .OrderByDescending(x => x.TransitionAtUtc)
+                .Select(x => (DateTimeOffset?)x.TransitionAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (downTransitionAtUtc.HasValue && transitionAtUtc >= downTransitionAtUtc.Value)
+            {
+                var downtime = transitionAtUtc - downTransitionAtUtc.Value;
+                return $"Endpoint \"{endpointName}\" recovered after {FormatDuration(downtime)} downtime.";
+            }
+
+            return $"Endpoint \"{endpointName}\" recovered.";
+        }
+
+        return $"Endpoint \"{endpointName}\" state changed from {previousState} to {nextState}.";
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        var safeDuration = duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
+        var hours = (int)safeDuration.TotalHours;
+        return $"{hours:D2}:{safeDuration.Minutes:D2}:{safeDuration.Seconds:D2}";
     }
 
     private readonly record struct ParentStateContext(string? ParentEndpointId, bool DependencyDown)

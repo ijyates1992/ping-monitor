@@ -147,6 +147,7 @@ builder.Services.AddScoped<IConfigurationRestoreService, ConfigurationRestoreSer
 builder.Services.AddSingleton<ConfigurationAutoBackupBackgroundService>();
 builder.Services.AddSingleton<IConfigurationChangeBackupSignal>(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
+builder.Services.AddHostedService<AgentStatusTransitionBackgroundService>();
 
 var app = builder.Build();
 

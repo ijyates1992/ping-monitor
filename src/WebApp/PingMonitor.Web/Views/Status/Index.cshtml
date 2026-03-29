@@ -11,6 +11,12 @@
     static string FormatDependency(string? endpointId, string? endpointName, string emptyText) => string.IsNullOrWhiteSpace(endpointId) ? emptyText : string.IsNullOrWhiteSpace(endpointName) ? $"{endpointId} (name unavailable)" : endpointName;
     static string FormatPercent(double? value) => value.HasValue ? $"{value.Value:F1}%" : "Unknown";
     static string FormatRtt(double? value) => value.HasValue ? $"{value.Value:F1} ms" : "No data";
+    static string EventRowClass(PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind rowKind) => rowKind switch
+    {
+        PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointDown => "event-row event-row-down",
+        PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointRecovery => "event-row event-row-recovery",
+        _ => "event-row"
+    };
     static string StateClass(EndpointStateKind state) => state switch
     {
         EndpointStateKind.Up => "state-up",
@@ -76,6 +82,8 @@
         .recent-events { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
         .event-row { padding: .7rem; border-bottom: 1px solid var(--border); }
         .event-row:last-child { border-bottom: 0; }
+        .event-row-down { background: #fdecec; }
+        .event-row-recovery { background: #e8f6ec; }
         .nowrap { white-space: nowrap; }
         @@media (min-width: 720px) {
             .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
@@ -116,7 +124,7 @@
                 <div class="recent-events">
                     @foreach (var recentEvent in Model.RecentEvents)
                     {
-                        <div class="event-row">
+                        <div class="@EventRowClass(recentEvent.RowKind)">
                             <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
                             <div>@recentEvent.Message</div>
                             <div class="muted">

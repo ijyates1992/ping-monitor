@@ -49,10 +49,10 @@ internal sealed class AgentHelloService : IAgentHelloService
             {
                 OccurredAtUtc = now,
                 Category = EventCategory.Agent,
-                EventType = EventType.AgentOnline,
+                EventType = EventType.AgentBecameOnline,
                 Severity = EventSeverity.Info,
                 AgentId = agent.AgentId,
-                Message = $"Agent \"{agent.Name ?? agent.InstanceId}\" is now online."
+                Message = $"Agent \"{agent.Name ?? agent.InstanceId}\" became online."
             }, cancellationToken);
         }
 

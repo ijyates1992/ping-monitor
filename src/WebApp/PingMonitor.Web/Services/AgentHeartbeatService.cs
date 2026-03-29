@@ -27,7 +27,6 @@ internal sealed class AgentHeartbeatService : IHeartbeatService
         var currentConfigVersion = await _configurationService.GetCurrentConfigVersionAsync(agent, cancellationToken);
 
         var wasOnline = agent.Status == AgentHealthStatus.Online;
-        var previousHeartbeat = agent.LastHeartbeatUtc;
         agent.LastHeartbeatUtc = now;
         agent.LastSeenUtc = now;
         agent.AgentVersion = request.AgentVersion.Trim();
@@ -48,29 +47,11 @@ internal sealed class AgentHeartbeatService : IHeartbeatService
             {
                 OccurredAtUtc = now,
                 Category = EventCategory.Agent,
-                EventType = EventType.AgentOnline,
+                EventType = EventType.AgentBecameOnline,
                 Severity = EventSeverity.Info,
                 AgentId = agent.AgentId,
-                Message = $"Agent \"{agent.Name ?? agent.InstanceId}\" is now online."
+                Message = $"Agent \"{agent.Name ?? agent.InstanceId}\" became online."
             }, cancellationToken);
-        }
-
-        if (!agent.LastHeartbeatEventLoggedAtUtc.HasValue ||
-            now - agent.LastHeartbeatEventLoggedAtUtc.Value >= TimeSpan.FromMinutes(5) ||
-            (previousHeartbeat.HasValue && now - previousHeartbeat.Value >= TimeSpan.FromMinutes(5)))
-        {
-            await _eventLogService.WriteAsync(new EventLogWriteRequest
-            {
-                OccurredAtUtc = now,
-                Category = EventCategory.Agent,
-                EventType = EventType.AgentHeartbeatReceived,
-                Severity = EventSeverity.Info,
-                AgentId = agent.AgentId,
-                Message = $"Heartbeat received from agent \"{agent.Name ?? agent.InstanceId}\"."
-            }, cancellationToken);
-
-            agent.LastHeartbeatEventLoggedAtUtc = now;
-            await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
         return new AgentHeartbeatResponse(
