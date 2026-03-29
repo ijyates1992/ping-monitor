@@ -33,6 +33,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         string? search,
         CancellationToken cancellationToken)
     {
+        var nowUtc = DateTimeOffset.UtcNow;
         var normalizedState = Normalize(state);
 
         var principal = _httpContextAccessor.HttpContext?.User;
@@ -67,6 +68,8 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 StatusCssClass = GetStatusCssClass(endpointState != null ? endpointState.CurrentState : EndpointStateKind.Unknown),
                 LastCheckUtc = endpointState != null ? endpointState.LastCheckUtc : null,
                 LastStateChangeUtc = endpointState != null ? endpointState.LastStateChangeUtc : null,
+                CurrentStateDuration = endpointState != null ? GetCurrentStateDuration(endpointState.CurrentState, endpointState.LastStateChangeUtc, nowUtc) : null,
+                CurrentStateDurationDisplay = endpointState != null ? FormatCurrentStateDuration(endpointState.CurrentState, endpointState.LastStateChangeUtc, nowUtc) : "—",
                 ConsecutiveFailureCount = endpointState != null ? endpointState.ConsecutiveFailureCount : 0,
                 ConsecutiveSuccessCount = endpointState != null ? endpointState.ConsecutiveSuccessCount : 0,
                 CheckType = assignment.CheckType.ToString(),
@@ -160,6 +163,8 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 StatusCssClass = GetStatusCssClass(row.CurrentState),
                 LastCheckUtc = row.LastCheckUtc,
                 LastStateChangeUtc = row.LastStateChangeUtc,
+                CurrentStateDuration = row.CurrentStateDuration,
+                CurrentStateDurationDisplay = row.CurrentStateDurationDisplay,
                 ConsecutiveFailureCount = row.ConsecutiveFailureCount,
                 ConsecutiveSuccessCount = row.ConsecutiveSuccessCount,
                 CheckType = row.CheckType,
@@ -197,6 +202,8 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 StatusCssClass = row.StatusCssClass,
                 LastCheckUtc = row.LastCheckUtc,
                 LastStateChangeUtc = row.LastStateChangeUtc,
+                CurrentStateDuration = row.CurrentStateDuration,
+                CurrentStateDurationDisplay = row.CurrentStateDurationDisplay,
                 ConsecutiveFailureCount = row.ConsecutiveFailureCount,
                 ConsecutiveSuccessCount = row.ConsecutiveSuccessCount,
                 CheckType = row.CheckType,
@@ -265,5 +272,61 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             EndpointStateKind.Suppressed => "status-suppressed",
             _ => "status-unknown"
         };
+    }
+
+    private static TimeSpan? GetCurrentStateDuration(EndpointStateKind state, DateTimeOffset? lastStateChangeUtc, DateTimeOffset nowUtc)
+    {
+        if (!lastStateChangeUtc.HasValue)
+        {
+            return null;
+        }
+
+        if (state == EndpointStateKind.Unknown)
+        {
+            return null;
+        }
+
+        var duration = nowUtc - lastStateChangeUtc.Value;
+        return duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
+    }
+
+    private static string FormatCurrentStateDuration(EndpointStateKind state, DateTimeOffset? lastStateChangeUtc, DateTimeOffset nowUtc)
+    {
+        var duration = GetCurrentStateDuration(state, lastStateChangeUtc, nowUtc);
+        if (!duration.HasValue)
+        {
+            return "—";
+        }
+
+        var prefix = state switch
+        {
+            EndpointStateKind.Up => "Up for",
+            EndpointStateKind.Down => "Down for",
+            EndpointStateKind.Suppressed => "Suppressed for",
+            EndpointStateKind.Degraded => "Degraded for",
+            _ => null
+        };
+
+        if (prefix is null)
+        {
+            return "—";
+        }
+
+        return $"{prefix} {FormatDuration(duration.Value)}";
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalDays >= 1d)
+        {
+            return $"{(int)duration.TotalDays}d {duration.Hours:00}h {duration.Minutes:00}m";
+        }
+
+        if (duration.TotalHours >= 1d)
+        {
+            return $"{(int)duration.TotalHours}h {duration.Minutes:00}m";
+        }
+
+        return $"{duration.Minutes:00}m {duration.Seconds:00}s";
     }
 }

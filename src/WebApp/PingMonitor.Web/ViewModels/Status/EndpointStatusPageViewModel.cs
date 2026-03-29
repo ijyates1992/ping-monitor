@@ -53,6 +53,8 @@ public sealed class EndpointStatusRowViewModel
     public string StatusCssClass { get; init; } = "status-unknown";
     public DateTimeOffset? LastCheckUtc { get; init; }
     public DateTimeOffset? LastStateChangeUtc { get; init; }
+    public TimeSpan? CurrentStateDuration { get; init; }
+    public string CurrentStateDurationDisplay { get; init; } = "—";
     public int ConsecutiveFailureCount { get; init; }
     public int ConsecutiveSuccessCount { get; init; }
     public string CheckType { get; init; } = string.Empty;
