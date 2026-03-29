@@ -64,6 +64,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AgentInstanceId = assignmentAgent.InstanceId,
                 AgentName = assignmentAgent.Name ?? assignmentAgent.InstanceId,
                 CurrentState = endpointState != null ? endpointState.CurrentState : EndpointStateKind.Unknown,
+                StatusCssClass = GetStatusCssClass(endpointState != null ? endpointState.CurrentState : EndpointStateKind.Unknown),
                 LastCheckUtc = endpointState != null ? endpointState.LastCheckUtc : null,
                 LastStateChangeUtc = endpointState != null ? endpointState.LastStateChangeUtc : null,
                 ConsecutiveFailureCount = endpointState != null ? endpointState.ConsecutiveFailureCount : 0,
@@ -156,6 +157,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AgentInstanceId = row.AgentInstanceId,
                 AgentName = row.AgentName,
                 CurrentState = row.CurrentState,
+                StatusCssClass = GetStatusCssClass(row.CurrentState),
                 LastCheckUtc = row.LastCheckUtc,
                 LastStateChangeUtc = row.LastStateChangeUtc,
                 ConsecutiveFailureCount = row.ConsecutiveFailureCount,
@@ -192,6 +194,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AgentInstanceId = row.AgentInstanceId,
                 AgentName = row.AgentName,
                 CurrentState = row.CurrentState,
+                StatusCssClass = row.StatusCssClass,
                 LastCheckUtc = row.LastCheckUtc,
                 LastStateChangeUtc = row.LastStateChangeUtc,
                 ConsecutiveFailureCount = row.ConsecutiveFailureCount,
@@ -250,5 +253,17 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         return Enum.TryParse<EndpointStateKind>(value, ignoreCase: true, out var parsedValue)
             ? parsedValue
             : null;
+    }
+
+    private static string GetStatusCssClass(EndpointStateKind state)
+    {
+        return state switch
+        {
+            EndpointStateKind.Up => "status-up",
+            EndpointStateKind.Down => "status-down",
+            EndpointStateKind.Degraded => "status-degraded",
+            EndpointStateKind.Suppressed => "status-suppressed",
+            _ => "status-unknown"
+        };
     }
 }
