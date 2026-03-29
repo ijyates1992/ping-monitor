@@ -32,7 +32,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SecurityAuthLogs",
         "ApplicationSettings",
         "SecuritySettings",
-        "SecurityIpBlocks"
+        "SecurityIpBlocks",
+        "NotificationSettings"
     ];
     private static readonly string[] RequiredEndpointDependencyColumns =
     [
@@ -286,6 +287,19 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+        const string createNotificationSettingsSql = """
+            CREATE TABLE IF NOT EXISTS `NotificationSettings` (
+                `NotificationSettingsId` int NOT NULL,
+                `BrowserNotificationsEnabled` tinyint(1) NOT NULL,
+                `BrowserNotificationsPermissionState` varchar(16) NULL,
+                `TelegramNotificationsEnabled` tinyint(1) NOT NULL,
+                `SmtpNotificationsEnabled` tinyint(1) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedByUserId` varchar(255) NULL,
+                PRIMARY KEY (`NotificationSettingsId`)
+            );
+            """;
+
         const string createEventLogsSql = """
             CREATE TABLE IF NOT EXISTS `EventLogs` (
                 `EventLogId` varchar(64) NOT NULL,
@@ -398,6 +412,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecuritySettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityIpBlocksSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAgentHeartbeatHistorySql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createGroupsSql, cancellationToken);

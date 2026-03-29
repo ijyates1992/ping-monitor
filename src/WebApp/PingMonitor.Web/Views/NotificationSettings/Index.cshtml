@@ -1,0 +1,186 @@
+@model PingMonitor.Web.ViewModels.Admin.NotificationSettingsPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notification settings</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6f8;
+            --card: #ffffff;
+            --text: #102a43;
+            --muted: #52606d;
+            --border: #d9e2ec;
+            --accent: #0f62fe;
+            --success: #137333;
+            --error-bg: #fee4e2;
+            --error-text: #b42318;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 760px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+        .button, .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .8rem 1rem; border-radius: 10px; font-weight: 600; text-decoration: none; }
+        .button { border: 0; background: var(--accent); color: white; cursor: pointer; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: white; cursor: pointer; }
+        .saved { border: 1px solid #c2f0c2; background: #ebffee; color: var(--success); border-radius: 10px; padding: .8rem; }
+        .errors { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: .8rem; }
+        .muted { color: var(--muted); }
+        .field-error { color: var(--error-text); font-size: .9rem; margin-top: .25rem; }
+        .status-pill { display: inline-block; padding: .3rem .55rem; border-radius: 999px; font-size: .85rem; border: 1px solid var(--border); background: #f8fafc; }
+        .switch-row { display: flex; align-items: center; gap: .75rem; }
+        input[type="checkbox"] { inline-size: 1.2rem; block-size: 1.2rem; }
+    </style>
+</head>
+<body>
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Notification settings</h1>
+            <p class="muted">Scope: global app setting for now. Browser permission is controlled by each browser; this page stores app preference separately.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/admin">Back to admin settings</a>
+                <a class="button-secondary" href="/status">Back to status</a>
+            </div>
+        </section>
+
+        <form method="post" action="/settings/notifications" class="stack">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="BrowserNotificationsPermissionState" id="browserPermissionStateInput" />
+
+            @if (Model.Saved)
+            {
+                <div class="saved" role="status">Notification settings saved.</div>
+            }
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="errors" asp-validation-summary="ModelOnly"></div>
+            }
+
+            <section class="card stack">
+                <h2>Browser notifications (phase 1)</h2>
+                <p class="muted">Works while this app is open in your browser. Background push/service workers are not included in this phase.</p>
+
+                <div class="switch-row">
+                    <input asp-for="BrowserNotificationsEnabled" type="checkbox" />
+                    <label asp-for="BrowserNotificationsEnabled"></label>
+                </div>
+
+                <div class="field-error"><span asp-validation-for="BrowserNotificationsPermissionState"></span></div>
+
+                <div>
+                    <div>Browser support: <span id="browserSupportStatus" class="status-pill">Checking…</span></div>
+                    <div style="margin-top:.5rem;">Browser permission: <span id="browserPermissionState" class="status-pill">@Model.BrowserNotificationsPermissionState</span></div>
+                    <p class="muted">Cached permission from server save: <strong>@Model.BrowserNotificationsPermissionState</strong></p>
+                </div>
+
+                <div class="button-row">
+                    <button type="button" id="requestPermissionButton" class="button-secondary">Request browser permission</button>
+                    <button type="button" id="testNotificationButton" class="button-secondary">Send test notification</button>
+                </div>
+                <p id="browserNotificationMessage" class="muted" role="status"></p>
+            </section>
+
+            <section class="card stack">
+                <h2>Future channels</h2>
+                <div>
+                    <h3>Telegram notifications</h3>
+                    <p class="muted">Coming later. Delivery and channel settings are not implemented in phase 1.</p>
+                </div>
+                <div>
+                    <h3>SMTP email notifications</h3>
+                    <p class="muted">Coming later. SMTP delivery and credential settings are not implemented in phase 1.</p>
+                </div>
+            </section>
+
+            <section class="card">
+                <p class="muted">Last updated: @Model.UpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+                @if (!string.IsNullOrWhiteSpace(Model.UpdatedByUserId))
+                {
+                    <p class="muted">Last updated by: @Model.UpdatedByUserId</p>
+                }
+                <div class="button-row">
+                    <button class="button" type="submit">Save notification settings</button>
+                </div>
+            </section>
+        </form>
+    </div>
+</main>
+
+<script>
+(() => {
+    const permissionStateDisplay = document.getElementById('browserPermissionState');
+    const permissionStateInput = document.getElementById('browserPermissionStateInput');
+    const supportStatusDisplay = document.getElementById('browserSupportStatus');
+    const messageDisplay = document.getElementById('browserNotificationMessage');
+    const requestPermissionButton = document.getElementById('requestPermissionButton');
+    const testNotificationButton = document.getElementById('testNotificationButton');
+
+    const hasNotificationApi = typeof window !== 'undefined' && 'Notification' in window;
+
+    function setMessage(message) {
+        messageDisplay.textContent = message;
+    }
+
+    function updatePermissionState(state) {
+        permissionStateDisplay.textContent = state;
+        permissionStateInput.value = state;
+    }
+
+    if (!hasNotificationApi) {
+        supportStatusDisplay.textContent = 'Not supported';
+        updatePermissionState('default');
+        requestPermissionButton.disabled = true;
+        testNotificationButton.disabled = true;
+        setMessage('This browser does not support notifications.');
+        return;
+    }
+
+    supportStatusDisplay.textContent = 'Supported';
+    updatePermissionState(Notification.permission);
+
+    requestPermissionButton.addEventListener('click', async () => {
+        try {
+            const permission = await Notification.requestPermission();
+            updatePermissionState(permission);
+
+            if (permission === 'granted') {
+                setMessage('Browser permission granted. Save settings to persist this cached state.');
+                return;
+            }
+
+            if (permission === 'denied') {
+                setMessage('Browser permission denied. Update browser site permissions to enable notifications.');
+                return;
+            }
+
+            setMessage('Permission request dismissed.');
+        } catch {
+            setMessage('Unable to request browser notification permission.');
+        }
+    });
+
+    testNotificationButton.addEventListener('click', () => {
+        if (Notification.permission !== 'granted') {
+            updatePermissionState(Notification.permission);
+            setMessage('Test notification requires granted browser permission.');
+            return;
+        }
+
+        new Notification('Ping Monitor Test', {
+            body: 'Browser notifications are working.'
+        });
+
+        updatePermissionState(Notification.permission);
+        setMessage('Test notification sent.');
+    });
+})();
+</script>
+</body>
+</html>

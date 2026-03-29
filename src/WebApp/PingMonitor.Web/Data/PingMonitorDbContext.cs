@@ -35,6 +35,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<ApplicationSettings> ApplicationSettings => Set<ApplicationSettings>();
     public DbSet<SecuritySettings> SecuritySettings => Set<SecuritySettings>();
     public DbSet<SecurityIpBlock> SecurityIpBlocks => Set<SecurityIpBlock>();
+    public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -249,6 +250,17 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         appSettings.Property(x => x.DefaultFailureThreshold).IsRequired();
         appSettings.Property(x => x.DefaultRecoveryThreshold).IsRequired();
         appSettings.Property(x => x.UpdatedAtUtc).IsRequired();
+
+        var notificationSettings = modelBuilder.Entity<NotificationSettings>();
+        notificationSettings.ToTable("NotificationSettings");
+        notificationSettings.HasKey(x => x.NotificationSettingsId);
+        notificationSettings.Property(x => x.NotificationSettingsId).ValueGeneratedNever();
+        notificationSettings.Property(x => x.BrowserNotificationsEnabled).IsRequired();
+        notificationSettings.Property(x => x.BrowserNotificationsPermissionState).HasMaxLength(16);
+        notificationSettings.Property(x => x.TelegramNotificationsEnabled).IsRequired();
+        notificationSettings.Property(x => x.SmtpNotificationsEnabled).IsRequired();
+        notificationSettings.Property(x => x.UpdatedAtUtc).IsRequired();
+        notificationSettings.Property(x => x.UpdatedByUserId).HasMaxLength(255);
 
         var securitySettings = modelBuilder.Entity<SecuritySettings>();
         securitySettings.ToTable("SecuritySettings");
