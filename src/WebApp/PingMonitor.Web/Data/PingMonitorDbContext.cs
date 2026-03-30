@@ -263,6 +263,18 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         notificationSettings.Property(x => x.BrowserNotificationsPermissionState).HasMaxLength(16);
         notificationSettings.Property(x => x.TelegramNotificationsEnabled).IsRequired();
         notificationSettings.Property(x => x.SmtpNotificationsEnabled).IsRequired();
+        notificationSettings.Property(x => x.SmtpHost).HasMaxLength(255);
+        notificationSettings.Property(x => x.SmtpPort).IsRequired();
+        notificationSettings.Property(x => x.SmtpUseTls).IsRequired();
+        notificationSettings.Property(x => x.SmtpUsername).HasMaxLength(255);
+        notificationSettings.Property(x => x.SmtpPasswordProtected).HasMaxLength(4096);
+        notificationSettings.Property(x => x.SmtpFromAddress).HasMaxLength(255);
+        notificationSettings.Property(x => x.SmtpFromDisplayName).HasMaxLength(255);
+        notificationSettings.Property(x => x.SmtpRecipientAddresses).HasMaxLength(4096);
+        notificationSettings.Property(x => x.SmtpNotifyEndpointDown).IsRequired();
+        notificationSettings.Property(x => x.SmtpNotifyEndpointRecovered).IsRequired();
+        notificationSettings.Property(x => x.SmtpNotifyAgentOffline).IsRequired();
+        notificationSettings.Property(x => x.SmtpNotifyAgentOnline).IsRequired();
         notificationSettings.Property(x => x.UpdatedAtUtc).IsRequired();
         notificationSettings.Property(x => x.UpdatedByUserId).HasMaxLength(255);
 

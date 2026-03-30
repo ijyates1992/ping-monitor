@@ -1,22 +1,13 @@
 namespace PingMonitor.Web.Services;
 
-public sealed class UpdateNotificationSettingsCommand
+public sealed class SmtpChannelSettingsDto
 {
-    public bool BrowserNotificationsEnabled { get; set; }
-    public bool BrowserNotifyEndpointDown { get; set; }
-    public bool BrowserNotifyEndpointRecovered { get; set; }
-    public bool BrowserNotifyAgentOffline { get; set; }
-    public bool BrowserNotifyAgentOnline { get; set; }
-
-    public string? BrowserNotificationsPermissionState { get; set; }
-
     public bool SmtpNotificationsEnabled { get; set; }
     public string? SmtpHost { get; set; }
     public int SmtpPort { get; set; }
     public bool SmtpUseTls { get; set; }
     public string? SmtpUsername { get; set; }
     public string? SmtpPassword { get; set; }
-    public bool SmtpClearPassword { get; set; }
     public string? SmtpFromAddress { get; set; }
     public string? SmtpFromDisplayName { get; set; }
     public string? SmtpRecipientAddresses { get; set; }
@@ -24,6 +15,4 @@ public sealed class UpdateNotificationSettingsCommand
     public bool SmtpNotifyEndpointRecovered { get; set; }
     public bool SmtpNotifyAgentOffline { get; set; }
     public bool SmtpNotifyAgentOnline { get; set; }
-
-    public string? UpdatedByUserId { get; set; }
 }

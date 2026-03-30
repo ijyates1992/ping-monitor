@@ -78,6 +78,18 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "BrowserNotificationsPermissionState",
         "TelegramNotificationsEnabled",
         "SmtpNotificationsEnabled",
+        "SmtpHost",
+        "SmtpPort",
+        "SmtpUseTls",
+        "SmtpUsername",
+        "SmtpPasswordProtected",
+        "SmtpFromAddress",
+        "SmtpFromDisplayName",
+        "SmtpRecipientAddresses",
+        "SmtpNotifyEndpointDown",
+        "SmtpNotifyEndpointRecovered",
+        "SmtpNotifyAgentOffline",
+        "SmtpNotifyAgentOnline",
         "UpdatedAtUtc",
         "UpdatedByUserId"
     ];
@@ -319,6 +331,18 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `BrowserNotificationsPermissionState` varchar(16) NULL,
                 `TelegramNotificationsEnabled` tinyint(1) NOT NULL,
                 `SmtpNotificationsEnabled` tinyint(1) NOT NULL,
+                `SmtpHost` varchar(255) NULL,
+                `SmtpPort` int NOT NULL DEFAULT 25,
+                `SmtpUseTls` tinyint(1) NOT NULL DEFAULT 1,
+                `SmtpUsername` varchar(255) NULL,
+                `SmtpPasswordProtected` varchar(4096) NULL,
+                `SmtpFromAddress` varchar(255) NULL,
+                `SmtpFromDisplayName` varchar(255) NULL,
+                `SmtpRecipientAddresses` varchar(4096) NULL,
+                `SmtpNotifyEndpointDown` tinyint(1) NOT NULL DEFAULT 1,
+                `SmtpNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1,
+                `SmtpNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1,
+                `SmtpNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedByUserId` varchar(255) NULL,
                 PRIMARY KEY (`NotificationSettingsId`)
@@ -760,6 +784,126 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """
                 ALTER TABLE `NotificationSettings`
                 ADD COLUMN `BrowserNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpHost", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpHost` varchar(255) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpPort", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpPort` int NOT NULL DEFAULT 25;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpUseTls", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpUseTls` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpUsername", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpUsername` varchar(255) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpPasswordProtected", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpPasswordProtected` varchar(4096) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpFromAddress", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpFromAddress` varchar(255) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpFromDisplayName", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpFromDisplayName` varchar(255) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpRecipientAddresses", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpRecipientAddresses` varchar(4096) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpNotifyEndpointDown", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpNotifyEndpointDown` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpNotifyEndpointRecovered", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpNotifyAgentOffline", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "SmtpNotifyAgentOnline", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `SmtpNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1;
                 """,
                 cancellationToken);
         }

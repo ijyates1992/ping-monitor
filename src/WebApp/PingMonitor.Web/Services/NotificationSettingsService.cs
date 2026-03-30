@@ -1,22 +1,47 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PingMonitor.Web.Services;
 
 internal sealed class NotificationSettingsService : INotificationSettingsService
 {
     private readonly PingMonitorDbContext _dbContext;
+    private readonly ILogger<NotificationSettingsService> _logger;
 
-    public NotificationSettingsService(PingMonitorDbContext dbContext)
+    public NotificationSettingsService(PingMonitorDbContext dbContext, ILogger<NotificationSettingsService> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public async Task<NotificationSettingsDto> GetCurrentAsync(CancellationToken cancellationToken)
     {
         var settings = await GetOrCreateEntityAsync(cancellationToken);
         return ToDto(settings);
+    }
+
+    public async Task<SmtpChannelSettingsDto> GetSmtpChannelAsync(CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateEntityAsync(cancellationToken);
+        return new SmtpChannelSettingsDto
+        {
+            SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,
+            SmtpHost = settings.SmtpHost,
+            SmtpPort = settings.SmtpPort <= 0 ? 25 : settings.SmtpPort,
+            SmtpUseTls = settings.SmtpUseTls,
+            SmtpUsername = settings.SmtpUsername,
+            SmtpPassword = UnprotectSmtpSecret(settings.SmtpPasswordProtected),
+            SmtpFromAddress = settings.SmtpFromAddress,
+            SmtpFromDisplayName = settings.SmtpFromDisplayName,
+            SmtpRecipientAddresses = settings.SmtpRecipientAddresses,
+            SmtpNotifyEndpointDown = settings.SmtpNotifyEndpointDown,
+            SmtpNotifyEndpointRecovered = settings.SmtpNotifyEndpointRecovered,
+            SmtpNotifyAgentOffline = settings.SmtpNotifyAgentOffline,
+            SmtpNotifyAgentOnline = settings.SmtpNotifyAgentOnline
+        };
     }
 
     public async Task<NotificationSettingsDto> UpdateAsync(UpdateNotificationSettingsCommand command, CancellationToken cancellationToken)
@@ -29,12 +54,40 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         settings.BrowserNotifyAgentOffline = command.BrowserNotifyAgentOffline;
         settings.BrowserNotifyAgentOnline = command.BrowserNotifyAgentOnline;
         settings.BrowserNotificationsPermissionState = NormalizePermissionState(command.BrowserNotificationsPermissionState);
+        settings.SmtpNotificationsEnabled = command.SmtpNotificationsEnabled;
+        settings.SmtpHost = NormalizeString(command.SmtpHost);
+        settings.SmtpPort = command.SmtpPort <= 0 ? 25 : command.SmtpPort;
+        settings.SmtpUseTls = command.SmtpUseTls;
+        settings.SmtpUsername = NormalizeString(command.SmtpUsername);
+        settings.SmtpFromAddress = NormalizeString(command.SmtpFromAddress);
+        settings.SmtpFromDisplayName = NormalizeString(command.SmtpFromDisplayName);
+        settings.SmtpRecipientAddresses = NormalizeRecipients(command.SmtpRecipientAddresses);
+        settings.SmtpNotifyEndpointDown = command.SmtpNotifyEndpointDown;
+        settings.SmtpNotifyEndpointRecovered = command.SmtpNotifyEndpointRecovered;
+        settings.SmtpNotifyAgentOffline = command.SmtpNotifyAgentOffline;
+        settings.SmtpNotifyAgentOnline = command.SmtpNotifyAgentOnline;
+
+        if (command.SmtpClearPassword)
+        {
+            settings.SmtpPasswordProtected = null;
+        }
+        else if (!string.IsNullOrWhiteSpace(command.SmtpPassword))
+        {
+            settings.SmtpPasswordProtected = ProtectSmtpSecret(command.SmtpPassword.Trim());
+        }
+
         settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
         settings.UpdatedByUserId = string.IsNullOrWhiteSpace(command.UpdatedByUserId)
             ? null
             : command.UpdatedByUserId.Trim();
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Notification settings updated by {UpdatedByUserId}. BrowserEnabled={BrowserEnabled} SmtpEnabled={SmtpEnabled}",
+            settings.UpdatedByUserId ?? "(unknown)",
+            settings.BrowserNotificationsEnabled,
+            settings.SmtpNotificationsEnabled);
+
         return ToDto(settings);
     }
 
@@ -59,6 +112,12 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             BrowserNotificationsPermissionState = "default",
             TelegramNotificationsEnabled = false,
             SmtpNotificationsEnabled = false,
+            SmtpPort = 25,
+            SmtpUseTls = true,
+            SmtpNotifyEndpointDown = true,
+            SmtpNotifyEndpointRecovered = true,
+            SmtpNotifyAgentOffline = true,
+            SmtpNotifyAgentOnline = true,
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
@@ -75,6 +134,68 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             : "default";
     }
 
+    private static string? NormalizeString(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeRecipients(string? recipients)
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+        {
+            return null;
+        }
+
+        var split = recipients
+            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return split.Length == 0 ? null : string.Join(Environment.NewLine, split);
+    }
+
+    private string ProtectSmtpSecret(string secret)
+    {
+        var payload = Encoding.UTF8.GetBytes(secret);
+        if (OperatingSystem.IsWindows())
+        {
+            payload = ProtectedData.Protect(payload, optionalEntropy: null, DataProtectionScope.LocalMachine);
+        }
+        else
+        {
+            _logger.LogWarning("SMTP password fallback storage is in use because DPAPI is only available on Windows.");
+        }
+
+        return Convert.ToBase64String(payload);
+    }
+
+    private string? UnprotectSmtpSecret(string? protectedSecret)
+    {
+        if (string.IsNullOrWhiteSpace(protectedSecret))
+        {
+            return null;
+        }
+
+        byte[] payload;
+        try
+        {
+            payload = Convert.FromBase64String(protectedSecret);
+        }
+        catch (FormatException)
+        {
+            _logger.LogWarning("Stored SMTP secret could not be decoded.");
+            return null;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            payload = ProtectedData.Unprotect(payload, optionalEntropy: null, DataProtectionScope.LocalMachine);
+        }
+
+        return Encoding.UTF8.GetString(payload);
+    }
+
     private static NotificationSettingsDto ToDto(NotificationSettings settings)
     {
         return new NotificationSettingsDto
@@ -87,6 +208,18 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState,
             TelegramNotificationsEnabled = settings.TelegramNotificationsEnabled,
             SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,
+            SmtpHost = settings.SmtpHost,
+            SmtpPort = settings.SmtpPort <= 0 ? 25 : settings.SmtpPort,
+            SmtpUseTls = settings.SmtpUseTls,
+            SmtpUsername = settings.SmtpUsername,
+            SmtpPasswordConfigured = !string.IsNullOrWhiteSpace(settings.SmtpPasswordProtected),
+            SmtpFromAddress = settings.SmtpFromAddress,
+            SmtpFromDisplayName = settings.SmtpFromDisplayName,
+            SmtpRecipientAddresses = settings.SmtpRecipientAddresses,
+            SmtpNotifyEndpointDown = settings.SmtpNotifyEndpointDown,
+            SmtpNotifyEndpointRecovered = settings.SmtpNotifyEndpointRecovered,
+            SmtpNotifyAgentOffline = settings.SmtpNotifyAgentOffline,
+            SmtpNotifyAgentOnline = settings.SmtpNotifyAgentOnline,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             UpdatedByUserId = settings.UpdatedByUserId
         };
