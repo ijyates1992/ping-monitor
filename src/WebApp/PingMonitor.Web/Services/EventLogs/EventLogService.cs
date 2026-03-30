@@ -45,12 +45,7 @@ internal sealed class EventLogService : IEventLogService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         var smtpResult = await _smtpNotificationSender.SendForEventAsync(eventLog, cancellationToken);
-        if (smtpResult.Success)
-        {
-            return;
-        }
-
-        if (!smtpResult.Skipped)
+        if (!smtpResult.Success && !smtpResult.Skipped)
         {
             _logger.LogWarning(
                 "SMTP notification was not delivered for event {EventType}: {Message}",

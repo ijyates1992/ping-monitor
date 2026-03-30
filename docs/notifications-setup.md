@@ -26,7 +26,6 @@ It is intended for operators and admins running the .NET 10 web app against MySQ
 - **Browser notifications** are phase-1 polling notifications while the app is open in the browser (no background service-worker push when browser/app is closed).
 - **Telegram inbound mode** is effectively polling in phase 1. Webhook-related fields exist in data model/spec, but there is no webhook inbound controller/handler path documented in runtime code yet.
 - **Telegram poll interval setting is saved**, but current polling worker loop runs every 10 seconds.
-- **Current event-dispatch limitation:** event pipeline currently returns early after a successful SMTP send, so Telegram event delivery may be skipped when SMTP succeeds for that same event.
 - **Notification source events** are an explicit subset of event-log events:
   - endpoint down
   - endpoint recovered
