@@ -1210,6 +1210,56 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             await connection.OpenAsync(cancellationToken);
         }
 
+        if (!await HasUserNotificationSettingsColumnAsync(connection, "TelegramNotificationsEnabled", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `UserNotificationSettings`
+                ADD COLUMN `TelegramNotificationsEnabled` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasUserNotificationSettingsColumnAsync(connection, "TelegramNotifyEndpointDown", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `UserNotificationSettings`
+                ADD COLUMN `TelegramNotifyEndpointDown` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasUserNotificationSettingsColumnAsync(connection, "TelegramNotifyEndpointRecovered", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `UserNotificationSettings`
+                ADD COLUMN `TelegramNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasUserNotificationSettingsColumnAsync(connection, "TelegramNotifyAgentOffline", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `UserNotificationSettings`
+                ADD COLUMN `TelegramNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasUserNotificationSettingsColumnAsync(connection, "TelegramNotifyAgentOnline", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `UserNotificationSettings`
+                ADD COLUMN `TelegramNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
         if (!await HasUserNotificationSettingsColumnAsync(connection, "QuietHoursSuppressTelegramNotifications", cancellationToken))
         {
             await dbContext.Database.ExecuteSqlRawAsync(
