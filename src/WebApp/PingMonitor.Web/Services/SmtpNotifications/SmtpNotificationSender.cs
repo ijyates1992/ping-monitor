@@ -1,25 +1,36 @@
 using System.Net;
 using System.Net.Mail;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services;
 
 namespace PingMonitor.Web.Services.SmtpNotifications;
 
 internal sealed class SmtpNotificationSender : ISmtpNotificationSender
 {
     private readonly INotificationSettingsService _notificationSettingsService;
+    private readonly INotificationSuppressionService _notificationSuppressionService;
     private readonly ILogger<SmtpNotificationSender> _logger;
 
     public SmtpNotificationSender(
         INotificationSettingsService notificationSettingsService,
+        INotificationSuppressionService notificationSuppressionService,
         ILogger<SmtpNotificationSender> logger)
     {
         _notificationSettingsService = notificationSettingsService;
+        _notificationSuppressionService = notificationSuppressionService;
         _logger = logger;
     }
 
-    public Task<SmtpNotificationSendResult> SendTestAsync(CancellationToken cancellationToken)
+    public async Task<SmtpNotificationSendResult> SendTestAsync(CancellationToken cancellationToken)
     {
-        return SendEmailAsync(
+        var suppressionDecision = await _notificationSuppressionService.IsSmtpNotificationSuppressedAsync(cancellationToken);
+        if (suppressionDecision.IsSuppressed)
+        {
+            _logger.LogDebug("SMTP test notification suppressed by quiet hours. Reason={Reason}", suppressionDecision.Reason);
+            return SmtpNotificationSendResult.Skip("SMTP notification suppressed by quiet hours.");
+        }
+
+        return await SendEmailAsync(
             subject: "Ping Monitor SMTP Test",
             body: "SMTP notifications are working.",
             eventKey: "smtp_test",
@@ -44,6 +55,13 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
         {
             _logger.LogDebug("SMTP notification skipped because event toggle is disabled for {EventType}.", eventLog.EventType);
             return SmtpNotificationSendResult.Skip("SMTP notification is disabled for this event type.");
+        }
+
+        var suppressionDecision = await _notificationSuppressionService.IsSmtpNotificationSuppressedAsync(cancellationToken);
+        if (suppressionDecision.IsSuppressed)
+        {
+            _logger.LogDebug("SMTP notification suppressed by quiet hours for event {EventType}. Reason={Reason}", eventLog.EventType, suppressionDecision.Reason);
+            return SmtpNotificationSendResult.Skip("SMTP notification suppressed by quiet hours.");
         }
 
         var body = BuildEventBody(eventLog);

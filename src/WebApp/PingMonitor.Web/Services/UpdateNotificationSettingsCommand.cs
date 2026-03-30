@@ -10,6 +10,13 @@ public sealed class UpdateNotificationSettingsCommand
 
     public string? BrowserNotificationsPermissionState { get; set; }
 
+    public bool QuietHoursEnabled { get; set; }
+    public string QuietHoursStartLocalTime { get; set; } = "22:00";
+    public string QuietHoursEndLocalTime { get; set; } = "07:00";
+    public string QuietHoursTimeZoneId { get; set; } = "UTC";
+    public bool QuietHoursSuppressBrowserNotifications { get; set; }
+    public bool QuietHoursSuppressSmtpNotifications { get; set; }
+
     public bool SmtpNotificationsEnabled { get; set; }
     public string? SmtpHost { get; set; }
     public int SmtpPort { get; set; }

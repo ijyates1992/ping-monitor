@@ -77,6 +77,12 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "BrowserNotifyAgentOnline",
         "BrowserNotificationsPermissionState",
         "TelegramNotificationsEnabled",
+        "QuietHoursEnabled",
+        "QuietHoursStartLocalTime",
+        "QuietHoursEndLocalTime",
+        "QuietHoursTimeZoneId",
+        "QuietHoursSuppressBrowserNotifications",
+        "QuietHoursSuppressSmtpNotifications",
         "SmtpNotificationsEnabled",
         "SmtpHost",
         "SmtpPort",
@@ -330,6 +336,12 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `BrowserNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1,
                 `BrowserNotificationsPermissionState` varchar(16) NULL,
                 `TelegramNotificationsEnabled` tinyint(1) NOT NULL,
+                `QuietHoursEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `QuietHoursStartLocalTime` varchar(5) NOT NULL DEFAULT '22:00',
+                `QuietHoursEndLocalTime` varchar(5) NOT NULL DEFAULT '07:00',
+                `QuietHoursTimeZoneId` varchar(128) NOT NULL DEFAULT 'UTC',
+                `QuietHoursSuppressBrowserNotifications` tinyint(1) NOT NULL DEFAULT 1,
+                `QuietHoursSuppressSmtpNotifications` tinyint(1) NOT NULL DEFAULT 1,
                 `SmtpNotificationsEnabled` tinyint(1) NOT NULL,
                 `SmtpHost` varchar(255) NULL,
                 `SmtpPort` int NOT NULL DEFAULT 25,
@@ -794,6 +806,66 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """
                 ALTER TABLE `NotificationSettings`
                 ADD COLUMN `SmtpHost` varchar(255) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "QuietHoursEnabled", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `QuietHoursEnabled` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "QuietHoursStartLocalTime", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `QuietHoursStartLocalTime` varchar(5) NOT NULL DEFAULT '22:00';
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "QuietHoursEndLocalTime", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `QuietHoursEndLocalTime` varchar(5) NOT NULL DEFAULT '07:00';
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "QuietHoursTimeZoneId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `QuietHoursTimeZoneId` varchar(128) NOT NULL DEFAULT 'UTC';
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "QuietHoursSuppressBrowserNotifications", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `QuietHoursSuppressBrowserNotifications` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "QuietHoursSuppressSmtpNotifications", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `QuietHoursSuppressSmtpNotifications` tinyint(1) NOT NULL DEFAULT 1;
                 """,
                 cancellationToken);
         }

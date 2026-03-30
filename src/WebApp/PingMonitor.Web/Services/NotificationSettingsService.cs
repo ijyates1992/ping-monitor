@@ -54,6 +54,12 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         settings.BrowserNotifyAgentOffline = command.BrowserNotifyAgentOffline;
         settings.BrowserNotifyAgentOnline = command.BrowserNotifyAgentOnline;
         settings.BrowserNotificationsPermissionState = NormalizePermissionState(command.BrowserNotificationsPermissionState);
+        settings.QuietHoursEnabled = command.QuietHoursEnabled;
+        settings.QuietHoursStartLocalTime = NormalizeQuietHoursTime(command.QuietHoursStartLocalTime, fallback: "22:00");
+        settings.QuietHoursEndLocalTime = NormalizeQuietHoursTime(command.QuietHoursEndLocalTime, fallback: "07:00");
+        settings.QuietHoursTimeZoneId = NormalizeTimeZoneId(command.QuietHoursTimeZoneId);
+        settings.QuietHoursSuppressBrowserNotifications = command.QuietHoursSuppressBrowserNotifications;
+        settings.QuietHoursSuppressSmtpNotifications = command.QuietHoursSuppressSmtpNotifications;
         settings.SmtpNotificationsEnabled = command.SmtpNotificationsEnabled;
         settings.SmtpHost = NormalizeString(command.SmtpHost);
         settings.SmtpPort = command.SmtpPort <= 0 ? 25 : command.SmtpPort;
@@ -83,10 +89,14 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         _logger.LogInformation(
-            "Notification settings updated by {UpdatedByUserId}. BrowserEnabled={BrowserEnabled} SmtpEnabled={SmtpEnabled}",
+            "Notification settings updated by {UpdatedByUserId}. BrowserEnabled={BrowserEnabled} SmtpEnabled={SmtpEnabled} QuietHoursEnabled={QuietHoursEnabled} QuietHours={QuietHoursStart}->{QuietHoursEnd} QuietHoursTimeZoneId={QuietHoursTimeZoneId}",
             settings.UpdatedByUserId ?? "(unknown)",
             settings.BrowserNotificationsEnabled,
-            settings.SmtpNotificationsEnabled);
+            settings.SmtpNotificationsEnabled,
+            settings.QuietHoursEnabled,
+            settings.QuietHoursStartLocalTime,
+            settings.QuietHoursEndLocalTime,
+            settings.QuietHoursTimeZoneId);
 
         return ToDto(settings);
     }
@@ -111,6 +121,12 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             BrowserNotifyAgentOnline = true,
             BrowserNotificationsPermissionState = "default",
             TelegramNotificationsEnabled = false,
+            QuietHoursEnabled = false,
+            QuietHoursStartLocalTime = "22:00",
+            QuietHoursEndLocalTime = "07:00",
+            QuietHoursTimeZoneId = "UTC",
+            QuietHoursSuppressBrowserNotifications = true,
+            QuietHoursSuppressSmtpNotifications = true,
             SmtpNotificationsEnabled = false,
             SmtpPort = 25,
             SmtpUseTls = true,
@@ -137,6 +153,21 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
     private static string? NormalizeString(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string NormalizeQuietHoursTime(string? value, string fallback)
+    {
+        if (TimeOnly.TryParseExact(value?.Trim(), "HH:mm", out var parsed))
+        {
+            return parsed.ToString("HH:mm");
+        }
+
+        return fallback;
+    }
+
+    private static string NormalizeTimeZoneId(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "UTC" : value.Trim();
     }
 
     private static string? NormalizeRecipients(string? recipients)
@@ -207,6 +238,12 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             BrowserNotifyAgentOnline = settings.BrowserNotifyAgentOnline,
             BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState,
             TelegramNotificationsEnabled = settings.TelegramNotificationsEnabled,
+            QuietHoursEnabled = settings.QuietHoursEnabled,
+            QuietHoursStartLocalTime = NormalizeQuietHoursTime(settings.QuietHoursStartLocalTime, "22:00"),
+            QuietHoursEndLocalTime = NormalizeQuietHoursTime(settings.QuietHoursEndLocalTime, "07:00"),
+            QuietHoursTimeZoneId = NormalizeTimeZoneId(settings.QuietHoursTimeZoneId),
+            QuietHoursSuppressBrowserNotifications = settings.QuietHoursSuppressBrowserNotifications,
+            QuietHoursSuppressSmtpNotifications = settings.QuietHoursSuppressSmtpNotifications,
             SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,
             SmtpHost = settings.SmtpHost,
             SmtpPort = settings.SmtpPort <= 0 ? 25 : settings.SmtpPort,

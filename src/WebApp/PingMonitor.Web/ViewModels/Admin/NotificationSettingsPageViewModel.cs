@@ -22,6 +22,30 @@ public sealed class NotificationSettingsPageViewModel
     [Display(Name = "Cached browser permission state")]
     public string BrowserNotificationsPermissionState { get; set; } = "default";
 
+    [Display(Name = "Enable quiet hours")]
+    public bool QuietHoursEnabled { get; set; }
+
+    [Display(Name = "Quiet hours start (local time)")]
+    public string QuietHoursStartLocalTime { get; set; } = "22:00";
+
+    [Display(Name = "Quiet hours end (local time)")]
+    public string QuietHoursEndLocalTime { get; set; } = "07:00";
+
+    [Display(Name = "Quiet hours time zone ID")]
+    public string QuietHoursTimeZoneId { get; set; } = "UTC";
+
+    [Display(Name = "Suppress browser notifications during quiet hours")]
+    public bool QuietHoursSuppressBrowserNotifications { get; set; }
+
+    [Display(Name = "Suppress SMTP notifications during quiet hours")]
+    public bool QuietHoursSuppressSmtpNotifications { get; set; }
+
+    public bool QuietHoursCurrentlyActive { get; set; }
+    public string QuietHoursCurrentStatusLabel { get; set; } = "inactive";
+    public string QuietHoursCurrentReason { get; set; } = string.Empty;
+    public string QuietHoursResolvedTimeZoneId { get; set; } = "UTC";
+    public DateTimeOffset QuietHoursEvaluatedAtUtc { get; set; }
+
     [Display(Name = "Enable SMTP email notifications")]
     public bool SmtpNotificationsEnabled { get; set; }
 

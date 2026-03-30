@@ -13,15 +13,18 @@ namespace PingMonitor.Web.Controllers;
 public sealed class NotificationSettingsController : Controller
 {
     private readonly INotificationSettingsService _notificationSettingsService;
+    private readonly INotificationSuppressionService _notificationSuppressionService;
     private readonly ISmtpNotificationSender _smtpNotificationSender;
     private readonly ILogger<NotificationSettingsController> _logger;
 
     public NotificationSettingsController(
         INotificationSettingsService notificationSettingsService,
+        INotificationSuppressionService notificationSuppressionService,
         ISmtpNotificationSender smtpNotificationSender,
         ILogger<NotificationSettingsController> logger)
     {
         _notificationSettingsService = notificationSettingsService;
+        _notificationSuppressionService = notificationSuppressionService;
         _smtpNotificationSender = smtpNotificationSender;
         _logger = logger;
     }
@@ -30,7 +33,7 @@ public sealed class NotificationSettingsController : Controller
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var settings = await _notificationSettingsService.GetCurrentAsync(cancellationToken);
-        return View("Index", ToViewModel(settings, saved: false));
+        return View("Index", await ToViewModelAsync(settings, saved: false, cancellationToken));
     }
 
     [HttpPost]
@@ -45,6 +48,7 @@ public sealed class NotificationSettingsController : Controller
         }
 
         ValidateSmtpSettings(model);
+        ValidateQuietHours(model);
 
         if (!ModelState.IsValid)
         {
@@ -60,6 +64,12 @@ public sealed class NotificationSettingsController : Controller
                 BrowserNotifyAgentOffline = model.BrowserNotifyAgentOffline,
                 BrowserNotifyAgentOnline = model.BrowserNotifyAgentOnline,
                 BrowserNotificationsPermissionState = model.BrowserNotificationsPermissionState,
+                QuietHoursEnabled = model.QuietHoursEnabled,
+                QuietHoursStartLocalTime = model.QuietHoursStartLocalTime,
+                QuietHoursEndLocalTime = model.QuietHoursEndLocalTime,
+                QuietHoursTimeZoneId = model.QuietHoursTimeZoneId,
+                QuietHoursSuppressBrowserNotifications = model.QuietHoursSuppressBrowserNotifications,
+                QuietHoursSuppressSmtpNotifications = model.QuietHoursSuppressSmtpNotifications,
                 SmtpNotificationsEnabled = model.SmtpNotificationsEnabled,
                 SmtpHost = model.SmtpHost,
                 SmtpPort = model.SmtpPort,
@@ -78,7 +88,7 @@ public sealed class NotificationSettingsController : Controller
             },
             cancellationToken);
 
-        return View("Index", ToViewModel(updated, saved: true));
+        return View("Index", await ToViewModelAsync(updated, saved: true, cancellationToken));
     }
 
     [HttpPost("smtp-test")]
@@ -91,6 +101,7 @@ public sealed class NotificationSettingsController : Controller
         }
 
         ValidateSmtpSettings(model);
+        ValidateQuietHours(model);
         if (!ModelState.IsValid)
         {
             model.SmtpTestSent = false;
@@ -107,6 +118,12 @@ public sealed class NotificationSettingsController : Controller
                 BrowserNotifyAgentOffline = model.BrowserNotifyAgentOffline,
                 BrowserNotifyAgentOnline = model.BrowserNotifyAgentOnline,
                 BrowserNotificationsPermissionState = model.BrowserNotificationsPermissionState,
+                QuietHoursEnabled = model.QuietHoursEnabled,
+                QuietHoursStartLocalTime = model.QuietHoursStartLocalTime,
+                QuietHoursEndLocalTime = model.QuietHoursEndLocalTime,
+                QuietHoursTimeZoneId = model.QuietHoursTimeZoneId,
+                QuietHoursSuppressBrowserNotifications = model.QuietHoursSuppressBrowserNotifications,
+                QuietHoursSuppressSmtpNotifications = model.QuietHoursSuppressSmtpNotifications,
                 SmtpNotificationsEnabled = model.SmtpNotificationsEnabled,
                 SmtpHost = model.SmtpHost,
                 SmtpPort = model.SmtpPort,
@@ -136,7 +153,7 @@ public sealed class NotificationSettingsController : Controller
         }
 
         var refreshed = await _notificationSettingsService.GetCurrentAsync(cancellationToken);
-        var viewModel = ToViewModel(refreshed, saved: false);
+        var viewModel = await ToViewModelAsync(refreshed, saved: false, cancellationToken);
         viewModel.SmtpTestSent = result.Success;
         viewModel.SmtpTestMessage = result.Message;
         return View("Index", viewModel);
@@ -175,8 +192,41 @@ public sealed class NotificationSettingsController : Controller
         }
     }
 
-    private static NotificationSettingsPageViewModel ToViewModel(NotificationSettingsDto settings, bool saved)
+    private void ValidateQuietHours(NotificationSettingsPageViewModel model)
     {
+        if (!TimeOnly.TryParseExact(model.QuietHoursStartLocalTime?.Trim(), "HH:mm", out _))
+        {
+            ModelState.AddModelError(nameof(model.QuietHoursStartLocalTime), "Quiet hours start time must use HH:mm (24-hour) format.");
+        }
+
+        if (!TimeOnly.TryParseExact(model.QuietHoursEndLocalTime?.Trim(), "HH:mm", out _))
+        {
+            ModelState.AddModelError(nameof(model.QuietHoursEndLocalTime), "Quiet hours end time must use HH:mm (24-hour) format.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.QuietHoursTimeZoneId))
+        {
+            ModelState.AddModelError(nameof(model.QuietHoursTimeZoneId), "Quiet hours time zone ID is required.");
+            return;
+        }
+
+        try
+        {
+            TimeZoneInfo.FindSystemTimeZoneById(model.QuietHoursTimeZoneId.Trim());
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            ModelState.AddModelError(nameof(model.QuietHoursTimeZoneId), "Quiet hours time zone ID was not found on this server.");
+        }
+        catch (InvalidTimeZoneException)
+        {
+            ModelState.AddModelError(nameof(model.QuietHoursTimeZoneId), "Quiet hours time zone ID is invalid.");
+        }
+    }
+
+    private async Task<NotificationSettingsPageViewModel> ToViewModelAsync(NotificationSettingsDto settings, bool saved, CancellationToken cancellationToken)
+    {
+        var suppressionStatus = await _notificationSuppressionService.GetCurrentStatusAsync(cancellationToken);
         return new NotificationSettingsPageViewModel
         {
             BrowserNotificationsEnabled = settings.BrowserNotificationsEnabled,
@@ -185,6 +235,17 @@ public sealed class NotificationSettingsController : Controller
             BrowserNotifyAgentOffline = settings.BrowserNotifyAgentOffline,
             BrowserNotifyAgentOnline = settings.BrowserNotifyAgentOnline,
             BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState ?? "default",
+            QuietHoursEnabled = settings.QuietHoursEnabled,
+            QuietHoursStartLocalTime = settings.QuietHoursStartLocalTime,
+            QuietHoursEndLocalTime = settings.QuietHoursEndLocalTime,
+            QuietHoursTimeZoneId = settings.QuietHoursTimeZoneId,
+            QuietHoursSuppressBrowserNotifications = settings.QuietHoursSuppressBrowserNotifications,
+            QuietHoursSuppressSmtpNotifications = settings.QuietHoursSuppressSmtpNotifications,
+            QuietHoursCurrentlyActive = suppressionStatus.QuietHoursActiveNow,
+            QuietHoursCurrentStatusLabel = suppressionStatus.QuietHoursActiveNow ? "active" : "inactive",
+            QuietHoursCurrentReason = suppressionStatus.Reason,
+            QuietHoursResolvedTimeZoneId = suppressionStatus.EffectiveTimeZoneId,
+            QuietHoursEvaluatedAtUtc = suppressionStatus.EvaluatedAtUtc,
             SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,
             SmtpHost = settings.SmtpHost,
             SmtpPort = settings.SmtpPort,
