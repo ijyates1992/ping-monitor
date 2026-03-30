@@ -93,7 +93,16 @@ internal sealed class TelegramPollingService : ITelegramPollingService
 
             if (processingResult.Handled)
             {
-                _logger.LogInformation("Telegram inbound message processed. Success={Success} Detail={Detail}", processingResult.Success, processingResult.Message);
+                _logger.LogInformation(
+                    "Telegram inbound message processed. Success={Success} Status={Status} Detail={Detail}",
+                    processingResult.Success,
+                    processingResult.Status,
+                    processingResult.Message);
+            }
+
+            if (processingResult.ShouldReply && !string.IsNullOrWhiteSpace(processingResult.ReplyText))
+            {
+                await SendReplyAsync(settings.TelegramBotToken, chatId, processingResult.ReplyText, cancellationToken);
             }
         }
 
@@ -132,6 +141,30 @@ internal sealed class TelegramPollingService : ITelegramPollingService
                 SmtpNotifyAgentOnline = current.SmtpNotifyAgentOnline,
                 UpdatedByUserId = current.UpdatedByUserId
             }, cancellationToken);
+        }
+    }
+
+    private async Task SendReplyAsync(string botToken, string chatId, string text, CancellationToken cancellationToken)
+    {
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["chat_id"] = chatId,
+            ["text"] = text
+        });
+
+        var url = $"https://api.telegram.org/bot{botToken}/sendMessage";
+
+        try
+        {
+            var response = await _httpClient.PostAsync(url, content, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Telegram verification reply failed for chat {ChatId} with status {StatusCode}.", chatId, (int)response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Telegram verification reply request failed for chat {ChatId}.", chatId);
         }
     }
 }

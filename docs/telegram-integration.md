@@ -68,6 +68,21 @@ Components: - Telegram Bot API (outbound) - Inbound updates
 6.  Chat ID linked to user
 7.  Bot confirms success
 
+### Bot reply behaviour (phase 1)
+
+When an operator sends a verification attempt to the bot, the bot must
+reply with a single, explicit outcome message.
+
+Reply outcomes:
+
+-   verification successful/link complete
+-   code expired
+-   code invalid/not recognised
+-   code already used
+-   unsupported chat type (non-private chat)
+
+Non-code or unrelated inbound messages may be ignored without reply.
+
 ------------------------------------------------------------------------
 
 ## Verification Rules
