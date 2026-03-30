@@ -1,43 +1,28 @@
-# Telegram Integration Specification
+# Telegram Integration Specification (Revised)
 
 ## Overview
 
-This document defines the design and implementation of Telegram
-integration for the Ping Monitor system.
+Telegram is a per-user notification channel for Ping Monitor.
 
-Telegram is used as a notification channel and supports secure account
-linking via a bot-based verification flow.
-
-The system supports two inbound communication modes:
-
--   Polling (default)
--   Webhook (optional, for public deployments)
+Integration supports: - Secure account linking via verification code -
+Browser-independent delivery - Polling (default) and Webhook (optional)
 
 ------------------------------------------------------------------------
 
-## Goals
+## Key Design Principles
 
--   Provide Telegram notifications for system events
--   Ensure secure and explicit user verification
--   Support both private (LAN/dev) and public deployments
--   Avoid requiring additional agents or services
--   Keep initial implementation simple and extensible
+-   Fully **per-user ownership**
+-   Inbound transport decoupled from processing
+-   Simple first-phase implementation
+-   Secure, explicit linking
+-   No global notification behaviour
 
 ------------------------------------------------------------------------
 
 ## Architecture
 
-Telegram integration consists of:
-
--   Bot API communication (outbound messages)
--   Inbound message handling (polling or webhook)
--   Account linking via verification codes
--   Notification delivery via Telegram
-
-### Key Principle
-
-Inbound transport (polling/webhook) must be decoupled from message
-processing.
+Components: - Telegram Bot API (outbound) - Inbound updates
+(Polling/Webhook) - Verification flow - Notification delivery
 
 ------------------------------------------------------------------------
 
@@ -45,46 +30,16 @@ processing.
 
 ### Polling (Default)
 
-Polling is the default mode and should be used in:
-
--   Development environments
--   LAN/internal deployments
--   Any environment without public internet access
-
-#### Behaviour
-
--   Background service polls Telegram for updates
--   Processes new messages using stored offset
--   Safe and reliable for all environments
-
-#### Requirements
-
--   Persist last processed update ID
--   Avoid duplicate message processing
-
-------------------------------------------------------------------------
+-   Uses long polling
+-   Persists last update ID
+-   Handles restarts safely
+-   Implements backoff on API errors
 
 ### Webhook (Optional)
 
-Webhook mode is more efficient but requires the application to be
-reachable from the public internet.
-
-#### Behaviour
-
--   Telegram sends updates via HTTP POST to the app
--   App processes incoming messages in real time
-
-#### Requirements
-
--   Public HTTPS endpoint
--   Webhook registration via Telegram API
--   Secret token validation
-
-#### Warning (UI Text)
-
-Webhook mode requires this application to be reachable from Telegram
-over the public internet.\
-It will not work on internal-only or non-public deployments.
+-   Requires public HTTPS
+-   Dedicated endpoint
+-   Validates Telegram secret token
 
 ------------------------------------------------------------------------
 
@@ -92,129 +47,118 @@ It will not work on internal-only or non-public deployments.
 
 ### Telegram Settings
 
--   Enabled (bool)
+-   Enabled
 -   Bot Token (secure)
--   Inbound Mode (Polling / Webhook)
-
-### Polling Settings (Polling Mode Only)
-
--   Poll Interval (seconds)
-
-### Webhook Settings (Webhook Mode Only)
-
--   Webhook URL
--   Register Webhook button
--   Webhook status display
+-   Inbound Mode (Polling/Webhook)
 
 ------------------------------------------------------------------------
 
-## Account Linking (Verification Flow)
-
-Telegram accounts are linked using a secure, user-initiated verification
-process.
+## Account Linking (Per-User)
 
 ### Flow
 
-1.  System generates a random 8-digit code
-2.  User is instructed to send the code to the Telegram bot
-3.  Bot receives message via polling or webhook
-4.  System matches code to pending link request
-5.  Chat ID is stored and marked as verified
-6.  Bot confirms successful linking
-
-### Example
-
-User sends: 48291357
-
-Bot replies: ✅ Your Telegram account is now linked to Ping Monitor.
+1.  User requests link from profile page
+2.  System generates 8-digit code
+3.  User sends code to bot **via private chat**
+4.  System matches code:
+    -   not expired
+    -   not used
+    -   tied to user
+5.  Code consumed atomically
+6.  Chat ID linked to user
+7.  Bot confirms success
 
 ------------------------------------------------------------------------
 
 ## Verification Rules
 
--   Codes must be:
-    -   Random (8 digits)
-    -   One-time use
-    -   Expire after a short period (e.g. 10--15 minutes)
--   Only verified Telegram accounts may receive alerts
+-   8-digit random codes
+-   One-time use
+-   Expire (10--15 minutes)
+-   Private chat only (phase 1)
 
 ------------------------------------------------------------------------
 
-## Data Model (Initial)
+## Data Model
 
 ### PendingTelegramLink
 
+-   UserId
 -   Code
 -   CreatedAtUtc
 -   ExpiresAtUtc
+-   UsedAtUtc
+-   ConsumedByChatId
+-   Status
 
 ### TelegramAccount
 
+-   UserId
 -   ChatId
--   Verified (bool)
+-   Verified
 -   LinkedAtUtc
+-   Username (optional)
+-   DisplayName (optional)
+-   IsActive
 
 ------------------------------------------------------------------------
 
 ## Notification Delivery
 
-Telegram is treated as a notification channel.
+Telegram is per-user:
 
-### Behaviour
+-   Only to verified accounts
+-   Respects per-user settings
+-   Respects per-event-type settings
+-   Respects quiet hours
 
--   Only send notifications to verified Telegram accounts
--   Respect global notification settings
--   Respect per-event-type settings
+### First Phase Constraints
 
-### Message Format (Initial)
+-   One Telegram account per user
+-   Private chats only
+-   No groups/channels
 
-Plain text only.
+------------------------------------------------------------------------
 
-Examples:
+## Message Format
+
+Plain text:
 
 -   Ping Monitor: Endpoint Down - Core Switch
 -   Ping Monitor: Endpoint Recovered - Core Switch after 00:05:12
 
 ------------------------------------------------------------------------
 
-## Security Considerations
+## Security
 
--   Do not expose bot token in logs
--   Validate webhook secret token
--   Never send alerts to unverified accounts
--   Expire verification codes
+-   Do not log bot token
+-   Validate webhook secret
+-   Expire codes
+-   Never notify unverified users
+
+------------------------------------------------------------------------
+
+## Error Handling
+
+-   Log send failures
+-   Do not break pipeline on failure
+-   Optional retry later
 
 ------------------------------------------------------------------------
 
 ## Future Enhancements
 
-The following are out of scope for initial implementation but should be
-supported by design:
-
--   Multiple Telegram recipients
--   Per-user Telegram notification preferences
--   Per-agent notification routing
--   Rich message formatting (Markdown, buttons)
--   Automatic chat ID discovery
--   Notification templates
-
-------------------------------------------------------------------------
-
-## Implementation Notes
-
--   Use Telegram Bot API (no external agents)
--   Use .NET library (e.g. Telegram.Bot) or direct HTTP
--   Keep inbound handling modular:
-    -   Polling source
-    -   Webhook source
-    -   Shared message processor
+-   Multiple Telegram accounts per user
+-   Group/channel support
+-   Rich formatting
+-   Routing rules
+-   Templates
 
 ------------------------------------------------------------------------
 
 ## Summary
 
--   Polling is the default and safe option
--   Webhook is optional for public deployments
--   Account linking is user-driven and secure
--   Telegram integration is built directly into the web app
--   Design supports future per-user notification expansion
+-   Fully per-user design
+-   Secure linking
+-   Polling default, webhook optional
+-   Clean extensibility
