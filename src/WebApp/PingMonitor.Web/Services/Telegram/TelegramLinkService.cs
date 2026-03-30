@@ -123,6 +123,26 @@ internal sealed class TelegramLinkService : ITelegramLinkService
         return new TelegramLinkConsumeResult { Success = true, Message = "Telegram account linked." };
     }
 
+
+    public async Task<bool> UnlinkAccountAsync(string userId, CancellationToken cancellationToken)
+    {
+        var normalizedUserId = userId.Trim();
+        var account = await _dbContext.TelegramAccounts
+            .SingleOrDefaultAsync(x => x.UserId == normalizedUserId && x.IsActive, cancellationToken);
+
+        if (account is null)
+        {
+            return false;
+        }
+
+        account.IsActive = false;
+        account.Verified = false;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Telegram account unlinked for user {UserId}.", normalizedUserId);
+
+        return true;
+    }
     public async Task<TelegramAccountStatusDto?> GetAccountStatusAsync(string userId, CancellationToken cancellationToken)
     {
         var row = await _dbContext.TelegramAccounts.AsNoTracking()

@@ -197,6 +197,23 @@ public sealed class ProfileController : Controller
     }
 
 
+
+    [HttpPost("telegram/remove")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveTelegramAccount(CancellationToken cancellationToken)
+    {
+        var user = await RequireUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        await _telegramLinkService.UnlinkAccountAsync(user.Id, cancellationToken);
+        var refreshed = await BuildModelAsync(cancellationToken);
+        refreshed.TelegramAccountRemoved = true;
+        return View("Index", refreshed);
+    }
+
     [HttpPost("telegram/generate-code")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> GenerateTelegramCode(CancellationToken cancellationToken)

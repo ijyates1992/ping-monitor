@@ -53,4 +53,5 @@ public sealed class ProfilePageViewModel
     public string? TelegramLinkedDisplayName { get; set; }
     public DateTimeOffset? TelegramLinkedAtUtc { get; set; }
     public bool TelegramCodeGenerated { get; set; }
+    public bool TelegramAccountRemoved { get; set; }
 }
