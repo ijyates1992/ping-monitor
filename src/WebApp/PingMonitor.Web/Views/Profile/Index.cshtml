@@ -1,0 +1,90 @@
+@model PingMonitor.Web.ViewModels.Profile.ProfilePageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My profile</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --success:#137333; --error-bg:#fee4e2; --error-text:#b42318; }
+        *{box-sizing:border-box;} body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);} main{max-width:820px;margin:0 auto;padding:1rem;}
+        .stack{display:grid;gap:1rem;} .card{background:var(--card);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.08);padding:1rem;}
+        .button-row{display:flex;gap:.75rem;flex-wrap:wrap;} .button,.button-secondary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:.7rem 1rem;border-radius:10px;font-weight:600;text-decoration:none;}
+        .button{border:0;background:var(--accent);color:#fff;cursor:pointer;} .button-secondary{border:1px solid var(--border);color:var(--text);background:#fff;cursor:pointer;}
+        .saved{border:1px solid #c2f0c2;background:#ebffee;color:var(--success);border-radius:10px;padding:.8rem;} .errors{border:1px solid #fda29b;background:var(--error-bg);color:var(--error-text);border-radius:10px;padding:.8rem;}
+        .muted{color:var(--muted);} .field-error{color:var(--error-text);font-size:.9rem;margin-top:.25rem;} .switch-row{display:flex;align-items:center;gap:.75rem;}
+        input[type="text"],input[type="email"],input[type="password"],input[type="time"]{width:100%;min-height:44px;border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem;font:inherit;}
+    </style>
+</head>
+<body>
+<main>
+<div class="stack">
+<section class="card">
+    <h1>My profile</h1>
+    <p class="muted">Manage your account details and your own notification preferences.</p>
+    <div class="button-row"><a class="button-secondary" href="/status">Back to status</a></div>
+</section>
+@if (!ViewData.ModelState.IsValid) { <div class="errors" asp-validation-summary="ModelOnly"></div> }
+<section class="card stack">
+    <h2>Account details</h2>
+    @if (Model.AccountSaved) { <div class="saved">Email updated.</div> }
+    <form method="post" action="/profile/account" class="stack">
+        @Html.AntiForgeryToken()
+        <div><label>Username</label><input value="@Model.UserName" type="text" readonly /></div>
+        <div><label asp-for="Email"></label><input asp-for="Email" type="email" /><div class="field-error"><span asp-validation-for="Email"></span></div></div>
+        <div class="button-row"><button class="button" type="submit">Save account details</button></div>
+    </form>
+</section>
+<section class="card stack">
+    <h2>Change password</h2>
+    @if (Model.PasswordSaved) { <div class="saved">Password changed.</div> }
+    <form method="post" action="/profile/password" class="stack">
+        @Html.AntiForgeryToken()
+        <div><label asp-for="CurrentPassword"></label><input asp-for="CurrentPassword" type="password" autocomplete="current-password" /><div class="field-error"><span asp-validation-for="CurrentPassword"></span></div></div>
+        <div><label asp-for="NewPassword"></label><input asp-for="NewPassword" type="password" autocomplete="new-password" /><div class="field-error"><span asp-validation-for="NewPassword"></span></div></div>
+        <div><label asp-for="ConfirmNewPassword"></label><input asp-for="ConfirmNewPassword" type="password" autocomplete="new-password" /><div class="field-error"><span asp-validation-for="ConfirmNewPassword"></span></div></div>
+        <div class="button-row"><button class="button" type="submit">Change password</button></div>
+    </form>
+</section>
+<section class="card stack">
+    <h2>Notification preferences</h2>
+    @if (Model.NotificationsSaved) { <div class="saved">Notification preferences saved.</div> }
+    <form method="post" action="/profile/notifications" class="stack">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="BrowserNotificationsPermissionState" id="browserPermissionStateInput" />
+        <h3>Browser</h3>
+        <div class="switch-row"><input asp-for="BrowserNotificationsEnabled" type="checkbox" /><label asp-for="BrowserNotificationsEnabled">Enable browser notifications</label></div>
+        <div class="switch-row"><input asp-for="BrowserNotifyEndpointDown" type="checkbox" /><label asp-for="BrowserNotifyEndpointDown">Endpoint down</label></div>
+        <div class="switch-row"><input asp-for="BrowserNotifyEndpointRecovered" type="checkbox" /><label asp-for="BrowserNotifyEndpointRecovered">Endpoint recovered</label></div>
+        <div class="switch-row"><input asp-for="BrowserNotifyAgentOffline" type="checkbox" /><label asp-for="BrowserNotifyAgentOffline">Agent offline</label></div>
+        <div class="switch-row"><input asp-for="BrowserNotifyAgentOnline" type="checkbox" /><label asp-for="BrowserNotifyAgentOnline">Agent online</label></div>
+
+        <h3>SMTP</h3>
+        <div class="switch-row"><input asp-for="SmtpNotificationsEnabled" type="checkbox" /><label asp-for="SmtpNotificationsEnabled">Enable SMTP notifications to my email</label></div>
+        <div class="switch-row"><input asp-for="SmtpNotifyEndpointDown" type="checkbox" /><label asp-for="SmtpNotifyEndpointDown">Endpoint down</label></div>
+        <div class="switch-row"><input asp-for="SmtpNotifyEndpointRecovered" type="checkbox" /><label asp-for="SmtpNotifyEndpointRecovered">Endpoint recovered</label></div>
+        <div class="switch-row"><input asp-for="SmtpNotifyAgentOffline" type="checkbox" /><label asp-for="SmtpNotifyAgentOffline">Agent offline</label></div>
+        <div class="switch-row"><input asp-for="SmtpNotifyAgentOnline" type="checkbox" /><label asp-for="SmtpNotifyAgentOnline">Agent online</label></div>
+
+        <h3>Quiet hours</h3>
+        <div class="switch-row"><input asp-for="QuietHoursEnabled" type="checkbox" /><label asp-for="QuietHoursEnabled">Enable quiet hours</label></div>
+        <div><label asp-for="QuietHoursStartLocalTime">Start</label><input asp-for="QuietHoursStartLocalTime" type="time" /><div class="field-error"><span asp-validation-for="QuietHoursStartLocalTime"></span></div></div>
+        <div><label asp-for="QuietHoursEndLocalTime">End</label><input asp-for="QuietHoursEndLocalTime" type="time" /><div class="field-error"><span asp-validation-for="QuietHoursEndLocalTime"></span></div></div>
+        <div><label asp-for="QuietHoursTimeZoneId">Time zone ID</label><input asp-for="QuietHoursTimeZoneId" type="text" /><div class="field-error"><span asp-validation-for="QuietHoursTimeZoneId"></span></div></div>
+        <div class="switch-row"><input asp-for="QuietHoursSuppressBrowserNotifications" type="checkbox" /><label asp-for="QuietHoursSuppressBrowserNotifications">Suppress browser during quiet hours</label></div>
+        <div class="switch-row"><input asp-for="QuietHoursSuppressSmtpNotifications" type="checkbox" /><label asp-for="QuietHoursSuppressSmtpNotifications">Suppress SMTP during quiet hours</label></div>
+        <p class="muted">Settings last updated at @Model.NotificationSettingsUpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'").</p>
+        <div class="button-row"><button class="button" type="submit">Save notification preferences</button></div>
+    </form>
+</section>
+</div>
+</main>
+<script>
+(() => {
+const input=document.getElementById('browserPermissionStateInput');
+if (typeof Notification !== 'undefined' && input) { input.value = Notification.permission; }
+})();
+</script>
+</body>
+</html>

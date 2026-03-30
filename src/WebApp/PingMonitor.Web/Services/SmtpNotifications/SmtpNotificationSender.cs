@@ -1,39 +1,41 @@
 using System.Net;
 using System.Net.Mail;
+using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Data;
 using PingMonitor.Web.Services;
 
 namespace PingMonitor.Web.Services.SmtpNotifications;
 
 internal sealed class SmtpNotificationSender : ISmtpNotificationSender
 {
+    private readonly PingMonitorDbContext _dbContext;
     private readonly INotificationSettingsService _notificationSettingsService;
+    private readonly IUserNotificationSettingsService _userNotificationSettingsService;
     private readonly INotificationSuppressionService _notificationSuppressionService;
     private readonly ILogger<SmtpNotificationSender> _logger;
 
     public SmtpNotificationSender(
+        PingMonitorDbContext dbContext,
         INotificationSettingsService notificationSettingsService,
+        IUserNotificationSettingsService userNotificationSettingsService,
         INotificationSuppressionService notificationSuppressionService,
         ILogger<SmtpNotificationSender> logger)
     {
+        _dbContext = dbContext;
         _notificationSettingsService = notificationSettingsService;
+        _userNotificationSettingsService = userNotificationSettingsService;
         _notificationSuppressionService = notificationSuppressionService;
         _logger = logger;
     }
 
-    public async Task<SmtpNotificationSendResult> SendTestAsync(CancellationToken cancellationToken)
+    public async Task<SmtpNotificationSendResult> SendTestAsync(string recipientAddress, CancellationToken cancellationToken)
     {
-        var suppressionDecision = await _notificationSuppressionService.IsSmtpNotificationSuppressedAsync(cancellationToken);
-        if (suppressionDecision.IsSuppressed)
-        {
-            _logger.LogDebug("SMTP test notification suppressed by quiet hours. Reason={Reason}", suppressionDecision.Reason);
-            return SmtpNotificationSendResult.Skip("SMTP notification suppressed by quiet hours.");
-        }
-
         return await SendEmailAsync(
             subject: "Ping Monitor SMTP Test",
             body: "SMTP notifications are working.",
             eventKey: "smtp_test",
+            recipients: [recipientAddress],
             cancellationToken);
     }
 
@@ -45,33 +47,21 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
             return SmtpNotificationSendResult.Skip("Event type is not supported for SMTP notifications.");
         }
 
-        var settings = await _notificationSettingsService.GetSmtpChannelAsync(cancellationToken);
-        if (!settings.SmtpNotificationsEnabled)
+        var eligibleRecipientAddresses = await ResolveEligibleRecipientsAsync(mapped.Value.EventToggle, cancellationToken);
+        if (eligibleRecipientAddresses.Count == 0)
         {
-            return SmtpNotificationSendResult.Skip("SMTP notifications are disabled.");
-        }
-
-        if (!IsEventEnabled(mapped.Value.EventToggle, settings))
-        {
-            _logger.LogDebug("SMTP notification skipped because event toggle is disabled for {EventType}.", eventLog.EventType);
-            return SmtpNotificationSendResult.Skip("SMTP notification is disabled for this event type.");
-        }
-
-        var suppressionDecision = await _notificationSuppressionService.IsSmtpNotificationSuppressedAsync(cancellationToken);
-        if (suppressionDecision.IsSuppressed)
-        {
-            _logger.LogDebug("SMTP notification suppressed by quiet hours for event {EventType}. Reason={Reason}", eventLog.EventType, suppressionDecision.Reason);
-            return SmtpNotificationSendResult.Skip("SMTP notification suppressed by quiet hours.");
+            return SmtpNotificationSendResult.Skip("No users are eligible for SMTP delivery for this event.");
         }
 
         var body = BuildEventBody(eventLog);
-        return await SendEmailAsync(mapped.Value.Subject, body, eventLog.EventType, cancellationToken);
+        return await SendEmailAsync(mapped.Value.Subject, body, eventLog.EventType, eligibleRecipientAddresses, cancellationToken);
     }
 
     private async Task<SmtpNotificationSendResult> SendEmailAsync(
         string subject,
         string body,
         string eventKey,
+        IReadOnlyList<string> recipients,
         CancellationToken cancellationToken)
     {
         var settings = await _notificationSettingsService.GetSmtpChannelAsync(cancellationToken);
@@ -86,8 +76,6 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
             return validation;
         }
 
-        var recipients = ParseRecipients(settings.SmtpRecipientAddresses!);
-
         try
         {
             using var message = new MailMessage
@@ -100,7 +88,7 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
 
             foreach (var recipient in recipients)
             {
-                message.To.Add(recipient);
+                message.To.Add(new MailAddress(recipient));
             }
 
             using var client = new SmtpClient(settings.SmtpHost!, settings.SmtpPort)
@@ -151,39 +139,43 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
             return SmtpNotificationSendResult.Failed("SMTP from address is not valid.");
         }
 
-        if (string.IsNullOrWhiteSpace(settings.SmtpRecipientAddresses))
-        {
-            return SmtpNotificationSendResult.Failed("At least one SMTP recipient address is required.");
-        }
-
         if (!string.IsNullOrWhiteSpace(settings.SmtpUsername) && string.IsNullOrWhiteSpace(settings.SmtpPassword))
         {
             return SmtpNotificationSendResult.Failed("SMTP password is required when SMTP username is provided.");
         }
 
-        var recipients = ParseRecipients(settings.SmtpRecipientAddresses);
-        if (recipients.Count == 0)
-        {
-            return SmtpNotificationSendResult.Failed("At least one valid SMTP recipient address is required.");
-        }
-
         return SmtpNotificationSendResult.Sent("SMTP settings are valid.");
     }
 
-    private static List<MailAddress> ParseRecipients(string recipientAddresses)
+    private async Task<IReadOnlyList<string>> ResolveEligibleRecipientsAsync(SmtpEventToggle toggle, CancellationToken cancellationToken)
     {
-        var recipients = new List<MailAddress>();
-        var pieces = recipientAddresses.Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var users = await _dbContext.Users
+            .Where(x => !string.IsNullOrWhiteSpace(x.Email))
+            .Select(x => new { x.Id, x.Email })
+            .ToArrayAsync(cancellationToken);
 
-        foreach (var piece in pieces)
+        var recipients = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var user in users)
         {
-            if (MailAddress.TryCreate(piece, out var recipient))
+            var userSettings = await _userNotificationSettingsService.GetCurrentAsync(user.Id, cancellationToken);
+            if (!userSettings.SmtpNotificationsEnabled || !IsEventEnabled(toggle, userSettings))
             {
-                recipients.Add(recipient);
+                continue;
+            }
+
+            var suppressionDecision = _notificationSuppressionService.IsSmtpNotificationSuppressed(userSettings);
+            if (suppressionDecision.IsSuppressed)
+            {
+                continue;
+            }
+
+            if (MailAddress.TryCreate(user.Email, out var recipient))
+            {
+                recipients.Add(recipient.Address);
             }
         }
 
-        return recipients;
+        return recipients.ToArray();
     }
 
     private static MappedEvent? MapEvent(EventLog eventLog)
@@ -216,7 +208,7 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
         return null;
     }
 
-    private static bool IsEventEnabled(SmtpEventToggle toggle, SmtpChannelSettingsDto settings)
+    private static bool IsEventEnabled(SmtpEventToggle toggle, UserNotificationSettingsDto settings)
     {
         return toggle switch
         {

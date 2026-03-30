@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
-using PingMonitor.Web.Services;
 
 namespace PingMonitor.Web.Services.BrowserNotifications;
 
@@ -18,22 +18,33 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
     ];
 
     private readonly PingMonitorDbContext _dbContext;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IUserNotificationSettingsService _userNotificationSettingsService;
     private readonly INotificationSuppressionService _notificationSuppressionService;
 
     public BrowserNotificationQueryService(
         PingMonitorDbContext dbContext,
+        IHttpContextAccessor httpContextAccessor,
+        IUserNotificationSettingsService userNotificationSettingsService,
         INotificationSuppressionService notificationSuppressionService)
     {
         _dbContext = dbContext;
+        _httpContextAccessor = httpContextAccessor;
+        _userNotificationSettingsService = userNotificationSettingsService;
         _notificationSuppressionService = notificationSuppressionService;
     }
 
     public async Task<BrowserNotificationFeedDto> GetFeedAsync(string? lastEventId, int maxItems, CancellationToken cancellationToken)
     {
-        var settings = await _dbContext.NotificationSettings.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.NotificationSettingsId == NotificationSettings.SingletonId, cancellationToken);
+        var userId = _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return new BrowserNotificationFeedDto { BrowserNotificationsEnabled = false };
+        }
 
-        if (settings is null || !settings.BrowserNotificationsEnabled)
+        var settings = await _userNotificationSettingsService.GetCurrentAsync(userId, cancellationToken);
+
+        if (!settings.BrowserNotificationsEnabled)
         {
             return new BrowserNotificationFeedDto
             {
@@ -41,7 +52,7 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
             };
         }
 
-        var suppressionDecision = await _notificationSuppressionService.IsBrowserNotificationSuppressedAsync(cancellationToken);
+        var suppressionDecision = _notificationSuppressionService.IsBrowserNotificationSuppressed(settings);
         if (suppressionDecision.IsSuppressed)
         {
             return new BrowserNotificationFeedDto
@@ -134,7 +145,7 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
         });
     }
 
-    private static BrowserNotificationEventDto? MapNotification(EventRow row, NotificationSettings settings)
+    private static BrowserNotificationEventDto? MapNotification(EventRow row, UserNotificationSettingsDto settings)
     {
         var mappedEvent = MapSupportedEventType(row);
         if (mappedEvent is null)
@@ -180,7 +191,7 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
         return null;
     }
 
-    private static bool IsEventTypeEnabled(BrowserNotificationEventKind eventKind, NotificationSettings settings)
+    private static bool IsEventTypeEnabled(BrowserNotificationEventKind eventKind, UserNotificationSettingsDto settings)
     {
         return eventKind switch
         {

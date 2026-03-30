@@ -36,6 +36,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<SecuritySettings> SecuritySettings => Set<SecuritySettings>();
     public DbSet<SecurityIpBlock> SecurityIpBlocks => Set<SecurityIpBlock>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
+    public DbSet<UserNotificationSettings> UserNotificationSettings => Set<UserNotificationSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -283,6 +284,29 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         notificationSettings.Property(x => x.SmtpNotifyAgentOnline).IsRequired();
         notificationSettings.Property(x => x.UpdatedAtUtc).IsRequired();
         notificationSettings.Property(x => x.UpdatedByUserId).HasMaxLength(255);
+
+        var userNotificationSettings = modelBuilder.Entity<UserNotificationSettings>();
+        userNotificationSettings.ToTable("UserNotificationSettings");
+        userNotificationSettings.HasKey(x => x.UserId);
+        userNotificationSettings.Property(x => x.UserId).HasMaxLength(255).ValueGeneratedNever();
+        userNotificationSettings.Property(x => x.BrowserNotificationsEnabled).IsRequired();
+        userNotificationSettings.Property(x => x.BrowserNotifyEndpointDown).IsRequired();
+        userNotificationSettings.Property(x => x.BrowserNotifyEndpointRecovered).IsRequired();
+        userNotificationSettings.Property(x => x.BrowserNotifyAgentOffline).IsRequired();
+        userNotificationSettings.Property(x => x.BrowserNotifyAgentOnline).IsRequired();
+        userNotificationSettings.Property(x => x.BrowserNotificationsPermissionState).HasMaxLength(16);
+        userNotificationSettings.Property(x => x.SmtpNotificationsEnabled).IsRequired();
+        userNotificationSettings.Property(x => x.SmtpNotifyEndpointDown).IsRequired();
+        userNotificationSettings.Property(x => x.SmtpNotifyEndpointRecovered).IsRequired();
+        userNotificationSettings.Property(x => x.SmtpNotifyAgentOffline).IsRequired();
+        userNotificationSettings.Property(x => x.SmtpNotifyAgentOnline).IsRequired();
+        userNotificationSettings.Property(x => x.QuietHoursEnabled).IsRequired();
+        userNotificationSettings.Property(x => x.QuietHoursStartLocalTime).HasMaxLength(5).IsRequired();
+        userNotificationSettings.Property(x => x.QuietHoursEndLocalTime).HasMaxLength(5).IsRequired();
+        userNotificationSettings.Property(x => x.QuietHoursTimeZoneId).HasMaxLength(128).IsRequired();
+        userNotificationSettings.Property(x => x.QuietHoursSuppressBrowserNotifications).IsRequired();
+        userNotificationSettings.Property(x => x.QuietHoursSuppressSmtpNotifications).IsRequired();
+        userNotificationSettings.Property(x => x.UpdatedAtUtc).IsRequired();
 
         var securitySettings = modelBuilder.Entity<SecuritySettings>();
         securitySettings.ToTable("SecuritySettings");

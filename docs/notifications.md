@@ -43,17 +43,21 @@ For phase 1 browser and SMTP delivery, notification events are sourced from the 
 
 The system will support notification settings.
 
-Initial settings scope:
+Initial settings scope is split by ownership:
+
+### Admin-owned channel infrastructure settings
+
+- SMTP server settings (host, port, TLS mode, username, password secret, from address/display name)
+- SMTP infrastructure test-send action for operator verification
+
+### User-owned profile notification preferences
 
 - browser notifications enabled/disabled
 - browser notifications enabled/disabled per supported event type
-- test notification action for operator verification
+- cached browser permission state
 - SMTP notifications enabled/disabled
-- SMTP server settings (host, port, TLS mode, username, password secret, from address/display name)
-- SMTP recipient address list
 - SMTP notifications enabled/disabled per supported event type
-- SMTP test-send action for operator verification
-- quiet hours enabled/disabled (global delivery suppression window)
+- quiet hours enabled/disabled (per-user delivery suppression window)
 - quiet hours start local time (daily)
 - quiet hours end local time (daily)
 - quiet hours time zone basis
@@ -68,13 +72,13 @@ Future settings scope:
 
 ## Quiet hours / suppression windows (phase 1)
 
-Quiet hours are a **global daily notification-delivery suppression window** for operator convenience.
+Quiet hours are a **per-user daily notification-delivery suppression window** for operator convenience.
 
 Phase 1 scope:
 
-- applies globally across notification delivery
-- browser delivery respects quiet hours when browser suppression is enabled
-- SMTP delivery respects quiet hours when SMTP suppression is enabled
+- each authenticated user manages their own quiet-hours values in their profile
+- browser delivery respects that user's quiet-hours browser suppression toggle
+- SMTP delivery eligibility respects each user's quiet-hours SMTP suppression toggle
 - Telegram is not included in this phase
 
 Critical semantics:
@@ -124,8 +128,8 @@ Supported browser-deliverable event types in phase 1:
 
 Phase 1 browser settings are explicit and require both:
 
-- global browser notifications enabled in app settings, and
-- the specific event type enabled in app settings.
+- browser notifications enabled in the current authenticated user's profile, and
+- the specific browser event type enabled in that same user profile.
 
 Browser permission remains separate and must still be granted by the operator in the browser.
 
@@ -149,6 +153,13 @@ Future channel additions should reuse a common event model and avoid coupling no
 
 ## UI direction
 
-The next implementation step is a dedicated notification settings page in the web application.
+Phase 1 per-user ownership starts with a dedicated authenticated `/profile` page in the web application.
 
-That page should start with browser notification controls and provide clear placeholders for future Telegram and SMTP email settings.
+That page includes:
+
+- account details (username display + email update)
+- password change
+- user-owned browser and SMTP notification preferences
+- user-owned quiet-hours preferences
+
+The admin notification settings page remains for channel infrastructure (SMTP transport/server configuration), while per-user delivery preferences live in each user profile.

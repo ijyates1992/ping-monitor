@@ -35,12 +35,7 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             SmtpUsername = settings.SmtpUsername,
             SmtpPassword = UnprotectSmtpSecret(settings.SmtpPasswordProtected),
             SmtpFromAddress = settings.SmtpFromAddress,
-            SmtpFromDisplayName = settings.SmtpFromDisplayName,
-            SmtpRecipientAddresses = settings.SmtpRecipientAddresses,
-            SmtpNotifyEndpointDown = settings.SmtpNotifyEndpointDown,
-            SmtpNotifyEndpointRecovered = settings.SmtpNotifyEndpointRecovered,
-            SmtpNotifyAgentOffline = settings.SmtpNotifyAgentOffline,
-            SmtpNotifyAgentOnline = settings.SmtpNotifyAgentOnline
+            SmtpFromDisplayName = settings.SmtpFromDisplayName
         };
     }
 
