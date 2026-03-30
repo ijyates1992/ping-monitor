@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using PingMonitor.Web.Models;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
@@ -58,6 +59,11 @@ public sealed class NotificationSettingsController : Controller
                 BrowserNotifyAgentOffline = true,
                 BrowserNotifyAgentOnline = true,
                 BrowserNotificationsPermissionState = "default",
+                TelegramEnabled = model.TelegramEnabled,
+                TelegramBotToken = model.TelegramBotToken,
+                TelegramClearBotToken = model.TelegramClearBotToken,
+                TelegramInboundMode = ParseInboundMode(model.TelegramInboundMode),
+                TelegramPollIntervalSeconds = model.TelegramPollIntervalSeconds,
                 QuietHoursEnabled = false,
                 QuietHoursStartLocalTime = "22:00",
                 QuietHoursEndLocalTime = "07:00",
@@ -106,6 +112,11 @@ public sealed class NotificationSettingsController : Controller
                 BrowserNotifyAgentOffline = true,
                 BrowserNotifyAgentOnline = true,
                 BrowserNotificationsPermissionState = "default",
+                TelegramEnabled = model.TelegramEnabled,
+                TelegramBotToken = model.TelegramBotToken,
+                TelegramClearBotToken = model.TelegramClearBotToken,
+                TelegramInboundMode = ParseInboundMode(model.TelegramInboundMode),
+                TelegramPollIntervalSeconds = model.TelegramPollIntervalSeconds,
                 QuietHoursEnabled = false,
                 QuietHoursStartLocalTime = "22:00",
                 QuietHoursEndLocalTime = "07:00",
@@ -179,10 +190,19 @@ public sealed class NotificationSettingsController : Controller
 
     }
 
+    private static TelegramInboundMode ParseInboundMode(string? value)
+    {
+        return Enum.TryParse<TelegramInboundMode>(value?.Trim(), true, out var parsed) ? parsed : TelegramInboundMode.Polling;
+    }
+
     private async Task<NotificationSettingsPageViewModel> ToViewModelAsync(NotificationSettingsDto settings, bool saved, CancellationToken cancellationToken)
     {
         return new NotificationSettingsPageViewModel
         {
+            TelegramEnabled = settings.TelegramEnabled,
+            TelegramInboundMode = settings.TelegramInboundMode.ToString(),
+            TelegramPollIntervalSeconds = settings.TelegramPollIntervalSeconds,
+            TelegramBotTokenConfigured = settings.TelegramBotTokenConfigured,
             SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,
             SmtpHost = settings.SmtpHost,
             SmtpPort = settings.SmtpPort,

@@ -21,6 +21,7 @@ using PingMonitor.Web.Services.Status;
 using PingMonitor.Web.Services.Security;
 using PingMonitor.Web.Services.SmtpNotifications;
 using PingMonitor.Web.Services.BrowserNotifications;
+using PingMonitor.Web.Services.Telegram;
 using PingMonitor.Web.Support;
 using Microsoft.Extensions.Options;
 
@@ -138,6 +139,10 @@ builder.Services.AddScoped<IUserNotificationSettingsService, UserNotificationSet
 builder.Services.AddScoped<INotificationSuppressionService, NotificationSuppressionService>();
 builder.Services.AddScoped<ISmtpNotificationSender, SmtpNotificationSender>();
 builder.Services.AddScoped<IBrowserNotificationQueryService, BrowserNotificationQueryService>();
+builder.Services.AddScoped<ITelegramLinkService, TelegramLinkService>();
+builder.Services.AddScoped<ITelegramMessageProcessor, TelegramMessageProcessor>();
+builder.Services.AddScoped<ITelegramPollingService, TelegramPollingService>();
+builder.Services.AddScoped<ITelegramNotificationSender, TelegramNotificationSender>();
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();
@@ -163,6 +168,7 @@ builder.Services.AddSingleton<ConfigurationAutoBackupBackgroundService>();
 builder.Services.AddSingleton<IConfigurationChangeBackupSignal>(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 builder.Services.AddHostedService<AgentStatusTransitionBackgroundService>();
+builder.Services.AddHostedService<TelegramPollingBackgroundService>();
 
 var app = builder.Build();
 

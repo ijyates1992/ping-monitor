@@ -33,12 +33,18 @@ internal sealed class UserNotificationSettingsService : IUserNotificationSetting
         row.SmtpNotifyEndpointRecovered = command.SmtpNotifyEndpointRecovered;
         row.SmtpNotifyAgentOffline = command.SmtpNotifyAgentOffline;
         row.SmtpNotifyAgentOnline = command.SmtpNotifyAgentOnline;
+        row.TelegramNotificationsEnabled = command.TelegramNotificationsEnabled;
+        row.TelegramNotifyEndpointDown = command.TelegramNotifyEndpointDown;
+        row.TelegramNotifyEndpointRecovered = command.TelegramNotifyEndpointRecovered;
+        row.TelegramNotifyAgentOffline = command.TelegramNotifyAgentOffline;
+        row.TelegramNotifyAgentOnline = command.TelegramNotifyAgentOnline;
         row.QuietHoursEnabled = command.QuietHoursEnabled;
         row.QuietHoursStartLocalTime = NormalizeQuietHoursTime(command.QuietHoursStartLocalTime, "22:00");
         row.QuietHoursEndLocalTime = NormalizeQuietHoursTime(command.QuietHoursEndLocalTime, "07:00");
         row.QuietHoursTimeZoneId = NormalizeTimeZoneId(command.QuietHoursTimeZoneId);
         row.QuietHoursSuppressBrowserNotifications = command.QuietHoursSuppressBrowserNotifications;
         row.QuietHoursSuppressSmtpNotifications = command.QuietHoursSuppressSmtpNotifications;
+        row.QuietHoursSuppressTelegramNotifications = command.QuietHoursSuppressTelegramNotifications;
         row.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -71,12 +77,18 @@ internal sealed class UserNotificationSettingsService : IUserNotificationSetting
             SmtpNotifyEndpointRecovered = global?.SmtpNotifyEndpointRecovered ?? true,
             SmtpNotifyAgentOffline = global?.SmtpNotifyAgentOffline ?? true,
             SmtpNotifyAgentOnline = global?.SmtpNotifyAgentOnline ?? true,
+            TelegramNotificationsEnabled = global?.TelegramEnabled ?? false,
+            TelegramNotifyEndpointDown = true,
+            TelegramNotifyEndpointRecovered = true,
+            TelegramNotifyAgentOffline = true,
+            TelegramNotifyAgentOnline = true,
             QuietHoursEnabled = global?.QuietHoursEnabled ?? false,
             QuietHoursStartLocalTime = NormalizeQuietHoursTime(global?.QuietHoursStartLocalTime, "22:00"),
             QuietHoursEndLocalTime = NormalizeQuietHoursTime(global?.QuietHoursEndLocalTime, "07:00"),
             QuietHoursTimeZoneId = NormalizeTimeZoneId(global?.QuietHoursTimeZoneId),
             QuietHoursSuppressBrowserNotifications = global?.QuietHoursSuppressBrowserNotifications ?? true,
             QuietHoursSuppressSmtpNotifications = global?.QuietHoursSuppressSmtpNotifications ?? true,
+            QuietHoursSuppressTelegramNotifications = true,
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
@@ -99,12 +111,18 @@ internal sealed class UserNotificationSettingsService : IUserNotificationSetting
         SmtpNotifyEndpointRecovered = row.SmtpNotifyEndpointRecovered,
         SmtpNotifyAgentOffline = row.SmtpNotifyAgentOffline,
         SmtpNotifyAgentOnline = row.SmtpNotifyAgentOnline,
+        TelegramNotificationsEnabled = row.TelegramNotificationsEnabled,
+        TelegramNotifyEndpointDown = row.TelegramNotifyEndpointDown,
+        TelegramNotifyEndpointRecovered = row.TelegramNotifyEndpointRecovered,
+        TelegramNotifyAgentOffline = row.TelegramNotifyAgentOffline,
+        TelegramNotifyAgentOnline = row.TelegramNotifyAgentOnline,
         QuietHoursEnabled = row.QuietHoursEnabled,
         QuietHoursStartLocalTime = NormalizeQuietHoursTime(row.QuietHoursStartLocalTime, "22:00"),
         QuietHoursEndLocalTime = NormalizeQuietHoursTime(row.QuietHoursEndLocalTime, "07:00"),
         QuietHoursTimeZoneId = NormalizeTimeZoneId(row.QuietHoursTimeZoneId),
         QuietHoursSuppressBrowserNotifications = row.QuietHoursSuppressBrowserNotifications,
         QuietHoursSuppressSmtpNotifications = row.QuietHoursSuppressSmtpNotifications,
+        QuietHoursSuppressTelegramNotifications = row.QuietHoursSuppressTelegramNotifications,
         UpdatedAtUtc = row.UpdatedAtUtc
     };
 

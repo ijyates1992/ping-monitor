@@ -37,6 +37,8 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<SecurityIpBlock> SecurityIpBlocks => Set<SecurityIpBlock>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<UserNotificationSettings> UserNotificationSettings => Set<UserNotificationSettings>();
+    public DbSet<PendingTelegramLink> PendingTelegramLinks => Set<PendingTelegramLink>();
+    public DbSet<TelegramAccount> TelegramAccounts => Set<TelegramAccount>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -262,7 +264,13 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         notificationSettings.Property(x => x.BrowserNotifyAgentOffline).IsRequired();
         notificationSettings.Property(x => x.BrowserNotifyAgentOnline).IsRequired();
         notificationSettings.Property(x => x.BrowserNotificationsPermissionState).HasMaxLength(16);
-        notificationSettings.Property(x => x.TelegramNotificationsEnabled).IsRequired();
+        notificationSettings.Property(x => x.TelegramEnabled).IsRequired();
+        notificationSettings.Property(x => x.TelegramBotTokenProtected).HasMaxLength(4096);
+        notificationSettings.Property(x => x.TelegramInboundMode).HasConversion<string>().HasMaxLength(16).IsRequired();
+        notificationSettings.Property(x => x.TelegramPollIntervalSeconds).IsRequired();
+        notificationSettings.Property(x => x.TelegramLastProcessedUpdateId).IsRequired();
+        notificationSettings.Property(x => x.TelegramWebhookUrl).HasMaxLength(2048);
+        notificationSettings.Property(x => x.TelegramWebhookSecretToken).HasMaxLength(512);
         notificationSettings.Property(x => x.QuietHoursEnabled).IsRequired();
         notificationSettings.Property(x => x.QuietHoursStartLocalTime).HasMaxLength(5).IsRequired();
         notificationSettings.Property(x => x.QuietHoursEndLocalTime).HasMaxLength(5).IsRequired();
@@ -300,14 +308,46 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         userNotificationSettings.Property(x => x.SmtpNotifyEndpointRecovered).IsRequired();
         userNotificationSettings.Property(x => x.SmtpNotifyAgentOffline).IsRequired();
         userNotificationSettings.Property(x => x.SmtpNotifyAgentOnline).IsRequired();
+        userNotificationSettings.Property(x => x.TelegramNotificationsEnabled).IsRequired();
+        userNotificationSettings.Property(x => x.TelegramNotifyEndpointDown).IsRequired();
+        userNotificationSettings.Property(x => x.TelegramNotifyEndpointRecovered).IsRequired();
+        userNotificationSettings.Property(x => x.TelegramNotifyAgentOffline).IsRequired();
+        userNotificationSettings.Property(x => x.TelegramNotifyAgentOnline).IsRequired();
         userNotificationSettings.Property(x => x.QuietHoursEnabled).IsRequired();
         userNotificationSettings.Property(x => x.QuietHoursStartLocalTime).HasMaxLength(5).IsRequired();
         userNotificationSettings.Property(x => x.QuietHoursEndLocalTime).HasMaxLength(5).IsRequired();
         userNotificationSettings.Property(x => x.QuietHoursTimeZoneId).HasMaxLength(128).IsRequired();
         userNotificationSettings.Property(x => x.QuietHoursSuppressBrowserNotifications).IsRequired();
         userNotificationSettings.Property(x => x.QuietHoursSuppressSmtpNotifications).IsRequired();
+        userNotificationSettings.Property(x => x.QuietHoursSuppressTelegramNotifications).IsRequired();
         userNotificationSettings.Property(x => x.UpdatedAtUtc).IsRequired();
 
+
+        var pendingTelegramLink = modelBuilder.Entity<PendingTelegramLink>();
+        pendingTelegramLink.ToTable("PendingTelegramLinks");
+        pendingTelegramLink.HasKey(x => x.PendingTelegramLinkId);
+        pendingTelegramLink.Property(x => x.PendingTelegramLinkId).HasMaxLength(64);
+        pendingTelegramLink.Property(x => x.UserId).HasMaxLength(255).IsRequired();
+        pendingTelegramLink.Property(x => x.Code).HasMaxLength(16).IsRequired();
+        pendingTelegramLink.Property(x => x.CreatedAtUtc).IsRequired();
+        pendingTelegramLink.Property(x => x.ExpiresAtUtc).IsRequired();
+        pendingTelegramLink.Property(x => x.ConsumedByChatId).HasMaxLength(64);
+        pendingTelegramLink.Property(x => x.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
+        pendingTelegramLink.HasIndex(x => new { x.Code, x.Status });
+
+        var telegramAccount = modelBuilder.Entity<TelegramAccount>();
+        telegramAccount.ToTable("TelegramAccounts");
+        telegramAccount.HasKey(x => x.TelegramAccountId);
+        telegramAccount.Property(x => x.TelegramAccountId).HasMaxLength(64);
+        telegramAccount.Property(x => x.UserId).HasMaxLength(255).IsRequired();
+        telegramAccount.Property(x => x.ChatId).HasMaxLength(64).IsRequired();
+        telegramAccount.Property(x => x.Verified).IsRequired();
+        telegramAccount.Property(x => x.LinkedAtUtc).IsRequired();
+        telegramAccount.Property(x => x.Username).HasMaxLength(255);
+        telegramAccount.Property(x => x.DisplayName).HasMaxLength(255);
+        telegramAccount.Property(x => x.IsActive).IsRequired();
+        telegramAccount.HasIndex(x => x.UserId).IsUnique();
+        telegramAccount.HasIndex(x => x.ChatId).IsUnique();
         var securitySettings = modelBuilder.Entity<SecuritySettings>();
         securitySettings.ToTable("SecuritySettings");
         securitySettings.HasKey(x => x.SecuritySettingsId);

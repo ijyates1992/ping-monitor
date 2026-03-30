@@ -67,6 +67,15 @@
         <div class="switch-row"><input asp-for="SmtpNotifyAgentOffline" type="checkbox" /><label asp-for="SmtpNotifyAgentOffline">Agent offline</label></div>
         <div class="switch-row"><input asp-for="SmtpNotifyAgentOnline" type="checkbox" /><label asp-for="SmtpNotifyAgentOnline">Agent online</label></div>
 
+
+
+        <h3>Telegram</h3>
+        <div class="switch-row"><input asp-for="TelegramNotificationsEnabled" type="checkbox" /><label asp-for="TelegramNotificationsEnabled">Enable Telegram notifications</label></div>
+        <div class="switch-row"><input asp-for="TelegramNotifyEndpointDown" type="checkbox" /><label asp-for="TelegramNotifyEndpointDown">Endpoint down</label></div>
+        <div class="switch-row"><input asp-for="TelegramNotifyEndpointRecovered" type="checkbox" /><label asp-for="TelegramNotifyEndpointRecovered">Endpoint recovered</label></div>
+        <div class="switch-row"><input asp-for="TelegramNotifyAgentOffline" type="checkbox" /><label asp-for="TelegramNotifyAgentOffline">Agent offline</label></div>
+        <div class="switch-row"><input asp-for="TelegramNotifyAgentOnline" type="checkbox" /><label asp-for="TelegramNotifyAgentOnline">Agent online</label></div>
+
         <h3>Quiet hours</h3>
         <div class="switch-row"><input asp-for="QuietHoursEnabled" type="checkbox" /><label asp-for="QuietHoursEnabled">Enable quiet hours</label></div>
         <div><label asp-for="QuietHoursStartLocalTime">Start</label><input asp-for="QuietHoursStartLocalTime" type="time" /><div class="field-error"><span asp-validation-for="QuietHoursStartLocalTime"></span></div></div>
@@ -74,10 +83,31 @@
         <div><label asp-for="QuietHoursTimeZoneId">Time zone ID</label><input asp-for="QuietHoursTimeZoneId" type="text" /><div class="field-error"><span asp-validation-for="QuietHoursTimeZoneId"></span></div></div>
         <div class="switch-row"><input asp-for="QuietHoursSuppressBrowserNotifications" type="checkbox" /><label asp-for="QuietHoursSuppressBrowserNotifications">Suppress browser during quiet hours</label></div>
         <div class="switch-row"><input asp-for="QuietHoursSuppressSmtpNotifications" type="checkbox" /><label asp-for="QuietHoursSuppressSmtpNotifications">Suppress SMTP during quiet hours</label></div>
+        <div class="switch-row"><input asp-for="QuietHoursSuppressTelegramNotifications" type="checkbox" /><label asp-for="QuietHoursSuppressTelegramNotifications">Suppress Telegram during quiet hours</label></div>
         <p class="muted">Settings last updated at @Model.NotificationSettingsUpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'").</p>
         <div class="button-row"><button class="button" type="submit">Save notification preferences</button></div>
     </form>
 </section>
+
+<section class="card stack">
+    <h2>Telegram account linking</h2>
+    <p class="muted">Generate a verification code, send it to the bot in a private chat, and wait for confirmation.</p>
+    @if (Model.TelegramCodeGenerated) { <div class="saved">A new Telegram link code was generated.</div> }
+    @if (!string.IsNullOrWhiteSpace(Model.ActiveTelegramCode))
+    {
+        <p><strong>Active code:</strong> @Model.ActiveTelegramCode (expires @Model.ActiveTelegramCodeExpiresAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"))</p>
+    }
+    @if (Model.TelegramLinked)
+    {
+        <p><strong>Linked chat:</strong> @Model.TelegramLinkedChatId</p>
+        @if (!string.IsNullOrWhiteSpace(Model.TelegramLinkedUsername)) { <p><strong>Username:</strong> @Model.TelegramLinkedUsername</p> }
+    }
+    <form method="post" action="/profile/telegram/generate-code" class="stack">
+        @Html.AntiForgeryToken()
+        <div class="button-row"><button class="button-secondary" type="submit">Generate link code</button></div>
+    </form>
+</section>
+
 </div>
 </main>
 <script>

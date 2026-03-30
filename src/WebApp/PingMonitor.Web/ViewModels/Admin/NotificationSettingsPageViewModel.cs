@@ -4,6 +4,24 @@ namespace PingMonitor.Web.ViewModels.Admin;
 
 public sealed class NotificationSettingsPageViewModel
 {
+    [Display(Name = "Enable Telegram infrastructure")]
+    public bool TelegramEnabled { get; set; }
+
+    [Display(Name = "Telegram bot token")]
+    public string? TelegramBotToken { get; set; }
+
+    [Display(Name = "Clear stored Telegram bot token")]
+    public bool TelegramClearBotToken { get; set; }
+
+    [Display(Name = "Telegram bot token configured")]
+    public bool TelegramBotTokenConfigured { get; set; }
+
+    [Display(Name = "Telegram inbound mode")]
+    public string TelegramInboundMode { get; set; } = "Polling";
+
+    [Display(Name = "Telegram poll interval (seconds)")]
+    public int TelegramPollIntervalSeconds { get; set; } = 10;
+
     [Display(Name = "Enable SMTP delivery infrastructure")]
     public bool SmtpNotificationsEnabled { get; set; }
 

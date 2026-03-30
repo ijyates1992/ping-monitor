@@ -4,5 +4,6 @@ public interface INotificationSuppressionService
 {
     NotificationSuppressionDecision IsBrowserNotificationSuppressed(UserNotificationSettingsDto settings);
     NotificationSuppressionDecision IsSmtpNotificationSuppressed(UserNotificationSettingsDto settings);
+    NotificationSuppressionDecision IsTelegramNotificationSuppressed(UserNotificationSettingsDto settings);
     NotificationSuppressionStatus GetCurrentStatus(UserNotificationSettingsDto settings);
 }

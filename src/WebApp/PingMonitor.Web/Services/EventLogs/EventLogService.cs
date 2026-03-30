@@ -1,6 +1,7 @@
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.SmtpNotifications;
+using PingMonitor.Web.Services.Telegram;
 
 namespace PingMonitor.Web.Services.EventLogs;
 
@@ -8,15 +9,18 @@ internal sealed class EventLogService : IEventLogService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly ISmtpNotificationSender _smtpNotificationSender;
+    private readonly ITelegramNotificationSender _telegramNotificationSender;
     private readonly ILogger<EventLogService> _logger;
 
     public EventLogService(
         PingMonitorDbContext dbContext,
         ISmtpNotificationSender smtpNotificationSender,
+        ITelegramNotificationSender telegramNotificationSender,
         ILogger<EventLogService> logger)
     {
         _dbContext = dbContext;
         _smtpNotificationSender = smtpNotificationSender;
+        _telegramNotificationSender = telegramNotificationSender;
         _logger = logger;
     }
 
@@ -52,6 +56,15 @@ internal sealed class EventLogService : IEventLogService
                 "SMTP notification was not delivered for event {EventType}: {Message}",
                 eventLog.EventType,
                 smtpResult.Message);
+        }
+
+        var telegramResult = await _telegramNotificationSender.SendForEventAsync(eventLog, cancellationToken);
+        if (!telegramResult.Success && !telegramResult.Skipped)
+        {
+            _logger.LogWarning(
+                "Telegram notification was not delivered for event {EventType}: {Message}",
+                eventLog.EventType,
+                telegramResult.Message);
         }
     }
 

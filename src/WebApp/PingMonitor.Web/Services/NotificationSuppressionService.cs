@@ -40,6 +40,25 @@ internal sealed class NotificationSuppressionService : INotificationSuppressionS
         };
     }
 
+    public NotificationSuppressionDecision IsTelegramNotificationSuppressed(UserNotificationSettingsDto settings)
+    {
+        if (!settings.QuietHoursSuppressTelegramNotifications)
+        {
+            return new NotificationSuppressionDecision
+            {
+                IsSuppressed = false,
+                Reason = "Quiet hours Telegram suppression is disabled."
+            };
+        }
+
+        var evaluation = EvaluateQuietHours(settings);
+        return new NotificationSuppressionDecision
+        {
+            IsSuppressed = evaluation.QuietHoursActiveNow,
+            Reason = evaluation.Reason
+        };
+    }
+
     public NotificationSuppressionStatus GetCurrentStatus(UserNotificationSettingsDto settings)
     {
         return EvaluateQuietHours(settings);
