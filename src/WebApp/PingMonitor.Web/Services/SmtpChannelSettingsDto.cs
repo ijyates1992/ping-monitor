@@ -10,9 +10,4 @@ public sealed class SmtpChannelSettingsDto
     public string? SmtpPassword { get; set; }
     public string? SmtpFromAddress { get; set; }
     public string? SmtpFromDisplayName { get; set; }
-    public string? SmtpRecipientAddresses { get; set; }
-    public bool SmtpNotifyEndpointDown { get; set; }
-    public bool SmtpNotifyEndpointRecovered { get; set; }
-    public bool SmtpNotifyAgentOffline { get; set; }
-    public bool SmtpNotifyAgentOnline { get; set; }
 }

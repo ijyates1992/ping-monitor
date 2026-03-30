@@ -4,49 +4,7 @@ namespace PingMonitor.Web.ViewModels.Admin;
 
 public sealed class NotificationSettingsPageViewModel
 {
-    [Display(Name = "Enable browser notifications while this app is open")]
-    public bool BrowserNotificationsEnabled { get; set; }
-
-    [Display(Name = "Endpoint down")]
-    public bool BrowserNotifyEndpointDown { get; set; }
-
-    [Display(Name = "Endpoint recovered")]
-    public bool BrowserNotifyEndpointRecovered { get; set; }
-
-    [Display(Name = "Agent offline")]
-    public bool BrowserNotifyAgentOffline { get; set; }
-
-    [Display(Name = "Agent online")]
-    public bool BrowserNotifyAgentOnline { get; set; }
-
-    [Display(Name = "Cached browser permission state")]
-    public string BrowserNotificationsPermissionState { get; set; } = "default";
-
-    [Display(Name = "Enable quiet hours")]
-    public bool QuietHoursEnabled { get; set; }
-
-    [Display(Name = "Quiet hours start (local time)")]
-    public string QuietHoursStartLocalTime { get; set; } = "22:00";
-
-    [Display(Name = "Quiet hours end (local time)")]
-    public string QuietHoursEndLocalTime { get; set; } = "07:00";
-
-    [Display(Name = "Quiet hours time zone ID")]
-    public string QuietHoursTimeZoneId { get; set; } = "UTC";
-
-    [Display(Name = "Suppress browser notifications during quiet hours")]
-    public bool QuietHoursSuppressBrowserNotifications { get; set; }
-
-    [Display(Name = "Suppress SMTP notifications during quiet hours")]
-    public bool QuietHoursSuppressSmtpNotifications { get; set; }
-
-    public bool QuietHoursCurrentlyActive { get; set; }
-    public string QuietHoursCurrentStatusLabel { get; set; } = "inactive";
-    public string QuietHoursCurrentReason { get; set; } = string.Empty;
-    public string QuietHoursResolvedTimeZoneId { get; set; } = "UTC";
-    public DateTimeOffset QuietHoursEvaluatedAtUtc { get; set; }
-
-    [Display(Name = "Enable SMTP email notifications")]
+    [Display(Name = "Enable SMTP delivery infrastructure")]
     public bool SmtpNotificationsEnabled { get; set; }
 
     [Display(Name = "SMTP host")]
@@ -76,27 +34,9 @@ public sealed class NotificationSettingsPageViewModel
     [Display(Name = "From display name")]
     public string? SmtpFromDisplayName { get; set; }
 
-    [Display(Name = "Recipient addresses (one per line or comma-separated)")]
-    public string? SmtpRecipientAddresses { get; set; }
-
-    [Display(Name = "Endpoint down")]
-    public bool SmtpNotifyEndpointDown { get; set; }
-
-    [Display(Name = "Endpoint recovered")]
-    public bool SmtpNotifyEndpointRecovered { get; set; }
-
-    [Display(Name = "Agent offline")]
-    public bool SmtpNotifyAgentOffline { get; set; }
-
-    [Display(Name = "Agent online")]
-    public bool SmtpNotifyAgentOnline { get; set; }
-
     public bool SmtpTestSent { get; set; }
     public string? SmtpTestMessage { get; set; }
-
     public bool Saved { get; set; }
-
     public DateTimeOffset UpdatedAtUtc { get; set; }
-
     public string? UpdatedByUserId { get; set; }
 }

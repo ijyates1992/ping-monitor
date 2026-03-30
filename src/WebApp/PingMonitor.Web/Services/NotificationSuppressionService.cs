@@ -2,16 +2,8 @@ namespace PingMonitor.Web.Services;
 
 internal sealed class NotificationSuppressionService : INotificationSuppressionService
 {
-    private readonly INotificationSettingsService _notificationSettingsService;
-
-    public NotificationSuppressionService(INotificationSettingsService notificationSettingsService)
+    public NotificationSuppressionDecision IsBrowserNotificationSuppressed(UserNotificationSettingsDto settings)
     {
-        _notificationSettingsService = notificationSettingsService;
-    }
-
-    public async Task<NotificationSuppressionDecision> IsBrowserNotificationSuppressedAsync(CancellationToken cancellationToken)
-    {
-        var settings = await _notificationSettingsService.GetCurrentAsync(cancellationToken);
         if (!settings.QuietHoursSuppressBrowserNotifications)
         {
             return new NotificationSuppressionDecision
@@ -29,9 +21,8 @@ internal sealed class NotificationSuppressionService : INotificationSuppressionS
         };
     }
 
-    public async Task<NotificationSuppressionDecision> IsSmtpNotificationSuppressedAsync(CancellationToken cancellationToken)
+    public NotificationSuppressionDecision IsSmtpNotificationSuppressed(UserNotificationSettingsDto settings)
     {
-        var settings = await _notificationSettingsService.GetCurrentAsync(cancellationToken);
         if (!settings.QuietHoursSuppressSmtpNotifications)
         {
             return new NotificationSuppressionDecision
@@ -49,13 +40,12 @@ internal sealed class NotificationSuppressionService : INotificationSuppressionS
         };
     }
 
-    public async Task<NotificationSuppressionStatus> GetCurrentStatusAsync(CancellationToken cancellationToken)
+    public NotificationSuppressionStatus GetCurrentStatus(UserNotificationSettingsDto settings)
     {
-        var settings = await _notificationSettingsService.GetCurrentAsync(cancellationToken);
         return EvaluateQuietHours(settings);
     }
 
-    private static NotificationSuppressionStatus EvaluateQuietHours(NotificationSettingsDto settings)
+    private static NotificationSuppressionStatus EvaluateQuietHours(UserNotificationSettingsDto settings)
     {
         var nowUtc = DateTimeOffset.UtcNow;
         var quietHoursStart = ParseLocalTime(settings.QuietHoursStartLocalTime, "22:00");
@@ -101,7 +91,7 @@ internal sealed class NotificationSuppressionService : INotificationSuppressionS
     }
 
     private static NotificationSuppressionStatus BuildStatus(
-        NotificationSettingsDto settings,
+        UserNotificationSettingsDto settings,
         DateTimeOffset evaluatedAtUtc,
         string effectiveTimeZoneId,
         TimeSpan quietHoursStart,

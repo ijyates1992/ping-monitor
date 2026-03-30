@@ -134,6 +134,7 @@ builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<INotificationSettingsService, NotificationSettingsService>();
+builder.Services.AddScoped<IUserNotificationSettingsService, UserNotificationSettingsService>();
 builder.Services.AddScoped<INotificationSuppressionService, NotificationSuppressionService>();
 builder.Services.AddScoped<ISmtpNotificationSender, SmtpNotificationSender>();
 builder.Services.AddScoped<IBrowserNotificationQueryService, BrowserNotificationQueryService>();

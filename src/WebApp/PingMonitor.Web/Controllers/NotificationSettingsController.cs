@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.SmtpNotifications;
@@ -13,18 +15,18 @@ namespace PingMonitor.Web.Controllers;
 public sealed class NotificationSettingsController : Controller
 {
     private readonly INotificationSettingsService _notificationSettingsService;
-    private readonly INotificationSuppressionService _notificationSuppressionService;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISmtpNotificationSender _smtpNotificationSender;
     private readonly ILogger<NotificationSettingsController> _logger;
 
     public NotificationSettingsController(
         INotificationSettingsService notificationSettingsService,
-        INotificationSuppressionService notificationSuppressionService,
+        UserManager<ApplicationUser> userManager,
         ISmtpNotificationSender smtpNotificationSender,
         ILogger<NotificationSettingsController> logger)
     {
         _notificationSettingsService = notificationSettingsService;
-        _notificationSuppressionService = notificationSuppressionService;
+        _userManager = userManager;
         _smtpNotificationSender = smtpNotificationSender;
         _logger = logger;
     }
@@ -40,15 +42,7 @@ public sealed class NotificationSettingsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Index([FromForm] NotificationSettingsPageViewModel model, CancellationToken cancellationToken)
     {
-        if (!IsValidPermissionState(model.BrowserNotificationsPermissionState))
-        {
-            ModelState.AddModelError(
-                nameof(NotificationSettingsPageViewModel.BrowserNotificationsPermissionState),
-                "Permission state must be default, granted, or denied.");
-        }
-
         ValidateSmtpSettings(model);
-        ValidateQuietHours(model);
 
         if (!ModelState.IsValid)
         {
@@ -58,18 +52,18 @@ public sealed class NotificationSettingsController : Controller
         var updated = await _notificationSettingsService.UpdateAsync(
             new UpdateNotificationSettingsCommand
             {
-                BrowserNotificationsEnabled = model.BrowserNotificationsEnabled,
-                BrowserNotifyEndpointDown = model.BrowserNotifyEndpointDown,
-                BrowserNotifyEndpointRecovered = model.BrowserNotifyEndpointRecovered,
-                BrowserNotifyAgentOffline = model.BrowserNotifyAgentOffline,
-                BrowserNotifyAgentOnline = model.BrowserNotifyAgentOnline,
-                BrowserNotificationsPermissionState = model.BrowserNotificationsPermissionState,
-                QuietHoursEnabled = model.QuietHoursEnabled,
-                QuietHoursStartLocalTime = model.QuietHoursStartLocalTime,
-                QuietHoursEndLocalTime = model.QuietHoursEndLocalTime,
-                QuietHoursTimeZoneId = model.QuietHoursTimeZoneId,
-                QuietHoursSuppressBrowserNotifications = model.QuietHoursSuppressBrowserNotifications,
-                QuietHoursSuppressSmtpNotifications = model.QuietHoursSuppressSmtpNotifications,
+                BrowserNotificationsEnabled = false,
+                BrowserNotifyEndpointDown = true,
+                BrowserNotifyEndpointRecovered = true,
+                BrowserNotifyAgentOffline = true,
+                BrowserNotifyAgentOnline = true,
+                BrowserNotificationsPermissionState = "default",
+                QuietHoursEnabled = false,
+                QuietHoursStartLocalTime = "22:00",
+                QuietHoursEndLocalTime = "07:00",
+                QuietHoursTimeZoneId = "UTC",
+                QuietHoursSuppressBrowserNotifications = true,
+                QuietHoursSuppressSmtpNotifications = true,
                 SmtpNotificationsEnabled = model.SmtpNotificationsEnabled,
                 SmtpHost = model.SmtpHost,
                 SmtpPort = model.SmtpPort,
@@ -79,11 +73,11 @@ public sealed class NotificationSettingsController : Controller
                 SmtpClearPassword = model.SmtpClearPassword,
                 SmtpFromAddress = model.SmtpFromAddress,
                 SmtpFromDisplayName = model.SmtpFromDisplayName,
-                SmtpRecipientAddresses = model.SmtpRecipientAddresses,
-                SmtpNotifyEndpointDown = model.SmtpNotifyEndpointDown,
-                SmtpNotifyEndpointRecovered = model.SmtpNotifyEndpointRecovered,
-                SmtpNotifyAgentOffline = model.SmtpNotifyAgentOffline,
-                SmtpNotifyAgentOnline = model.SmtpNotifyAgentOnline,
+                SmtpRecipientAddresses = null,
+                SmtpNotifyEndpointDown = true,
+                SmtpNotifyEndpointRecovered = true,
+                SmtpNotifyAgentOffline = true,
+                SmtpNotifyAgentOnline = true,
                 UpdatedByUserId = User.Identity?.Name
             },
             cancellationToken);
@@ -95,13 +89,7 @@ public sealed class NotificationSettingsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SendSmtpTest([FromForm] NotificationSettingsPageViewModel model, CancellationToken cancellationToken)
     {
-        if (!IsValidPermissionState(model.BrowserNotificationsPermissionState))
-        {
-            model.BrowserNotificationsPermissionState = "default";
-        }
-
         ValidateSmtpSettings(model);
-        ValidateQuietHours(model);
         if (!ModelState.IsValid)
         {
             model.SmtpTestSent = false;
@@ -112,18 +100,18 @@ public sealed class NotificationSettingsController : Controller
         await _notificationSettingsService.UpdateAsync(
             new UpdateNotificationSettingsCommand
             {
-                BrowserNotificationsEnabled = model.BrowserNotificationsEnabled,
-                BrowserNotifyEndpointDown = model.BrowserNotifyEndpointDown,
-                BrowserNotifyEndpointRecovered = model.BrowserNotifyEndpointRecovered,
-                BrowserNotifyAgentOffline = model.BrowserNotifyAgentOffline,
-                BrowserNotifyAgentOnline = model.BrowserNotifyAgentOnline,
-                BrowserNotificationsPermissionState = model.BrowserNotificationsPermissionState,
-                QuietHoursEnabled = model.QuietHoursEnabled,
-                QuietHoursStartLocalTime = model.QuietHoursStartLocalTime,
-                QuietHoursEndLocalTime = model.QuietHoursEndLocalTime,
-                QuietHoursTimeZoneId = model.QuietHoursTimeZoneId,
-                QuietHoursSuppressBrowserNotifications = model.QuietHoursSuppressBrowserNotifications,
-                QuietHoursSuppressSmtpNotifications = model.QuietHoursSuppressSmtpNotifications,
+                BrowserNotificationsEnabled = false,
+                BrowserNotifyEndpointDown = true,
+                BrowserNotifyEndpointRecovered = true,
+                BrowserNotifyAgentOffline = true,
+                BrowserNotifyAgentOnline = true,
+                BrowserNotificationsPermissionState = "default",
+                QuietHoursEnabled = false,
+                QuietHoursStartLocalTime = "22:00",
+                QuietHoursEndLocalTime = "07:00",
+                QuietHoursTimeZoneId = "UTC",
+                QuietHoursSuppressBrowserNotifications = true,
+                QuietHoursSuppressSmtpNotifications = true,
                 SmtpNotificationsEnabled = model.SmtpNotificationsEnabled,
                 SmtpHost = model.SmtpHost,
                 SmtpPort = model.SmtpPort,
@@ -133,16 +121,24 @@ public sealed class NotificationSettingsController : Controller
                 SmtpClearPassword = model.SmtpClearPassword,
                 SmtpFromAddress = model.SmtpFromAddress,
                 SmtpFromDisplayName = model.SmtpFromDisplayName,
-                SmtpRecipientAddresses = model.SmtpRecipientAddresses,
-                SmtpNotifyEndpointDown = model.SmtpNotifyEndpointDown,
-                SmtpNotifyEndpointRecovered = model.SmtpNotifyEndpointRecovered,
-                SmtpNotifyAgentOffline = model.SmtpNotifyAgentOffline,
-                SmtpNotifyAgentOnline = model.SmtpNotifyAgentOnline,
+                SmtpRecipientAddresses = null,
+                SmtpNotifyEndpointDown = true,
+                SmtpNotifyEndpointRecovered = true,
+                SmtpNotifyAgentOffline = true,
+                SmtpNotifyAgentOnline = true,
                 UpdatedByUserId = User.Identity?.Name
             },
             cancellationToken);
 
-        var result = await _smtpNotificationSender.SendTestAsync(cancellationToken);
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null || string.IsNullOrWhiteSpace(user.Email) || !MailAddress.TryCreate(user.Email, out _))
+        {
+            model.SmtpTestSent = false;
+            model.SmtpTestMessage = "Current user requires a valid email address for SMTP test.";
+            return View("Index", model);
+        }
+
+        var result = await _smtpNotificationSender.SendTestAsync(user.Email, cancellationToken);
         if (result.Success)
         {
             _logger.LogInformation("SMTP test send succeeded for user {UserId}.", User.Identity?.Name ?? "(unknown)");
@@ -157,11 +153,6 @@ public sealed class NotificationSettingsController : Controller
         viewModel.SmtpTestSent = result.Success;
         viewModel.SmtpTestMessage = result.Message;
         return View("Index", viewModel);
-    }
-
-    private static bool IsValidPermissionState(string value)
-    {
-        return value is "default" or "granted" or "denied";
     }
 
     private void ValidateSmtpSettings(NotificationSettingsPageViewModel model)
@@ -186,66 +177,12 @@ public sealed class NotificationSettingsController : Controller
             ModelState.AddModelError(nameof(model.SmtpFromAddress), "A valid SMTP from address is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(model.SmtpRecipientAddresses))
-        {
-            ModelState.AddModelError(nameof(model.SmtpRecipientAddresses), "At least one SMTP recipient address is required.");
-        }
-    }
-
-    private void ValidateQuietHours(NotificationSettingsPageViewModel model)
-    {
-        if (!TimeOnly.TryParseExact(model.QuietHoursStartLocalTime?.Trim(), "HH:mm", out _))
-        {
-            ModelState.AddModelError(nameof(model.QuietHoursStartLocalTime), "Quiet hours start time must use HH:mm (24-hour) format.");
-        }
-
-        if (!TimeOnly.TryParseExact(model.QuietHoursEndLocalTime?.Trim(), "HH:mm", out _))
-        {
-            ModelState.AddModelError(nameof(model.QuietHoursEndLocalTime), "Quiet hours end time must use HH:mm (24-hour) format.");
-        }
-
-        if (string.IsNullOrWhiteSpace(model.QuietHoursTimeZoneId))
-        {
-            ModelState.AddModelError(nameof(model.QuietHoursTimeZoneId), "Quiet hours time zone ID is required.");
-            return;
-        }
-
-        try
-        {
-            TimeZoneInfo.FindSystemTimeZoneById(model.QuietHoursTimeZoneId.Trim());
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            ModelState.AddModelError(nameof(model.QuietHoursTimeZoneId), "Quiet hours time zone ID was not found on this server.");
-        }
-        catch (InvalidTimeZoneException)
-        {
-            ModelState.AddModelError(nameof(model.QuietHoursTimeZoneId), "Quiet hours time zone ID is invalid.");
-        }
     }
 
     private async Task<NotificationSettingsPageViewModel> ToViewModelAsync(NotificationSettingsDto settings, bool saved, CancellationToken cancellationToken)
     {
-        var suppressionStatus = await _notificationSuppressionService.GetCurrentStatusAsync(cancellationToken);
         return new NotificationSettingsPageViewModel
         {
-            BrowserNotificationsEnabled = settings.BrowserNotificationsEnabled,
-            BrowserNotifyEndpointDown = settings.BrowserNotifyEndpointDown,
-            BrowserNotifyEndpointRecovered = settings.BrowserNotifyEndpointRecovered,
-            BrowserNotifyAgentOffline = settings.BrowserNotifyAgentOffline,
-            BrowserNotifyAgentOnline = settings.BrowserNotifyAgentOnline,
-            BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState ?? "default",
-            QuietHoursEnabled = settings.QuietHoursEnabled,
-            QuietHoursStartLocalTime = settings.QuietHoursStartLocalTime,
-            QuietHoursEndLocalTime = settings.QuietHoursEndLocalTime,
-            QuietHoursTimeZoneId = settings.QuietHoursTimeZoneId,
-            QuietHoursSuppressBrowserNotifications = settings.QuietHoursSuppressBrowserNotifications,
-            QuietHoursSuppressSmtpNotifications = settings.QuietHoursSuppressSmtpNotifications,
-            QuietHoursCurrentlyActive = suppressionStatus.QuietHoursActiveNow,
-            QuietHoursCurrentStatusLabel = suppressionStatus.QuietHoursActiveNow ? "active" : "inactive",
-            QuietHoursCurrentReason = suppressionStatus.Reason,
-            QuietHoursResolvedTimeZoneId = suppressionStatus.EffectiveTimeZoneId,
-            QuietHoursEvaluatedAtUtc = suppressionStatus.EvaluatedAtUtc,
             SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,
             SmtpHost = settings.SmtpHost,
             SmtpPort = settings.SmtpPort,
@@ -254,11 +191,6 @@ public sealed class NotificationSettingsController : Controller
             SmtpPasswordConfigured = settings.SmtpPasswordConfigured,
             SmtpFromAddress = settings.SmtpFromAddress,
             SmtpFromDisplayName = settings.SmtpFromDisplayName,
-            SmtpRecipientAddresses = settings.SmtpRecipientAddresses,
-            SmtpNotifyEndpointDown = settings.SmtpNotifyEndpointDown,
-            SmtpNotifyEndpointRecovered = settings.SmtpNotifyEndpointRecovered,
-            SmtpNotifyAgentOffline = settings.SmtpNotifyAgentOffline,
-            SmtpNotifyAgentOnline = settings.SmtpNotifyAgentOnline,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             UpdatedByUserId = settings.UpdatedByUserId,
             Saved = saved

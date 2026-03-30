@@ -4,6 +4,6 @@ namespace PingMonitor.Web.Services.SmtpNotifications;
 
 public interface ISmtpNotificationSender
 {
-    Task<SmtpNotificationSendResult> SendTestAsync(CancellationToken cancellationToken);
+    Task<SmtpNotificationSendResult> SendTestAsync(string recipientAddress, CancellationToken cancellationToken);
     Task<SmtpNotificationSendResult> SendForEventAsync(EventLog eventLog, CancellationToken cancellationToken);
 }

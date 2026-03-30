@@ -33,7 +33,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "ApplicationSettings",
         "SecuritySettings",
         "SecurityIpBlocks",
-        "NotificationSettings"
+        "NotificationSettings",
+        "UserNotificationSettings"
     ];
     private static readonly string[] RequiredEndpointDependencyColumns =
     [
@@ -360,6 +361,30 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 PRIMARY KEY (`NotificationSettingsId`)
             );
             """;
+        const string createUserNotificationSettingsSql = """
+            CREATE TABLE IF NOT EXISTS `UserNotificationSettings` (
+                `UserId` varchar(255) NOT NULL,
+                `BrowserNotificationsEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `BrowserNotifyEndpointDown` tinyint(1) NOT NULL DEFAULT 1,
+                `BrowserNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1,
+                `BrowserNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1,
+                `BrowserNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1,
+                `BrowserNotificationsPermissionState` varchar(16) NULL,
+                `SmtpNotificationsEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `SmtpNotifyEndpointDown` tinyint(1) NOT NULL DEFAULT 1,
+                `SmtpNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1,
+                `SmtpNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1,
+                `SmtpNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1,
+                `QuietHoursEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `QuietHoursStartLocalTime` varchar(5) NOT NULL DEFAULT '22:00',
+                `QuietHoursEndLocalTime` varchar(5) NOT NULL DEFAULT '07:00',
+                `QuietHoursTimeZoneId` varchar(128) NOT NULL DEFAULT 'UTC',
+                `QuietHoursSuppressBrowserNotifications` tinyint(1) NOT NULL DEFAULT 1,
+                `QuietHoursSuppressSmtpNotifications` tinyint(1) NOT NULL DEFAULT 1,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`UserId`)
+            );
+            """;
 
         const string createEventLogsSql = """
             CREATE TABLE IF NOT EXISTS `EventLogs` (
@@ -474,6 +499,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createSecuritySettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityIpBlocksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNotificationSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createUserNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAgentHeartbeatHistorySql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createGroupsSql, cancellationToken);
