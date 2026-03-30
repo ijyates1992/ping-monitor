@@ -262,6 +262,12 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         notificationSettings.Property(x => x.BrowserNotifyAgentOnline).IsRequired();
         notificationSettings.Property(x => x.BrowserNotificationsPermissionState).HasMaxLength(16);
         notificationSettings.Property(x => x.TelegramNotificationsEnabled).IsRequired();
+        notificationSettings.Property(x => x.QuietHoursEnabled).IsRequired();
+        notificationSettings.Property(x => x.QuietHoursStartLocalTime).HasMaxLength(5).IsRequired();
+        notificationSettings.Property(x => x.QuietHoursEndLocalTime).HasMaxLength(5).IsRequired();
+        notificationSettings.Property(x => x.QuietHoursTimeZoneId).HasMaxLength(128).IsRequired();
+        notificationSettings.Property(x => x.QuietHoursSuppressBrowserNotifications).IsRequired();
+        notificationSettings.Property(x => x.QuietHoursSuppressSmtpNotifications).IsRequired();
         notificationSettings.Property(x => x.SmtpNotificationsEnabled).IsRequired();
         notificationSettings.Property(x => x.SmtpHost).HasMaxLength(255);
         notificationSettings.Property(x => x.SmtpPort).IsRequired();

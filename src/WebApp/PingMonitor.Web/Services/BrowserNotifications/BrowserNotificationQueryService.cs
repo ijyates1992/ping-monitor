@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services;
 
 namespace PingMonitor.Web.Services.BrowserNotifications;
 
@@ -17,10 +18,14 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
     ];
 
     private readonly PingMonitorDbContext _dbContext;
+    private readonly INotificationSuppressionService _notificationSuppressionService;
 
-    public BrowserNotificationQueryService(PingMonitorDbContext dbContext)
+    public BrowserNotificationQueryService(
+        PingMonitorDbContext dbContext,
+        INotificationSuppressionService notificationSuppressionService)
     {
         _dbContext = dbContext;
+        _notificationSuppressionService = notificationSuppressionService;
     }
 
     public async Task<BrowserNotificationFeedDto> GetFeedAsync(string? lastEventId, int maxItems, CancellationToken cancellationToken)
@@ -33,6 +38,16 @@ internal sealed class BrowserNotificationQueryService : IBrowserNotificationQuer
             return new BrowserNotificationFeedDto
             {
                 BrowserNotificationsEnabled = false
+            };
+        }
+
+        var suppressionDecision = await _notificationSuppressionService.IsBrowserNotificationSuppressedAsync(cancellationToken);
+        if (suppressionDecision.IsSuppressed)
+        {
+            return new BrowserNotificationFeedDto
+            {
+                BrowserNotificationsEnabled = true,
+                LastEventId = lastEventId
             };
         }
 

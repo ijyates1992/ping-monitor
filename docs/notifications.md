@@ -53,11 +53,48 @@ Initial settings scope:
 - SMTP recipient address list
 - SMTP notifications enabled/disabled per supported event type
 - SMTP test-send action for operator verification
+- quiet hours enabled/disabled (global delivery suppression window)
+- quiet hours start local time (daily)
+- quiet hours end local time (daily)
+- quiet hours time zone basis
+- quiet hours channel toggles:
+  - suppress browser notifications during quiet hours
+  - suppress SMTP notifications during quiet hours
 
 Future settings scope:
 
 - channel-specific settings for Telegram
 - additional controls as new channels are introduced
+
+## Quiet hours / suppression windows (phase 1)
+
+Quiet hours are a **global daily notification-delivery suppression window** for operator convenience.
+
+Phase 1 scope:
+
+- applies globally across notification delivery
+- browser delivery respects quiet hours when browser suppression is enabled
+- SMTP delivery respects quiet hours when SMTP suppression is enabled
+- Telegram is not included in this phase
+
+Critical semantics:
+
+- quiet hours suppress **notification delivery only**
+- quiet hours do **not** suppress event logging
+- quiet hours do **not** suppress state calculation or state transitions
+- quiet hours do **not** change alert/state generation logic
+
+Window behaviour:
+
+- evaluated as a daily local-time window
+- evaluated using the configured `QuietHoursTimeZoneId` from notification settings (with UTC fallback if invalid)
+- supports windows that cross midnight (for example, `22:00` → `07:00`)
+- disabled quiet hours means normal delivery behaviour
+
+Phase 1 delivery policy:
+
+- notifications suppressed by quiet hours are **dropped** (not queued for later delivery)
+- operators still have historical visibility via event logs
 
 SMTP secret handling requirements:
 

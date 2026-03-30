@@ -178,6 +178,12 @@ Browser notification delivery for these eligible event types is additionally gat
 
 Global browser notifications must also be enabled, and browser permission must be granted.
 
+Quiet hours integration (phase 1):
+
+- browser delivery may be suppressed by the global quiet-hours window when browser quiet-hours suppression is enabled
+- suppression affects delivery only; underlying event-log records are still written normally
+- suppressed notifications are dropped in phase 1 (not queued for later delivery)
+
 ## SMTP notification integration (phase 1)
 
 SMTP notification delivery also uses event-log records as the source of truth.
@@ -194,6 +200,12 @@ SMTP delivery for eligible events is additionally gated by explicit SMTP setting
 - global SMTP notifications enabled
 - SMTP channel settings complete and valid (server/auth/from/recipients)
 - specific SMTP event-type setting enabled
+
+Quiet hours integration (phase 1):
+
+- SMTP delivery may be suppressed by the global quiet-hours window when SMTP quiet-hours suppression is enabled
+- suppression affects delivery only; event-log persistence is unchanged
+- suppressed notifications are dropped in phase 1 (not queued for later delivery)
 
 Routine heartbeat and high-frequency/non-actionable events remain excluded from notification delivery.
 
