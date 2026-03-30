@@ -69,7 +69,12 @@ internal sealed class TelegramLinkService : ITelegramLinkService
     {
         if (!string.Equals(chatType, "private", StringComparison.OrdinalIgnoreCase))
         {
-            return new TelegramLinkConsumeResult { Success = false, Message = "Linking is only supported from a private chat." };
+            return new TelegramLinkConsumeResult
+            {
+                Status = TelegramLinkConsumeStatus.UnsupportedChatType,
+                Success = false,
+                Message = "Linking is only supported from a private chat."
+            };
         }
 
         var trimmedCode = code.Trim();
@@ -77,13 +82,38 @@ internal sealed class TelegramLinkService : ITelegramLinkService
 
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         var pending = await _dbContext.PendingTelegramLinks
-            .Where(x => x.Code == trimmedCode && x.Status == PendingTelegramLinkStatus.Pending)
+            .Where(x => x.Code == trimmedCode)
             .OrderByDescending(x => x.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (pending is null)
         {
-            return new TelegramLinkConsumeResult { Success = false, Message = "Code was not found." };
+            return new TelegramLinkConsumeResult
+            {
+                Status = TelegramLinkConsumeStatus.InvalidCode,
+                Success = false,
+                Message = "Code was not found."
+            };
+        }
+
+        if (pending.Status == PendingTelegramLinkStatus.Verified || pending.Status == PendingTelegramLinkStatus.Consumed)
+        {
+            return new TelegramLinkConsumeResult
+            {
+                Status = TelegramLinkConsumeStatus.AlreadyUsedCode,
+                Success = false,
+                Message = "Code was already used."
+            };
+        }
+
+        if (pending.Status == PendingTelegramLinkStatus.Expired)
+        {
+            return new TelegramLinkConsumeResult
+            {
+                Status = TelegramLinkConsumeStatus.ExpiredCode,
+                Success = false,
+                Message = "Code is expired."
+            };
         }
 
         if (pending.ExpiresAtUtc <= now)
@@ -91,7 +121,12 @@ internal sealed class TelegramLinkService : ITelegramLinkService
             pending.Status = PendingTelegramLinkStatus.Expired;
             await _dbContext.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
-            return new TelegramLinkConsumeResult { Success = false, Message = "Code is expired." };
+            return new TelegramLinkConsumeResult
+            {
+                Status = TelegramLinkConsumeStatus.ExpiredCode,
+                Success = false,
+                Message = "Code is expired."
+            };
         }
 
         pending.Status = PendingTelegramLinkStatus.Verified;
@@ -120,7 +155,12 @@ internal sealed class TelegramLinkService : ITelegramLinkService
         await tx.CommitAsync(cancellationToken);
 
         _logger.LogInformation("Telegram account linked for user {UserId}.", pending.UserId);
-        return new TelegramLinkConsumeResult { Success = true, Message = "Telegram account linked." };
+        return new TelegramLinkConsumeResult
+        {
+            Status = TelegramLinkConsumeStatus.Success,
+            Success = true,
+            Message = "Telegram account linked."
+        };
     }
 
 
