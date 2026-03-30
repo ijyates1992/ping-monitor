@@ -92,6 +92,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "QuietHoursTimeZoneId",
         "QuietHoursSuppressBrowserNotifications",
         "QuietHoursSuppressSmtpNotifications",
+        "QuietHoursSuppressTelegramNotifications",
         "SmtpNotificationsEnabled",
         "SmtpHost",
         "SmtpPort",
@@ -107,6 +108,34 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SmtpNotifyAgentOnline",
         "UpdatedAtUtc",
         "UpdatedByUserId"
+    ];
+    private static readonly string[] RequiredUserNotificationSettingsColumns =
+    [
+        "UserId",
+        "BrowserNotificationsEnabled",
+        "BrowserNotifyEndpointDown",
+        "BrowserNotifyEndpointRecovered",
+        "BrowserNotifyAgentOffline",
+        "BrowserNotifyAgentOnline",
+        "BrowserNotificationsPermissionState",
+        "SmtpNotificationsEnabled",
+        "SmtpNotifyEndpointDown",
+        "SmtpNotifyEndpointRecovered",
+        "SmtpNotifyAgentOffline",
+        "SmtpNotifyAgentOnline",
+        "TelegramNotificationsEnabled",
+        "TelegramNotifyEndpointDown",
+        "TelegramNotifyEndpointRecovered",
+        "TelegramNotifyAgentOffline",
+        "TelegramNotifyAgentOnline",
+        "QuietHoursEnabled",
+        "QuietHoursStartLocalTime",
+        "QuietHoursEndLocalTime",
+        "QuietHoursTimeZoneId",
+        "QuietHoursSuppressBrowserNotifications",
+        "QuietHoursSuppressSmtpNotifications",
+        "QuietHoursSuppressTelegramNotifications",
+        "UpdatedAtUtc"
     ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
@@ -190,6 +219,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"NotificationSettings table is missing required columns: {string.Join(", ", missingNotificationSettingsColumns)}.");
+            return status;
+        }
+        var missingUserNotificationSettingsColumns = await GetMissingUserNotificationSettingsColumnsAsync(connection, cancellationToken);
+        if (missingUserNotificationSettingsColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"UserNotificationSettings table is missing required columns: {string.Join(", ", missingUserNotificationSettingsColumns)}.");
             return status;
         }
 
@@ -565,6 +601,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureEndpointColumnsAsync(dbContext, cancellationToken);
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
+        await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }
@@ -653,6 +690,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
 
         return RequiredNotificationSettingsColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
+    }
+
+    private static async Task<string[]> GetMissingUserNotificationSettingsColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'UserNotificationSettings';
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return RequiredUserNotificationSettingsColumns
             .Where(column => !existingColumns.Contains(column))
             .ToArray();
     }
@@ -1022,6 +1081,16 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 cancellationToken);
         }
 
+        if (!await HasNotificationSettingsColumnAsync(connection, "QuietHoursSuppressTelegramNotifications", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `QuietHoursSuppressTelegramNotifications` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
         if (!await HasNotificationSettingsColumnAsync(connection, "SmtpPort", cancellationToken))
         {
             await dbContext.Database.ExecuteSqlRawAsync(
@@ -1133,6 +1202,25 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
     }
 
+    private static async Task EnsureUserNotificationSettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await HasUserNotificationSettingsColumnAsync(connection, "QuietHoursSuppressTelegramNotifications", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `UserNotificationSettings`
+                ADD COLUMN `QuietHoursSuppressTelegramNotifications` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+    }
+
     private static async Task EnsureEndpointColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         await using var connection = dbContext.Database.GetDbConnection();
@@ -1229,6 +1317,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
               AND table_name = 'NotificationSettings'
+              AND column_name = @columnName;
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+    private static async Task<bool> HasUserNotificationSettingsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'UserNotificationSettings'
               AND column_name = @columnName;
             """;
         var parameter = command.CreateParameter();
