@@ -34,7 +34,9 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SecuritySettings",
         "SecurityIpBlocks",
         "NotificationSettings",
-        "UserNotificationSettings"
+        "UserNotificationSettings",
+        "PendingTelegramLinks",
+        "TelegramAccounts"
     ];
     private static readonly string[] RequiredEndpointDependencyColumns =
     [
@@ -77,7 +79,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "BrowserNotifyAgentOffline",
         "BrowserNotifyAgentOnline",
         "BrowserNotificationsPermissionState",
-        "TelegramNotificationsEnabled",
+        "TelegramEnabled",
+        "TelegramBotTokenProtected",
+        "TelegramInboundMode",
+        "TelegramPollIntervalSeconds",
+        "TelegramLastProcessedUpdateId",
+        "TelegramWebhookUrl",
+        "TelegramWebhookSecretToken",
         "QuietHoursEnabled",
         "QuietHoursStartLocalTime",
         "QuietHoursEndLocalTime",
@@ -336,13 +344,20 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `BrowserNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1,
                 `BrowserNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1,
                 `BrowserNotificationsPermissionState` varchar(16) NULL,
-                `TelegramNotificationsEnabled` tinyint(1) NOT NULL,
+                `TelegramEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `TelegramBotTokenProtected` varchar(4096) NULL,
+                `TelegramInboundMode` varchar(16) NOT NULL DEFAULT 'Polling',
+                `TelegramPollIntervalSeconds` int NOT NULL DEFAULT 10,
+                `TelegramLastProcessedUpdateId` bigint NOT NULL DEFAULT 0,
+                `TelegramWebhookUrl` varchar(2048) NULL,
+                `TelegramWebhookSecretToken` varchar(512) NULL,
                 `QuietHoursEnabled` tinyint(1) NOT NULL DEFAULT 0,
                 `QuietHoursStartLocalTime` varchar(5) NOT NULL DEFAULT '22:00',
                 `QuietHoursEndLocalTime` varchar(5) NOT NULL DEFAULT '07:00',
                 `QuietHoursTimeZoneId` varchar(128) NOT NULL DEFAULT 'UTC',
                 `QuietHoursSuppressBrowserNotifications` tinyint(1) NOT NULL DEFAULT 1,
                 `QuietHoursSuppressSmtpNotifications` tinyint(1) NOT NULL DEFAULT 1,
+                `QuietHoursSuppressTelegramNotifications` tinyint(1) NOT NULL DEFAULT 1,
                 `SmtpNotificationsEnabled` tinyint(1) NOT NULL,
                 `SmtpHost` varchar(255) NULL,
                 `SmtpPort` int NOT NULL DEFAULT 25,
@@ -375,14 +390,52 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `SmtpNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1,
                 `SmtpNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1,
                 `SmtpNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1,
+                `TelegramNotificationsEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `TelegramNotifyEndpointDown` tinyint(1) NOT NULL DEFAULT 1,
+                `TelegramNotifyEndpointRecovered` tinyint(1) NOT NULL DEFAULT 1,
+                `TelegramNotifyAgentOffline` tinyint(1) NOT NULL DEFAULT 1,
+                `TelegramNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1,
                 `QuietHoursEnabled` tinyint(1) NOT NULL DEFAULT 0,
                 `QuietHoursStartLocalTime` varchar(5) NOT NULL DEFAULT '22:00',
                 `QuietHoursEndLocalTime` varchar(5) NOT NULL DEFAULT '07:00',
                 `QuietHoursTimeZoneId` varchar(128) NOT NULL DEFAULT 'UTC',
                 `QuietHoursSuppressBrowserNotifications` tinyint(1) NOT NULL DEFAULT 1,
                 `QuietHoursSuppressSmtpNotifications` tinyint(1) NOT NULL DEFAULT 1,
+                `QuietHoursSuppressTelegramNotifications` tinyint(1) NOT NULL DEFAULT 1,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 PRIMARY KEY (`UserId`)
+            );
+            """;
+
+
+        const string createPendingTelegramLinksSql = """
+            CREATE TABLE IF NOT EXISTS `PendingTelegramLinks` (
+                `PendingTelegramLinkId` varchar(64) NOT NULL,
+                `UserId` varchar(255) NOT NULL,
+                `Code` varchar(16) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `ExpiresAtUtc` datetime(6) NOT NULL,
+                `UsedAtUtc` datetime(6) NULL,
+                `ConsumedByChatId` varchar(64) NULL,
+                `Status` varchar(16) NOT NULL,
+                PRIMARY KEY (`PendingTelegramLinkId`),
+                KEY `IX_PendingTelegramLinks_Code_Status` (`Code`, `Status`)
+            );
+            """;
+
+        const string createTelegramAccountsSql = """
+            CREATE TABLE IF NOT EXISTS `TelegramAccounts` (
+                `TelegramAccountId` varchar(64) NOT NULL,
+                `UserId` varchar(255) NOT NULL,
+                `ChatId` varchar(64) NOT NULL,
+                `Verified` tinyint(1) NOT NULL,
+                `LinkedAtUtc` datetime(6) NOT NULL,
+                `Username` varchar(255) NULL,
+                `DisplayName` varchar(255) NULL,
+                `IsActive` tinyint(1) NOT NULL DEFAULT 1,
+                PRIMARY KEY (`TelegramAccountId`),
+                UNIQUE KEY `UX_TelegramAccounts_UserId` (`UserId`),
+                UNIQUE KEY `UX_TelegramAccounts_ChatId` (`ChatId`)
             );
             """;
 
@@ -500,6 +553,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityIpBlocksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserNotificationSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createPendingTelegramLinksSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createTelegramAccountsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointDependenciesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAgentHeartbeatHistorySql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createGroupsSql, cancellationToken);
@@ -822,6 +877,77 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """
                 ALTER TABLE `NotificationSettings`
                 ADD COLUMN `BrowserNotifyAgentOnline` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "TelegramEnabled", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `TelegramEnabled` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "TelegramBotTokenProtected", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `TelegramBotTokenProtected` varchar(4096) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "TelegramInboundMode", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `TelegramInboundMode` varchar(16) NOT NULL DEFAULT 'Polling';
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "TelegramPollIntervalSeconds", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `TelegramPollIntervalSeconds` int NOT NULL DEFAULT 10;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "TelegramLastProcessedUpdateId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `TelegramLastProcessedUpdateId` bigint NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "TelegramWebhookUrl", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `TelegramWebhookUrl` varchar(2048) NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasNotificationSettingsColumnAsync(connection, "TelegramWebhookSecretToken", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `NotificationSettings`
+                ADD COLUMN `TelegramWebhookSecretToken` varchar(512) NULL;
                 """,
                 cancellationToken);
         }

@@ -1,3 +1,5 @@
+using PingMonitor.Web.Models;
+
 namespace PingMonitor.Web.Services;
 
 public sealed class UpdateNotificationSettingsCommand
@@ -9,6 +11,15 @@ public sealed class UpdateNotificationSettingsCommand
     public bool BrowserNotifyAgentOnline { get; set; }
 
     public string? BrowserNotificationsPermissionState { get; set; }
+
+    public bool TelegramEnabled { get; set; }
+    public string? TelegramBotToken { get; set; }
+    public bool TelegramClearBotToken { get; set; }
+    public TelegramInboundMode TelegramInboundMode { get; set; } = TelegramInboundMode.Polling;
+    public int TelegramPollIntervalSeconds { get; set; } = 10;
+    public long TelegramLastProcessedUpdateId { get; set; } = -1;
+    public string? TelegramWebhookUrl { get; set; }
+    public string? TelegramWebhookSecretToken { get; set; }
 
     public bool QuietHoursEnabled { get; set; }
     public string QuietHoursStartLocalTime { get; set; } = "22:00";

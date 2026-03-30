@@ -14,9 +14,11 @@ This design is operator-focused and aligned with the control-plane role of the w
 
 The first implementation phase is browser notifications delivered while an operator has the web application open.
 
-### Telegram (future)
+### Telegram (phase 1, polling inbound)
 
-Telegram delivery is planned as a future notification channel.
+Telegram delivery is supported as a per-user notification channel in phase 1.
+
+Phase 1 transport mode is polling inbound updates via the Telegram Bot API. Webhook mode remains optional future scope.
 
 ### SMTP email (phase 1)
 
@@ -65,9 +67,15 @@ Initial settings scope is split by ownership:
   - suppress browser notifications during quiet hours
   - suppress SMTP notifications during quiet hours
 
+Additional phase 1 per-user Telegram settings:
+
+- Telegram notifications enabled/disabled
+- Telegram notifications enabled/disabled per supported event type
+- Telegram account linking status (verified only delivery)
+
 Future settings scope:
 
-- channel-specific settings for Telegram
+- webhook mode activation controls
 - additional controls as new channels are introduced
 
 ## Quiet hours / suppression windows (phase 1)
@@ -79,7 +87,7 @@ Phase 1 scope:
 - each authenticated user manages their own quiet-hours values in their profile
 - browser delivery respects that user's quiet-hours browser suppression toggle
 - SMTP delivery eligibility respects each user's quiet-hours SMTP suppression toggle
-- Telegram is not included in this phase
+- Telegram delivery eligibility respects each user's quiet-hours Telegram suppression toggle
 
 Critical semantics:
 

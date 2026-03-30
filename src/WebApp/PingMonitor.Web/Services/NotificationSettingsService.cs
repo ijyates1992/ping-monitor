@@ -33,9 +33,22 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             SmtpPort = settings.SmtpPort <= 0 ? 25 : settings.SmtpPort,
             SmtpUseTls = settings.SmtpUseTls,
             SmtpUsername = settings.SmtpUsername,
-            SmtpPassword = UnprotectSmtpSecret(settings.SmtpPasswordProtected),
+            SmtpPassword = UnprotectSecret(settings.SmtpPasswordProtected),
             SmtpFromAddress = settings.SmtpFromAddress,
             SmtpFromDisplayName = settings.SmtpFromDisplayName
+        };
+    }
+
+    public async Task<TelegramChannelSettingsDto> GetTelegramChannelAsync(CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateEntityAsync(cancellationToken);
+        return new TelegramChannelSettingsDto
+        {
+            TelegramEnabled = settings.TelegramEnabled,
+            TelegramBotToken = UnprotectSecret(settings.TelegramBotTokenProtected),
+            TelegramInboundMode = settings.TelegramInboundMode,
+            TelegramPollIntervalSeconds = settings.TelegramPollIntervalSeconds <= 0 ? 10 : settings.TelegramPollIntervalSeconds,
+            TelegramLastProcessedUpdateId = settings.TelegramLastProcessedUpdateId
         };
     }
 
@@ -49,6 +62,25 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         settings.BrowserNotifyAgentOffline = command.BrowserNotifyAgentOffline;
         settings.BrowserNotifyAgentOnline = command.BrowserNotifyAgentOnline;
         settings.BrowserNotificationsPermissionState = NormalizePermissionState(command.BrowserNotificationsPermissionState);
+        settings.TelegramEnabled = command.TelegramEnabled;
+        settings.TelegramInboundMode = command.TelegramInboundMode;
+        settings.TelegramPollIntervalSeconds = command.TelegramPollIntervalSeconds <= 0 ? 10 : command.TelegramPollIntervalSeconds;
+        settings.TelegramWebhookUrl = NormalizeString(command.TelegramWebhookUrl);
+        if (command.TelegramLastProcessedUpdateId >= 0)
+        {
+            settings.TelegramLastProcessedUpdateId = command.TelegramLastProcessedUpdateId;
+        }
+        settings.TelegramWebhookSecretToken = NormalizeString(command.TelegramWebhookSecretToken);
+
+        if (command.TelegramClearBotToken)
+        {
+            settings.TelegramBotTokenProtected = null;
+        }
+        else if (!string.IsNullOrWhiteSpace(command.TelegramBotToken))
+        {
+            settings.TelegramBotTokenProtected = ProtectSecret(command.TelegramBotToken.Trim(), "Telegram bot token");
+        }
+
         settings.QuietHoursEnabled = command.QuietHoursEnabled;
         settings.QuietHoursStartLocalTime = NormalizeQuietHoursTime(command.QuietHoursStartLocalTime, fallback: "22:00");
         settings.QuietHoursEndLocalTime = NormalizeQuietHoursTime(command.QuietHoursEndLocalTime, fallback: "07:00");
@@ -74,7 +106,7 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         }
         else if (!string.IsNullOrWhiteSpace(command.SmtpPassword))
         {
-            settings.SmtpPasswordProtected = ProtectSmtpSecret(command.SmtpPassword.Trim());
+            settings.SmtpPasswordProtected = ProtectSecret(command.SmtpPassword.Trim(), "SMTP password");
         }
 
         settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -115,7 +147,10 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             BrowserNotifyAgentOffline = true,
             BrowserNotifyAgentOnline = true,
             BrowserNotificationsPermissionState = "default",
-            TelegramNotificationsEnabled = false,
+            TelegramEnabled = false,
+            TelegramInboundMode = TelegramInboundMode.Polling,
+            TelegramPollIntervalSeconds = 10,
+            TelegramLastProcessedUpdateId = 0,
             QuietHoursEnabled = false,
             QuietHoursStartLocalTime = "22:00",
             QuietHoursEndLocalTime = "07:00",
@@ -181,7 +216,7 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         return split.Length == 0 ? null : string.Join(Environment.NewLine, split);
     }
 
-    private string ProtectSmtpSecret(string secret)
+    private string ProtectSecret(string secret, string secretName)
     {
         var payload = Encoding.UTF8.GetBytes(secret);
         if (OperatingSystem.IsWindows())
@@ -190,13 +225,13 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         }
         else
         {
-            _logger.LogWarning("SMTP password fallback storage is in use because DPAPI is only available on Windows.");
+            _logger.LogWarning("{SecretName} fallback storage is in use because DPAPI is only available on Windows.", secretName);
         }
 
         return Convert.ToBase64String(payload);
     }
 
-    private string? UnprotectSmtpSecret(string? protectedSecret)
+    private string? UnprotectSecret(string? protectedSecret)
     {
         if (string.IsNullOrWhiteSpace(protectedSecret))
         {
@@ -210,7 +245,7 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         }
         catch (FormatException)
         {
-            _logger.LogWarning("Stored SMTP secret could not be decoded.");
+            _logger.LogWarning("Stored protected secret could not be decoded.");
             return null;
         }
 
@@ -232,7 +267,10 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
             BrowserNotifyAgentOffline = settings.BrowserNotifyAgentOffline,
             BrowserNotifyAgentOnline = settings.BrowserNotifyAgentOnline,
             BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState,
-            TelegramNotificationsEnabled = settings.TelegramNotificationsEnabled,
+            TelegramEnabled = settings.TelegramEnabled,
+            TelegramInboundMode = settings.TelegramInboundMode,
+            TelegramPollIntervalSeconds = settings.TelegramPollIntervalSeconds <= 0 ? 10 : settings.TelegramPollIntervalSeconds,
+            TelegramBotTokenConfigured = !string.IsNullOrWhiteSpace(settings.TelegramBotTokenProtected),
             QuietHoursEnabled = settings.QuietHoursEnabled,
             QuietHoursStartLocalTime = NormalizeQuietHoursTime(settings.QuietHoursStartLocalTime, "22:00"),
             QuietHoursEndLocalTime = NormalizeQuietHoursTime(settings.QuietHoursEndLocalTime, "07:00"),

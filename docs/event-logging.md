@@ -184,6 +184,27 @@ Quiet hours integration (phase 1):
 - suppression affects delivery only; underlying event-log records are still written normally
 - suppressed notifications are dropped in phase 1 (not queued for later delivery)
 
+## Telegram notification integration (phase 1)
+
+Telegram notification delivery uses event-log records as the source of truth and remains aligned with meaningful event types only.
+
+Only this explicit subset is Telegram-eligible in phase 1:
+
+- endpoint down
+- endpoint recovered
+- agent became offline
+- agent became online
+
+Telegram delivery is additionally gated by:
+
+- global Telegram bot/channel infrastructure enabled
+- user has a verified linked Telegram private chat account
+- user Telegram notifications enabled
+- specific Telegram event-type toggle enabled
+- user quiet-hours suppression policy
+
+Suppressed deliveries are dropped in phase 1 (not queued), while event-log persistence remains unchanged.
+
 ## SMTP notification integration (phase 1)
 
 SMTP notification delivery also uses event-log records as the source of truth.

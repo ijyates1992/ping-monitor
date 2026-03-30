@@ -1,3 +1,5 @@
+using PingMonitor.Web.Models;
+
 namespace PingMonitor.Web.Services;
 
 public sealed class NotificationSettingsDto
@@ -10,7 +12,10 @@ public sealed class NotificationSettingsDto
 
     public string? BrowserNotificationsPermissionState { get; set; }
 
-    public bool TelegramNotificationsEnabled { get; set; }
+    public bool TelegramEnabled { get; set; }
+    public TelegramInboundMode TelegramInboundMode { get; set; } = TelegramInboundMode.Polling;
+    public int TelegramPollIntervalSeconds { get; set; } = 10;
+    public bool TelegramBotTokenConfigured { get; set; }
 
     public bool QuietHoursEnabled { get; set; }
     public string QuietHoursStartLocalTime { get; set; } = "22:00";

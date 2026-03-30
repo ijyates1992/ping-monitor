@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Services;
+using PingMonitor.Web.Services.Telegram;
 using PingMonitor.Web.ViewModels.Profile;
 
 namespace PingMonitor.Web.Controllers;
@@ -15,13 +16,16 @@ public sealed class ProfileController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IUserNotificationSettingsService _userNotificationSettingsService;
+    private readonly ITelegramLinkService _telegramLinkService;
 
     public ProfileController(
         UserManager<ApplicationUser> userManager,
-        IUserNotificationSettingsService userNotificationSettingsService)
+        IUserNotificationSettingsService userNotificationSettingsService,
+        ITelegramLinkService telegramLinkService)
     {
         _userManager = userManager;
         _userNotificationSettingsService = userNotificationSettingsService;
+        _telegramLinkService = telegramLinkService;
     }
 
     [HttpGet("")]
@@ -173,16 +177,39 @@ public sealed class ProfileController : Controller
             SmtpNotifyEndpointRecovered = model.SmtpNotifyEndpointRecovered,
             SmtpNotifyAgentOffline = model.SmtpNotifyAgentOffline,
             SmtpNotifyAgentOnline = model.SmtpNotifyAgentOnline,
+            TelegramNotificationsEnabled = model.TelegramNotificationsEnabled,
+            TelegramNotifyEndpointDown = model.TelegramNotifyEndpointDown,
+            TelegramNotifyEndpointRecovered = model.TelegramNotifyEndpointRecovered,
+            TelegramNotifyAgentOffline = model.TelegramNotifyAgentOffline,
+            TelegramNotifyAgentOnline = model.TelegramNotifyAgentOnline,
             QuietHoursEnabled = model.QuietHoursEnabled,
             QuietHoursStartLocalTime = model.QuietHoursStartLocalTime ?? "22:00",
             QuietHoursEndLocalTime = model.QuietHoursEndLocalTime ?? "07:00",
             QuietHoursTimeZoneId = model.QuietHoursTimeZoneId ?? "UTC",
             QuietHoursSuppressBrowserNotifications = model.QuietHoursSuppressBrowserNotifications,
-            QuietHoursSuppressSmtpNotifications = model.QuietHoursSuppressSmtpNotifications
+            QuietHoursSuppressSmtpNotifications = model.QuietHoursSuppressSmtpNotifications,
+            QuietHoursSuppressTelegramNotifications = model.QuietHoursSuppressTelegramNotifications
         }, cancellationToken);
 
         var refreshed = await BuildModelAsync(cancellationToken);
         refreshed.NotificationsSaved = true;
+        return View("Index", refreshed);
+    }
+
+
+    [HttpPost("telegram/generate-code")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenerateTelegramCode(CancellationToken cancellationToken)
+    {
+        var user = await RequireUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        await _telegramLinkService.GenerateCodeAsync(user.Id, cancellationToken);
+        var refreshed = await BuildModelAsync(cancellationToken);
+        refreshed.TelegramCodeGenerated = true;
         return View("Index", refreshed);
     }
 
@@ -201,6 +228,8 @@ public sealed class ProfileController : Controller
         }
 
         var settings = await _userNotificationSettingsService.GetCurrentAsync(user.Id, cancellationToken);
+        var pendingCode = await _telegramLinkService.GetActiveCodeAsync(user.Id, cancellationToken);
+        var telegramAccount = await _telegramLinkService.GetAccountStatusAsync(user.Id, cancellationToken);
         return new ProfilePageViewModel
         {
             UserName = user.UserName ?? string.Empty,
@@ -216,13 +245,26 @@ public sealed class ProfileController : Controller
             SmtpNotifyEndpointRecovered = source?.SmtpNotifyEndpointRecovered ?? settings.SmtpNotifyEndpointRecovered,
             SmtpNotifyAgentOffline = source?.SmtpNotifyAgentOffline ?? settings.SmtpNotifyAgentOffline,
             SmtpNotifyAgentOnline = source?.SmtpNotifyAgentOnline ?? settings.SmtpNotifyAgentOnline,
+            TelegramNotificationsEnabled = source?.TelegramNotificationsEnabled ?? settings.TelegramNotificationsEnabled,
+            TelegramNotifyEndpointDown = source?.TelegramNotifyEndpointDown ?? settings.TelegramNotifyEndpointDown,
+            TelegramNotifyEndpointRecovered = source?.TelegramNotifyEndpointRecovered ?? settings.TelegramNotifyEndpointRecovered,
+            TelegramNotifyAgentOffline = source?.TelegramNotifyAgentOffline ?? settings.TelegramNotifyAgentOffline,
+            TelegramNotifyAgentOnline = source?.TelegramNotifyAgentOnline ?? settings.TelegramNotifyAgentOnline,
             QuietHoursEnabled = source?.QuietHoursEnabled ?? settings.QuietHoursEnabled,
             QuietHoursStartLocalTime = source?.QuietHoursStartLocalTime ?? settings.QuietHoursStartLocalTime,
             QuietHoursEndLocalTime = source?.QuietHoursEndLocalTime ?? settings.QuietHoursEndLocalTime,
             QuietHoursTimeZoneId = source?.QuietHoursTimeZoneId ?? settings.QuietHoursTimeZoneId,
             QuietHoursSuppressBrowserNotifications = source?.QuietHoursSuppressBrowserNotifications ?? settings.QuietHoursSuppressBrowserNotifications,
             QuietHoursSuppressSmtpNotifications = source?.QuietHoursSuppressSmtpNotifications ?? settings.QuietHoursSuppressSmtpNotifications,
-            NotificationSettingsUpdatedAtUtc = settings.UpdatedAtUtc
+            QuietHoursSuppressTelegramNotifications = source?.QuietHoursSuppressTelegramNotifications ?? settings.QuietHoursSuppressTelegramNotifications,
+            NotificationSettingsUpdatedAtUtc = settings.UpdatedAtUtc,
+            ActiveTelegramCode = pendingCode?.Code,
+            ActiveTelegramCodeExpiresAtUtc = pendingCode?.ExpiresAtUtc,
+            TelegramLinked = telegramAccount is not null && telegramAccount.Verified,
+            TelegramLinkedChatId = telegramAccount?.ChatId,
+            TelegramLinkedUsername = telegramAccount?.Username,
+            TelegramLinkedDisplayName = telegramAccount?.DisplayName,
+            TelegramLinkedAtUtc = telegramAccount?.LinkedAtUtc
         };
     }
 }
