@@ -95,6 +95,7 @@
     <h2>Telegram account linking</h2>
     <p class="muted">Generate a verification code, send it to the bot in a private chat, and wait for confirmation.</p>
     @if (Model.TelegramCodeGenerated) { <div class="saved">A new Telegram link code was generated.</div> }
+    @if (Model.TelegramAccountRemoved) { <div class="saved">Telegram account removed.</div> }
     @if (!string.IsNullOrWhiteSpace(Model.ActiveTelegramCode))
     {
         <p><strong>Active code:</strong> @Model.ActiveTelegramCode (expires @Model.ActiveTelegramCodeExpiresAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"))</p>
@@ -104,10 +105,19 @@
         <p><strong>Linked chat:</strong> @Model.TelegramLinkedChatId</p>
         @if (!string.IsNullOrWhiteSpace(Model.TelegramLinkedUsername)) { <p><strong>Username:</strong> @Model.TelegramLinkedUsername</p> }
     }
-    <form method="post" action="/profile/telegram/generate-code" class="stack">
-        @Html.AntiForgeryToken()
-        <div class="button-row"><button class="button-secondary" type="submit">Generate link code</button></div>
-    </form>
+    <div class="button-row">
+        <form method="post" action="/profile/telegram/generate-code" class="stack">
+            @Html.AntiForgeryToken()
+            <button class="button-secondary" type="submit">Generate link code</button>
+        </form>
+        @if (Model.TelegramLinked)
+        {
+            <form method="post" action="/profile/telegram/remove" class="stack">
+                @Html.AntiForgeryToken()
+                <button class="button-secondary" type="submit">Remove linked Telegram account</button>
+            </form>
+        }
+    </div>
 </section>
 
 </div>
