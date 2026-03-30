@@ -41,6 +41,7 @@
     @if (Model.PasswordSaved) { <div class="saved">Password changed.</div> }
     <form method="post" action="/profile/password" class="stack">
         @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Email" />
         <div><label asp-for="CurrentPassword"></label><input asp-for="CurrentPassword" type="password" autocomplete="current-password" /><div class="field-error"><span asp-validation-for="CurrentPassword"></span></div></div>
         <div><label asp-for="NewPassword"></label><input asp-for="NewPassword" type="password" autocomplete="new-password" /><div class="field-error"><span asp-validation-for="NewPassword"></span></div></div>
         <div><label asp-for="ConfirmNewPassword"></label><input asp-for="ConfirmNewPassword" type="password" autocomplete="new-password" /><div class="field-error"><span asp-validation-for="ConfirmNewPassword"></span></div></div>
@@ -52,6 +53,7 @@
     @if (Model.NotificationsSaved) { <div class="saved">Notification preferences saved.</div> }
     <form method="post" action="/profile/notifications" class="stack">
         @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Email" />
         <input type="hidden" asp-for="BrowserNotificationsPermissionState" id="browserPermissionStateInput" />
         <h3>Browser</h3>
         <div class="switch-row"><input asp-for="BrowserNotificationsEnabled" type="checkbox" /><label asp-for="BrowserNotificationsEnabled">Enable browser notifications</label></div>
