@@ -178,6 +178,25 @@ Browser notification delivery for these eligible event types is additionally gat
 
 Global browser notifications must also be enabled, and browser permission must be granted.
 
+## SMTP notification integration (phase 1)
+
+SMTP notification delivery also uses event-log records as the source of truth.
+
+Only the same explicit subset of meaningful events is eligible for SMTP delivery in phase 1:
+
+- endpoint down
+- endpoint recovered
+- agent became offline
+- agent became online
+
+SMTP delivery for eligible events is additionally gated by explicit SMTP settings:
+
+- global SMTP notifications enabled
+- SMTP channel settings complete and valid (server/auth/from/recipients)
+- specific SMTP event-type setting enabled
+
+Routine heartbeat and high-frequency/non-actionable events remain excluded from notification delivery.
+
 ### Status Page
 
 - Displays **recent events**

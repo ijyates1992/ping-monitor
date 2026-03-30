@@ -18,9 +18,9 @@ The first implementation phase is browser notifications delivered while an opera
 
 Telegram delivery is planned as a future notification channel.
 
-### SMTP email (future)
+### SMTP email (phase 1)
 
-SMTP-backed email delivery is planned as a future notification channel.
+SMTP-backed email delivery is included in phase 1 as an operator-configured channel.
 
 ---
 
@@ -35,7 +35,7 @@ Initial intended notification event types:
 
 Future scope may include security-oriented notifications (for example, authentication/security events), but these are not part of the first implementation.
 
-For phase 1 browser delivery, notification events are sourced from the persisted event log (not raw check-result ingestion). Only meaningful event types are eligible for browser delivery.
+For phase 1 browser and SMTP delivery, notification events are sourced from the persisted event log (not raw check-result ingestion). Only meaningful event types are eligible for delivery.
 
 ---
 
@@ -48,11 +48,23 @@ Initial settings scope:
 - browser notifications enabled/disabled
 - browser notifications enabled/disabled per supported event type
 - test notification action for operator verification
+- SMTP notifications enabled/disabled
+- SMTP server settings (host, port, TLS mode, username, password secret, from address/display name)
+- SMTP recipient address list
+- SMTP notifications enabled/disabled per supported event type
+- SMTP test-send action for operator verification
 
 Future settings scope:
 
-- channel-specific settings for Telegram and SMTP email
+- channel-specific settings for Telegram
 - additional controls as new channels are introduced
+
+SMTP secret handling requirements:
+
+- SMTP password must not be echoed back to operators in UI
+- SMTP password must not be written to logs
+- Stored SMTP secrets must use protected storage appropriate for the deployment model
+- Leaving password blank during edit should preserve the existing stored secret unless explicit clear is requested
 
 ---
 

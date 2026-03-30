@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Services.SmtpNotifications;
 using PingMonitor.Web.ViewModels.Admin;
+using System.Net.Mail;
 
 namespace PingMonitor.Web.Controllers;
 
@@ -11,10 +13,17 @@ namespace PingMonitor.Web.Controllers;
 public sealed class NotificationSettingsController : Controller
 {
     private readonly INotificationSettingsService _notificationSettingsService;
+    private readonly ISmtpNotificationSender _smtpNotificationSender;
+    private readonly ILogger<NotificationSettingsController> _logger;
 
-    public NotificationSettingsController(INotificationSettingsService notificationSettingsService)
+    public NotificationSettingsController(
+        INotificationSettingsService notificationSettingsService,
+        ISmtpNotificationSender smtpNotificationSender,
+        ILogger<NotificationSettingsController> logger)
     {
         _notificationSettingsService = notificationSettingsService;
+        _smtpNotificationSender = smtpNotificationSender;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -35,6 +44,8 @@ public sealed class NotificationSettingsController : Controller
                 "Permission state must be default, granted, or denied.");
         }
 
+        ValidateSmtpSettings(model);
+
         if (!ModelState.IsValid)
         {
             return View("Index", model);
@@ -49,6 +60,20 @@ public sealed class NotificationSettingsController : Controller
                 BrowserNotifyAgentOffline = model.BrowserNotifyAgentOffline,
                 BrowserNotifyAgentOnline = model.BrowserNotifyAgentOnline,
                 BrowserNotificationsPermissionState = model.BrowserNotificationsPermissionState,
+                SmtpNotificationsEnabled = model.SmtpNotificationsEnabled,
+                SmtpHost = model.SmtpHost,
+                SmtpPort = model.SmtpPort,
+                SmtpUseTls = model.SmtpUseTls,
+                SmtpUsername = model.SmtpUsername,
+                SmtpPassword = model.SmtpPassword,
+                SmtpClearPassword = model.SmtpClearPassword,
+                SmtpFromAddress = model.SmtpFromAddress,
+                SmtpFromDisplayName = model.SmtpFromDisplayName,
+                SmtpRecipientAddresses = model.SmtpRecipientAddresses,
+                SmtpNotifyEndpointDown = model.SmtpNotifyEndpointDown,
+                SmtpNotifyEndpointRecovered = model.SmtpNotifyEndpointRecovered,
+                SmtpNotifyAgentOffline = model.SmtpNotifyAgentOffline,
+                SmtpNotifyAgentOnline = model.SmtpNotifyAgentOnline,
                 UpdatedByUserId = User.Identity?.Name
             },
             cancellationToken);
@@ -56,9 +81,98 @@ public sealed class NotificationSettingsController : Controller
         return View("Index", ToViewModel(updated, saved: true));
     }
 
+    [HttpPost("smtp-test")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendSmtpTest([FromForm] NotificationSettingsPageViewModel model, CancellationToken cancellationToken)
+    {
+        if (!IsValidPermissionState(model.BrowserNotificationsPermissionState))
+        {
+            model.BrowserNotificationsPermissionState = "default";
+        }
+
+        ValidateSmtpSettings(model);
+        if (!ModelState.IsValid)
+        {
+            model.SmtpTestSent = false;
+            model.SmtpTestMessage = "SMTP test send failed due to validation errors.";
+            return View("Index", model);
+        }
+
+        await _notificationSettingsService.UpdateAsync(
+            new UpdateNotificationSettingsCommand
+            {
+                BrowserNotificationsEnabled = model.BrowserNotificationsEnabled,
+                BrowserNotifyEndpointDown = model.BrowserNotifyEndpointDown,
+                BrowserNotifyEndpointRecovered = model.BrowserNotifyEndpointRecovered,
+                BrowserNotifyAgentOffline = model.BrowserNotifyAgentOffline,
+                BrowserNotifyAgentOnline = model.BrowserNotifyAgentOnline,
+                BrowserNotificationsPermissionState = model.BrowserNotificationsPermissionState,
+                SmtpNotificationsEnabled = model.SmtpNotificationsEnabled,
+                SmtpHost = model.SmtpHost,
+                SmtpPort = model.SmtpPort,
+                SmtpUseTls = model.SmtpUseTls,
+                SmtpUsername = model.SmtpUsername,
+                SmtpPassword = model.SmtpPassword,
+                SmtpClearPassword = model.SmtpClearPassword,
+                SmtpFromAddress = model.SmtpFromAddress,
+                SmtpFromDisplayName = model.SmtpFromDisplayName,
+                SmtpRecipientAddresses = model.SmtpRecipientAddresses,
+                SmtpNotifyEndpointDown = model.SmtpNotifyEndpointDown,
+                SmtpNotifyEndpointRecovered = model.SmtpNotifyEndpointRecovered,
+                SmtpNotifyAgentOffline = model.SmtpNotifyAgentOffline,
+                SmtpNotifyAgentOnline = model.SmtpNotifyAgentOnline,
+                UpdatedByUserId = User.Identity?.Name
+            },
+            cancellationToken);
+
+        var result = await _smtpNotificationSender.SendTestAsync(cancellationToken);
+        if (result.Success)
+        {
+            _logger.LogInformation("SMTP test send succeeded for user {UserId}.", User.Identity?.Name ?? "(unknown)");
+        }
+        else
+        {
+            _logger.LogWarning("SMTP test send failed for user {UserId}: {Reason}", User.Identity?.Name ?? "(unknown)", result.Message);
+        }
+
+        var refreshed = await _notificationSettingsService.GetCurrentAsync(cancellationToken);
+        var viewModel = ToViewModel(refreshed, saved: false);
+        viewModel.SmtpTestSent = result.Success;
+        viewModel.SmtpTestMessage = result.Message;
+        return View("Index", viewModel);
+    }
+
     private static bool IsValidPermissionState(string value)
     {
         return value is "default" or "granted" or "denied";
+    }
+
+    private void ValidateSmtpSettings(NotificationSettingsPageViewModel model)
+    {
+        if (!model.SmtpNotificationsEnabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.SmtpHost))
+        {
+            ModelState.AddModelError(nameof(model.SmtpHost), "SMTP host is required when SMTP notifications are enabled.");
+        }
+
+        if (model.SmtpPort <= 0 || model.SmtpPort > 65535)
+        {
+            ModelState.AddModelError(nameof(model.SmtpPort), "SMTP port must be between 1 and 65535.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.SmtpFromAddress) || !MailAddress.TryCreate(model.SmtpFromAddress, out _))
+        {
+            ModelState.AddModelError(nameof(model.SmtpFromAddress), "A valid SMTP from address is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.SmtpRecipientAddresses))
+        {
+            ModelState.AddModelError(nameof(model.SmtpRecipientAddresses), "At least one SMTP recipient address is required.");
+        }
     }
 
     private static NotificationSettingsPageViewModel ToViewModel(NotificationSettingsDto settings, bool saved)
@@ -71,6 +185,19 @@ public sealed class NotificationSettingsController : Controller
             BrowserNotifyAgentOffline = settings.BrowserNotifyAgentOffline,
             BrowserNotifyAgentOnline = settings.BrowserNotifyAgentOnline,
             BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState ?? "default",
+            SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,
+            SmtpHost = settings.SmtpHost,
+            SmtpPort = settings.SmtpPort,
+            SmtpUseTls = settings.SmtpUseTls,
+            SmtpUsername = settings.SmtpUsername,
+            SmtpPasswordConfigured = settings.SmtpPasswordConfigured,
+            SmtpFromAddress = settings.SmtpFromAddress,
+            SmtpFromDisplayName = settings.SmtpFromDisplayName,
+            SmtpRecipientAddresses = settings.SmtpRecipientAddresses,
+            SmtpNotifyEndpointDown = settings.SmtpNotifyEndpointDown,
+            SmtpNotifyEndpointRecovered = settings.SmtpNotifyEndpointRecovered,
+            SmtpNotifyAgentOffline = settings.SmtpNotifyAgentOffline,
+            SmtpNotifyAgentOnline = settings.SmtpNotifyAgentOnline,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             UpdatedByUserId = settings.UpdatedByUserId,
             Saved = saved

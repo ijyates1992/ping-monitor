@@ -35,6 +35,16 @@
         .status-pill { display: inline-block; padding: .3rem .55rem; border-radius: 999px; font-size: .85rem; border: 1px solid var(--border); background: #f8fafc; }
         .switch-row { display: flex; align-items: center; gap: .75rem; }
         input[type="checkbox"] { inline-size: 1.2rem; block-size: 1.2rem; }
+        input[type="text"], input[type="password"], input[type="number"], textarea {
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: .6rem .7rem;
+            font: inherit;
+        }
+        textarea { min-height: 120px; }
+        label { font-weight: 600; }
     </style>
 </head>
 <body>
@@ -109,14 +119,96 @@
             </section>
 
             <section class="card stack">
+                <h2>SMTP email notifications (phase 1)</h2>
+                <p class="muted">SMTP delivery is configured separately from browser notifications and is sent only for supported event types.</p>
+
+                @if (!string.IsNullOrWhiteSpace(Model.SmtpTestMessage))
+                {
+                    <div class="@(Model.SmtpTestSent ? "saved" : "errors")" role="status">@Model.SmtpTestMessage</div>
+                }
+
+                <div class="switch-row">
+                    <input asp-for="SmtpNotificationsEnabled" type="checkbox" />
+                    <label asp-for="SmtpNotificationsEnabled"></label>
+                </div>
+
+                <div class="stack">
+                    <div>
+                        <label asp-for="SmtpHost"></label>
+                        <input asp-for="SmtpHost" type="text" />
+                        <div class="field-error"><span asp-validation-for="SmtpHost"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="SmtpPort"></label>
+                        <input asp-for="SmtpPort" type="number" min="1" max="65535" />
+                        <div class="field-error"><span asp-validation-for="SmtpPort"></span></div>
+                    </div>
+                    <div class="switch-row">
+                        <input asp-for="SmtpUseTls" type="checkbox" />
+                        <label asp-for="SmtpUseTls"></label>
+                    </div>
+                    <div>
+                        <label asp-for="SmtpUsername"></label>
+                        <input asp-for="SmtpUsername" type="text" />
+                    </div>
+                    <div>
+                        <label asp-for="SmtpPassword"></label>
+                        <input asp-for="SmtpPassword" type="password" autocomplete="new-password" />
+                        @if (Model.SmtpPasswordConfigured)
+                        {
+                            <p class="muted">A password is already stored. Leave blank to keep it unchanged.</p>
+                        }
+                    </div>
+                    <div class="switch-row">
+                        <input asp-for="SmtpClearPassword" type="checkbox" />
+                        <label asp-for="SmtpClearPassword"></label>
+                    </div>
+                    <div>
+                        <label asp-for="SmtpFromAddress"></label>
+                        <input asp-for="SmtpFromAddress" type="text" />
+                        <div class="field-error"><span asp-validation-for="SmtpFromAddress"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="SmtpFromDisplayName"></label>
+                        <input asp-for="SmtpFromDisplayName" type="text" />
+                    </div>
+                    <div>
+                        <label asp-for="SmtpRecipientAddresses"></label>
+                        <textarea asp-for="SmtpRecipientAddresses"></textarea>
+                        <div class="field-error"><span asp-validation-for="SmtpRecipientAddresses"></span></div>
+                    </div>
+                </div>
+
+                <div class="stack" style="margin-top:.5rem;">
+                    <p class="muted">SMTP event types:</p>
+                    <div class="switch-row">
+                        <input asp-for="SmtpNotifyEndpointDown" type="checkbox" />
+                        <label asp-for="SmtpNotifyEndpointDown"></label>
+                    </div>
+                    <div class="switch-row">
+                        <input asp-for="SmtpNotifyEndpointRecovered" type="checkbox" />
+                        <label asp-for="SmtpNotifyEndpointRecovered"></label>
+                    </div>
+                    <div class="switch-row">
+                        <input asp-for="SmtpNotifyAgentOffline" type="checkbox" />
+                        <label asp-for="SmtpNotifyAgentOffline"></label>
+                    </div>
+                    <div class="switch-row">
+                        <input asp-for="SmtpNotifyAgentOnline" type="checkbox" />
+                        <label asp-for="SmtpNotifyAgentOnline"></label>
+                    </div>
+                </div>
+
+                <div class="button-row">
+                    <button class="button-secondary" type="submit" formaction="/settings/notifications/smtp-test">Send SMTP test email</button>
+                </div>
+            </section>
+
+            <section class="card stack">
                 <h2>Future channels</h2>
                 <div>
                     <h3>Telegram notifications</h3>
                     <p class="muted">Coming later. Delivery and channel settings are not implemented in phase 1.</p>
-                </div>
-                <div>
-                    <h3>SMTP email notifications</h3>
-                    <p class="muted">Coming later. SMTP delivery and credential settings are not implemented in phase 1.</p>
                 </div>
             </section>
 
