@@ -52,6 +52,26 @@ internal sealed class NotificationSettingsService : INotificationSettingsService
         };
     }
 
+    public async Task AdvanceTelegramLastProcessedUpdateIdAsync(long updateId, CancellationToken cancellationToken)
+    {
+        if (updateId < 0)
+        {
+            return;
+        }
+
+        var settings = await GetOrCreateEntityAsync(cancellationToken);
+        if (updateId <= settings.TelegramLastProcessedUpdateId)
+        {
+            return;
+        }
+
+        settings.TelegramLastProcessedUpdateId = updateId;
+        settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogDebug("Telegram last processed update advanced to {UpdateId}.", updateId);
+    }
+
     public async Task<NotificationSettingsDto> UpdateAsync(UpdateNotificationSettingsCommand command, CancellationToken cancellationToken)
     {
         var settings = await GetOrCreateEntityAsync(cancellationToken);
