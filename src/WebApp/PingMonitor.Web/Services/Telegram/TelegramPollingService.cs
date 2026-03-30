@@ -28,7 +28,8 @@ internal sealed class TelegramPollingService : ITelegramPollingService
             return;
         }
 
-        var offset = settings.TelegramLastProcessedUpdateId + 1;
+        var lastProcessedUpdateId = settings.TelegramLastProcessedUpdateId;
+        var offset = lastProcessedUpdateId + 1;
         var url = $"https://api.telegram.org/bot{settings.TelegramBotToken}/getUpdates?timeout=25&offset={offset}";
 
         HttpResponseMessage response;
@@ -55,23 +56,57 @@ internal sealed class TelegramPollingService : ITelegramPollingService
             return;
         }
 
-        long maxUpdateId = settings.TelegramLastProcessedUpdateId;
-        foreach (var item in result.EnumerateArray())
+        var seenUpdateIds = new HashSet<long>();
+        var updates = result.EnumerateArray()
+            .OrderBy(item => item.TryGetProperty("update_id", out var updateIdElement) ? updateIdElement.GetInt64() : long.MaxValue)
+            .ToList();
+
+        foreach (var item in updates)
         {
-            var updateId = item.GetProperty("update_id").GetInt64();
-            if (updateId > maxUpdateId)
+            if (!item.TryGetProperty("update_id", out var updateIdElement))
             {
-                maxUpdateId = updateId;
+                _logger.LogWarning("Telegram update did not contain update_id and was skipped.");
+                continue;
             }
 
-            if (!item.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object)
+            var updateId = updateIdElement.GetInt64();
+            if (updateId <= lastProcessedUpdateId)
             {
                 continue;
+            }
+
+            if (!seenUpdateIds.Add(updateId))
+            {
+                _logger.LogWarning("Duplicate Telegram update {UpdateId} encountered in same poll cycle and skipped.", updateId);
+                continue;
+            }
+
+            var handledSuccessfully = await ProcessUpdateAsync(settings.TelegramBotToken, updateId, item, cancellationToken);
+            if (!handledSuccessfully)
+            {
+                _logger.LogWarning("Telegram update {UpdateId} failed processing and will be retried in a future poll cycle.", updateId);
+                continue;
+            }
+
+            await _notificationSettingsService.AdvanceTelegramLastProcessedUpdateIdAsync(updateId, cancellationToken);
+            lastProcessedUpdateId = updateId;
+        }
+    }
+
+    private async Task<bool> ProcessUpdateAsync(string botToken, long updateId, JsonElement item, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!item.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object)
+            {
+                _logger.LogDebug("Telegram update {UpdateId} contained no message payload and was acknowledged.", updateId);
+                return true;
             }
 
             if (!message.TryGetProperty("chat", out var chat) || !chat.TryGetProperty("id", out var chatIdElement))
             {
-                continue;
+                _logger.LogWarning("Telegram update {UpdateId} had message payload without chat id and was acknowledged.", updateId);
+                return true;
             }
 
             var chatId = chatIdElement.ToString();
@@ -94,7 +129,8 @@ internal sealed class TelegramPollingService : ITelegramPollingService
             if (processingResult.Handled)
             {
                 _logger.LogInformation(
-                    "Telegram inbound message processed. Success={Success} Status={Status} Detail={Detail}",
+                    "Telegram inbound message processed. UpdateId={UpdateId} Success={Success} Status={Status} Detail={Detail}",
+                    updateId,
                     processingResult.Success,
                     processingResult.Status,
                     processingResult.Message);
@@ -102,49 +138,19 @@ internal sealed class TelegramPollingService : ITelegramPollingService
 
             if (processingResult.ShouldReply && !string.IsNullOrWhiteSpace(processingResult.ReplyText))
             {
-                await SendReplyAsync(settings.TelegramBotToken, chatId, processingResult.ReplyText, cancellationToken);
+                await SendReplyAsync(botToken, chatId, updateId, processingResult.ReplyText, cancellationToken);
             }
-        }
 
-        if (maxUpdateId > settings.TelegramLastProcessedUpdateId)
+            return true;
+        }
+        catch (Exception ex)
         {
-            var current = await _notificationSettingsService.GetCurrentAsync(cancellationToken);
-            await _notificationSettingsService.UpdateAsync(new UpdateNotificationSettingsCommand
-            {
-                BrowserNotificationsEnabled = current.BrowserNotificationsEnabled,
-                BrowserNotifyEndpointDown = current.BrowserNotifyEndpointDown,
-                BrowserNotifyEndpointRecovered = current.BrowserNotifyEndpointRecovered,
-                BrowserNotifyAgentOffline = current.BrowserNotifyAgentOffline,
-                BrowserNotifyAgentOnline = current.BrowserNotifyAgentOnline,
-                BrowserNotificationsPermissionState = current.BrowserNotificationsPermissionState,
-                TelegramEnabled = current.TelegramEnabled,
-                TelegramInboundMode = current.TelegramInboundMode,
-                TelegramPollIntervalSeconds = current.TelegramPollIntervalSeconds,
-                TelegramLastProcessedUpdateId = maxUpdateId,
-                QuietHoursEnabled = current.QuietHoursEnabled,
-                QuietHoursStartLocalTime = current.QuietHoursStartLocalTime,
-                QuietHoursEndLocalTime = current.QuietHoursEndLocalTime,
-                QuietHoursTimeZoneId = current.QuietHoursTimeZoneId,
-                QuietHoursSuppressBrowserNotifications = current.QuietHoursSuppressBrowserNotifications,
-                QuietHoursSuppressSmtpNotifications = current.QuietHoursSuppressSmtpNotifications,
-                SmtpNotificationsEnabled = current.SmtpNotificationsEnabled,
-                SmtpHost = current.SmtpHost,
-                SmtpPort = current.SmtpPort,
-                SmtpUseTls = current.SmtpUseTls,
-                SmtpUsername = current.SmtpUsername,
-                SmtpFromAddress = current.SmtpFromAddress,
-                SmtpFromDisplayName = current.SmtpFromDisplayName,
-                SmtpRecipientAddresses = current.SmtpRecipientAddresses,
-                SmtpNotifyEndpointDown = current.SmtpNotifyEndpointDown,
-                SmtpNotifyEndpointRecovered = current.SmtpNotifyEndpointRecovered,
-                SmtpNotifyAgentOffline = current.SmtpNotifyAgentOffline,
-                SmtpNotifyAgentOnline = current.SmtpNotifyAgentOnline,
-                UpdatedByUserId = current.UpdatedByUserId
-            }, cancellationToken);
+            _logger.LogWarning(ex, "Telegram update {UpdateId} processing failed.", updateId);
+            return false;
         }
     }
 
-    private async Task SendReplyAsync(string botToken, string chatId, string text, CancellationToken cancellationToken)
+    private async Task SendReplyAsync(string botToken, string chatId, long updateId, string text, CancellationToken cancellationToken)
     {
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -159,12 +165,16 @@ internal sealed class TelegramPollingService : ITelegramPollingService
             var response = await _httpClient.PostAsync(url, content, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Telegram verification reply failed for chat {ChatId} with status {StatusCode}.", chatId, (int)response.StatusCode);
+                _logger.LogWarning(
+                    "Telegram verification reply failed for update {UpdateId} chat {ChatId} with status {StatusCode}.",
+                    updateId,
+                    chatId,
+                    (int)response.StatusCode);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Telegram verification reply request failed for chat {ChatId}.", chatId);
+            _logger.LogWarning(ex, "Telegram verification reply request failed for update {UpdateId} chat {ChatId}.", updateId, chatId);
         }
     }
 }
