@@ -242,6 +242,20 @@ Practical checks:
 - verify the site binding and certificate are correct for the public hostname
 - if another reverse proxy sits in front of IIS, make sure it preserves standard forwarded headers
 
+### IIS reports `Failed to gracefully shutdown application "MACHINE/WEBROOT/APPHOST/PING MONITOR"`
+
+This IIS/ANCM message indicates the worker process did not stop inside the configured shutdown window during recycle/stop.
+
+What this repository now does:
+
+- ships an explicit `web.config` with `shutdownTimeLimit="60"` so IIS allows a longer graceful-stop window for hosted background services
+
+Operational checks:
+
+- confirm IIS is serving the latest published output that includes this `web.config`
+- recycle the application pool after deployment
+- if you still see this message, review background-service logs to identify long-running operations that ignore cancellation
+
 ### Site keeps landing on `/startup-gate`
 
 That means one or more startup checks still fail. Review the diagnostics shown by the gate and verify:
