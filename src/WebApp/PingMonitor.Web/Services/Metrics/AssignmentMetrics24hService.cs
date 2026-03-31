@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
@@ -24,8 +25,10 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             return new Dictionary<string, AssignmentMetrics24hSummary>(StringComparer.Ordinal);
         }
 
-        var summaries = await _dbContext.AssignmentMetrics24h.AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId))
+        var summaries = await ApplyAssignmentFilter(
+                _dbContext.AssignmentMetrics24h.AsNoTracking(),
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
             .ToDictionaryAsync(
                 x => x.AssignmentId,
                 x => new AssignmentMetrics24hSummary
@@ -62,31 +65,41 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
         var nowUtc = DateTimeOffset.UtcNow;
         var windowStartUtc = nowUtc - Window;
 
-        var existingRows = await _dbContext.AssignmentMetrics24h
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId))
+        var existingRows = await ApplyAssignmentFilter(
+                _dbContext.AssignmentMetrics24h,
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
             .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
 
-        var endpointStates = await _dbContext.EndpointStates.AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId))
+        var endpointStates = await ApplyAssignmentFilter(
+                _dbContext.EndpointStates.AsNoTracking(),
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
             .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
 
-        var transitionsInWindow = await _dbContext.StateTransitions.AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId)
-                && x.TransitionAtUtc >= windowStartUtc
+        var transitionsInWindow = await ApplyAssignmentFilter(
+                _dbContext.StateTransitions.AsNoTracking(),
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
+            .Where(x => x.TransitionAtUtc >= windowStartUtc
                 && x.TransitionAtUtc <= nowUtc)
             .OrderBy(x => x.TransitionAtUtc)
             .ToListAsync(cancellationToken);
 
-        var transitionsBeforeWindow = await _dbContext.StateTransitions.AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId)
-                && x.TransitionAtUtc < windowStartUtc)
+        var transitionsBeforeWindow = await ApplyAssignmentFilter(
+                _dbContext.StateTransitions.AsNoTracking(),
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
+            .Where(x => x.TransitionAtUtc < windowStartUtc)
             .GroupBy(x => x.AssignmentId)
             .Select(group => group.OrderByDescending(x => x.TransitionAtUtc).First())
             .ToListAsync(cancellationToken);
 
-        var latestSuccessfulChecks = await _dbContext.CheckResults.AsNoTracking()
-            .Where(x => normalizedAssignmentIds.Contains(x.AssignmentId)
-                && x.Success
+        var latestSuccessfulChecks = await ApplyAssignmentFilter(
+                _dbContext.CheckResults.AsNoTracking(),
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
+            .Where(x => x.Success
                 && x.RoundTripMs.HasValue
                 && x.CheckedAtUtc >= windowStartUtc
                 && x.CheckedAtUtc <= nowUtc)
@@ -256,6 +269,34 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             .Select(x => x.Trim())
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static IQueryable<T> ApplyAssignmentFilter<T>(
+        IQueryable<T> query,
+        Expression<Func<T, string>> assignmentIdSelector,
+        IReadOnlyList<string> assignmentIds)
+    {
+        Expression? filterExpression = null;
+        var parameter = assignmentIdSelector.Parameters[0];
+
+        foreach (var assignmentId in assignmentIds)
+        {
+            var equalsExpression = Expression.Equal(
+                assignmentIdSelector.Body,
+                Expression.Constant(assignmentId));
+
+            filterExpression = filterExpression is null
+                ? equalsExpression
+                : Expression.OrElse(filterExpression, equalsExpression);
+        }
+
+        if (filterExpression is null)
+        {
+            return query.Where(_ => false);
+        }
+
+        var predicate = Expression.Lambda<Func<T, bool>>(filterExpression, parameter);
+        return query.Where(predicate);
     }
 
     private readonly record struct AssignmentDurationSummary(
