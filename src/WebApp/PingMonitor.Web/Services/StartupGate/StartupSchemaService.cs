@@ -656,7 +656,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.statistics
             WHERE table_schema = DATABASE()
               AND table_name = {0}
-              AND index_name = {1};
+              AND index_name = {1}
             """,
             tableName,
             indexName)
