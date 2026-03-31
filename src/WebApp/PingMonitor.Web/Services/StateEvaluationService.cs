@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.EventLogs;
+using PingMonitor.Web.Services.Metrics;
 using System.Text.Json;
 
 namespace PingMonitor.Web.Services;
@@ -11,15 +12,18 @@ internal sealed class StateEvaluationService : IStateEvaluationService
     private readonly PingMonitorDbContext _dbContext;
     private readonly ILogger<StateEvaluationService> _logger;
     private readonly IEventLogService _eventLogService;
+    private readonly IAssignmentMetrics24hService _assignmentMetrics24hService;
 
     public StateEvaluationService(
         PingMonitorDbContext dbContext,
         ILogger<StateEvaluationService> logger,
-        IEventLogService eventLogService)
+        IEventLogService eventLogService,
+        IAssignmentMetrics24hService assignmentMetrics24hService)
     {
         _dbContext = dbContext;
         _logger = logger;
         _eventLogService = eventLogService;
+        _assignmentMetrics24hService = assignmentMetrics24hService;
     }
 
     public async Task EvaluateAssignmentsAsync(IEnumerable<string> assignmentIds, CancellationToken cancellationToken)
@@ -192,6 +196,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _assignmentMetrics24hService.RefreshAssignmentAsync(assignment.AssignmentId, cancellationToken);
 
         if (CrossedDownBoundary(previousState, nextState))
         {

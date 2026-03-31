@@ -398,7 +398,6 @@
                                         <div class="meta-item"><span>Consecutive successes</span><div>@row.ConsecutiveSuccessCount</div></div>
                                         <div class="meta-item"><span>Endpoint uptime (24h)</span><div>@FormatPercent(row.UptimePercent)</div></div>
                                         <div class="meta-item"><span>Last RTT (24h)</span><div>@FormatRtt(row.LastRttMs)</div></div>
-                                        <div class="meta-item"><span>Average RTT (24h)</span><div>@FormatRtt(row.AverageRttMs)</div></div>
                                         <div class="meta-item"><span>Groups</span><div>@(row.GroupNames.Count == 0 ? "None" : string.Join(", ", row.GroupNames))</div></div>
                                         <div class="meta-item"><span>Dependency parents</span><div>@FormatDependencies(row.ParentEndpointIds, row.ParentEndpointNames, "None")</div></div>
                                         <div class="meta-item"><span>Suppressed by</span><div>@FormatDependency(row.SuppressedByEndpointId, row.SuppressedByEndpointName, "Not suppressed")</div></div>

@@ -409,6 +409,37 @@ Represents a historical state change.
 
 ---
 
+
+### AssignmentMetrics24h
+
+Represents persisted assignment-scoped 24-hour summary metrics used by status-page read paths.
+
+#### Purpose
+
+- avoid repeated raw-history scans on status-page load
+- provide lightweight, deterministic 24h assignment summaries
+- keep raw history as source of truth while using an explicit read model
+
+#### Key fields
+
+- `assignmentId` (PK)
+- `windowStartUtc`
+- `windowEndUtc`
+- `uptimeSeconds`
+- `downtimeSeconds`
+- `unknownSeconds`
+- `suppressedSeconds`
+- `lastRttMs` (nullable)
+- `lastSuccessfulCheckUtc` (nullable)
+- `updatedAtUtc`
+
+#### Constraints
+
+- recomputable from raw facts (`CheckResult`, `StateTransition`, `EndpointState`)
+- not a replacement for audit/history tables
+
+---
+
 ### EventLog
 
 Represents a meaningful endpoint/agent operational event.
@@ -523,6 +554,7 @@ Represents an alert lifecycle.
 - MonitorAssignment 1 → many CheckResults  
 - MonitorAssignment 1 → 1 EndpointState  
 - MonitorAssignment 1 → many StateTransitions  
+- MonitorAssignment 1 → 1 AssignmentMetrics24h  
 - MonitorAssignment 1 → many EventLogs  
 - MonitorAssignment 1 → many AlertEvents  
 
@@ -636,7 +668,7 @@ These read-side metrics are derived from existing facts and are intended for ope
 
 ### Endpoint uptime (v1)
 
-- computed from assignment-scoped state history (`EndpointState` + `StateTransition`)
+- persisted in `AssignmentMetrics24h` and recomputed from assignment-scoped state history (`EndpointState` + `StateTransition`)
 - numerator: time in `UP` or `DEGRADED`
 - denominator: full selected window (v1 fixed to last 24 hours)
 - `DOWN` and `SUPPRESSED` count as not-up
@@ -650,7 +682,7 @@ These read-side metrics are derived from existing facts and are intended for ope
 
 ### RTT summary (v1)
 
-- source: successful `CheckResult` rows only (`success = true` with non-null `roundTripMs`)
+- source of truth: successful `CheckResult` rows only (`success = true` with non-null `roundTripMs`)
 - fixed window: last 24 hours
 - summary values:
   - last RTT (most recent successful sample)

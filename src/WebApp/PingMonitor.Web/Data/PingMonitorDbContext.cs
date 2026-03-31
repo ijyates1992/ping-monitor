@@ -29,6 +29,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<ResultBatch> ResultBatches => Set<ResultBatch>();
     public DbSet<EndpointState> EndpointStates => Set<EndpointState>();
     public DbSet<StateTransition> StateTransitions => Set<StateTransition>();
+    public DbSet<AssignmentMetrics24h> AssignmentMetrics24h => Set<AssignmentMetrics24h>();
     public DbSet<EventLog> EventLogs => Set<EventLog>();
     public DbSet<SecurityAuthLog> SecurityAuthLogs => Set<SecurityAuthLog>();
     public DbSet<AppSchemaInfo> AppSchemaInfos => Set<AppSchemaInfo>();
@@ -171,6 +172,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         checkResult.Property(x => x.CheckedAtUtc).IsRequired();
         checkResult.Property(x => x.ReceivedAtUtc).IsRequired();
         checkResult.HasIndex(x => new { x.AgentId, x.BatchId });
+        checkResult.HasIndex(x => new { x.AssignmentId, x.CheckedAtUtc });
 
         var resultBatch = modelBuilder.Entity<ResultBatch>();
         resultBatch.ToTable("ResultBatches");
@@ -206,6 +208,22 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         stateTransition.Property(x => x.ReasonCode).HasMaxLength(64);
         stateTransition.Property(x => x.DependencyEndpointId).HasMaxLength(64);
         stateTransition.HasIndex(x => new { x.AssignmentId, x.TransitionAtUtc });
+
+
+        var assignmentMetrics24h = modelBuilder.Entity<AssignmentMetrics24h>();
+        assignmentMetrics24h.ToTable("AssignmentMetrics24h");
+        assignmentMetrics24h.HasKey(x => x.AssignmentId);
+        assignmentMetrics24h.Property(x => x.AssignmentId).HasMaxLength(64);
+        assignmentMetrics24h.Property(x => x.WindowStartUtc).IsRequired();
+        assignmentMetrics24h.Property(x => x.WindowEndUtc).IsRequired();
+        assignmentMetrics24h.Property(x => x.UptimeSeconds).IsRequired();
+        assignmentMetrics24h.Property(x => x.DowntimeSeconds).IsRequired();
+        assignmentMetrics24h.Property(x => x.UnknownSeconds).IsRequired();
+        assignmentMetrics24h.Property(x => x.SuppressedSeconds).IsRequired();
+        assignmentMetrics24h.Property(x => x.LastRttMs);
+        assignmentMetrics24h.Property(x => x.LastSuccessfulCheckUtc);
+        assignmentMetrics24h.Property(x => x.UpdatedAtUtc).IsRequired();
+        assignmentMetrics24h.HasIndex(x => x.AssignmentId).IsUnique();
 
         var eventLog = modelBuilder.Entity<EventLog>();
         eventLog.ToTable("EventLogs");

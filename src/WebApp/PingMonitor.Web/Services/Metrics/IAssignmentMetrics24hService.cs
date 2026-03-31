@@ -1,0 +1,28 @@
+namespace PingMonitor.Web.Services.Metrics;
+
+public interface IAssignmentMetrics24hService
+{
+    Task<IReadOnlyDictionary<string, AssignmentMetrics24hSummary>> GetSummariesAsync(
+        IReadOnlyCollection<string> assignmentIds,
+        CancellationToken cancellationToken);
+
+    Task RefreshAssignmentAsync(string assignmentId, CancellationToken cancellationToken);
+
+    Task RefreshAssignmentsAsync(IReadOnlyCollection<string> assignmentIds, CancellationToken cancellationToken);
+
+    Task RebuildAllAsync(CancellationToken cancellationToken);
+}
+
+public sealed class AssignmentMetrics24hSummary
+{
+    public DateTimeOffset WindowStartUtc { get; init; }
+    public DateTimeOffset WindowEndUtc { get; init; }
+    public long UptimeSeconds { get; init; }
+    public long DowntimeSeconds { get; init; }
+    public long UnknownSeconds { get; init; }
+    public long SuppressedSeconds { get; init; }
+    public double? UptimePercent { get; init; }
+    public int? LastRttMs { get; init; }
+    public DateTimeOffset? LastSuccessfulCheckUtc { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+}

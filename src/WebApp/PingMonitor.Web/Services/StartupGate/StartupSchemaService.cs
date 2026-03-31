@@ -28,6 +28,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "ResultBatches",
         "EndpointStates",
         "StateTransitions",
+        "AssignmentMetrics24h",
         "EventLogs",
         "SecurityAuthLogs",
         "ApplicationSettings",
@@ -475,6 +476,23 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+
+        const string createAssignmentMetrics24hSql = """
+            CREATE TABLE IF NOT EXISTS `AssignmentMetrics24h` (
+                `AssignmentId` varchar(64) NOT NULL,
+                `WindowStartUtc` datetime(6) NOT NULL,
+                `WindowEndUtc` datetime(6) NOT NULL,
+                `UptimeSeconds` bigint NOT NULL,
+                `DowntimeSeconds` bigint NOT NULL,
+                `UnknownSeconds` bigint NOT NULL,
+                `SuppressedSeconds` bigint NOT NULL,
+                `LastRttMs` int NULL,
+                `LastSuccessfulCheckUtc` datetime(6) NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AssignmentId`)
+            );
+            """;
+
         const string createEventLogsSql = """
             CREATE TABLE IF NOT EXISTS `EventLogs` (
                 `EventLogId` varchar(64) NOT NULL,
@@ -582,6 +600,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAssignmentMetrics24hSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEventLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityAuthLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
@@ -603,7 +622,50 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
+        await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
+    }
+
+    private static async Task EnsureMetricsIndexesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await EnsureIndexExistsAsync(
+            dbContext,
+            "CheckResults",
+            "IX_CheckResults_AssignmentId_CheckedAtUtc",
+            "CREATE INDEX `IX_CheckResults_AssignmentId_CheckedAtUtc` ON `CheckResults` (`AssignmentId`, `CheckedAtUtc`);",
+            cancellationToken);
+
+        await EnsureIndexExistsAsync(
+            dbContext,
+            "StateTransitions",
+            "IX_StateTransitions_AssignmentId_TransitionAtUtc",
+            "CREATE INDEX `IX_StateTransitions_AssignmentId_TransitionAtUtc` ON `StateTransitions` (`AssignmentId`, `TransitionAtUtc`);",
+            cancellationToken);
+    }
+
+    private static async Task EnsureIndexExistsAsync(
+        PingMonitorDbContext dbContext,
+        string tableName,
+        string indexName,
+        string createIndexSql,
+        CancellationToken cancellationToken)
+    {
+        var exists = await dbContext.Database.SqlQueryRaw<int>(
+            """
+            SELECT COUNT(1)
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = {0}
+              AND index_name = {1};
+            """,
+            tableName,
+            indexName)
+            .SingleAsync(cancellationToken) > 0;
+
+        if (!exists)
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(createIndexSql, cancellationToken);
+        }
     }
 
     private static async Task<string[]> GetMissingEndpointDependencyColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)

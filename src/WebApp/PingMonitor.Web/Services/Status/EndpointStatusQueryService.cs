@@ -12,15 +12,15 @@ namespace PingMonitor.Web.Services.Status;
 internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
 {
     private readonly PingMonitorDbContext _dbContext;
-    private readonly IEndpointMetricsService _endpointMetricsService;
+    private readonly IAssignmentMetrics24hService _assignmentMetrics24hService;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IEventLogQueryService _eventLogQueryService;
 
-    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService, IEventLogQueryService eventLogQueryService)
+    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IAssignmentMetrics24hService assignmentMetrics24hService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService, IEventLogQueryService eventLogQueryService)
     {
         _dbContext = dbContext;
-        _endpointMetricsService = endpointMetricsService;
+        _assignmentMetrics24hService = assignmentMetrics24hService;
         _httpContextAccessor = httpContextAccessor;
         _userAccessScopeService = userAccessScopeService;
         _eventLogQueryService = eventLogQueryService;
@@ -181,9 +181,21 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             };
         }).ToArray();
 
-        var endpointMetricsByAssignmentId = await _endpointMetricsService.GetEndpointMetricSummariesAsync(
-            projectedRows.Select(x => x.AssignmentId).ToArray(),
+        var projectedAssignmentIds = projectedRows.Select(x => x.AssignmentId).ToArray();
+        var endpointMetricsByAssignmentId = await _assignmentMetrics24hService.GetSummariesAsync(
+            projectedAssignmentIds,
             cancellationToken);
+
+        var missingSummaryAssignmentIds = projectedAssignmentIds
+            .Where(assignmentId => !endpointMetricsByAssignmentId.ContainsKey(assignmentId))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (missingSummaryAssignmentIds.Length > 0)
+        {
+            await _assignmentMetrics24hService.RefreshAssignmentsAsync(missingSummaryAssignmentIds, cancellationToken);
+            endpointMetricsByAssignmentId = await _assignmentMetrics24hService.GetSummariesAsync(projectedAssignmentIds, cancellationToken);
+        }
 
         var rowsWithMetrics = projectedRows.Select(row =>
         {
@@ -216,7 +228,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 GroupNames = row.GroupNames,
                 UptimePercent = metrics?.UptimePercent,
                 LastRttMs = metrics?.LastRttMs,
-                AverageRttMs = metrics?.AverageRttMs
+                AverageRttMs = null
             };
         }).ToArray();
 
