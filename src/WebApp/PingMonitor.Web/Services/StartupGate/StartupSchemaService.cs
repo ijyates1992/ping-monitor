@@ -652,7 +652,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
     {
         var exists = await dbContext.Database.SqlQueryRaw<int>(
             """
-            SELECT COUNT(1)
+            SELECT COUNT(1) AS Value
             FROM information_schema.statistics
             WHERE table_schema = DATABASE()
               AND table_name = {0}
