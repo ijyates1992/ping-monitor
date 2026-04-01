@@ -78,11 +78,11 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
             try
             {
                 await PersistAndEvaluateAsync(batch, cancellationToken);
-                _buffer.RecordFlushOutcome(batch.Count, DateTimeOffset.UtcNow, null);
+                _buffer.RecordFlushOutcome(batch.Count, batch.Count, DateTimeOffset.UtcNow, null);
             }
             catch (Exception ex)
             {
-                _buffer.RecordFlushOutcome(0, DateTimeOffset.UtcNow, ex);
+                _buffer.RecordFlushOutcome(batch.Count, 0, DateTimeOffset.UtcNow, ex);
                 _logger.LogError(ex, "Buffered raw result flush failed for batch size {BatchSize}.", batch.Count);
             }
 
