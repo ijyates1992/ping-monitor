@@ -1,4 +1,5 @@
 @model PingMonitor.Web.ViewModels.Admin.DatabaseStatusPageViewModel
+@using PingMonitor.Web.Services.DatabaseStatus
 @using PingMonitor.Web.Support
 @{
     var totalBytes = Model.TotalDataBytes + Model.TotalIndexBytes;
@@ -9,9 +10,9 @@
     @await Html.PartialAsync("_ThemeHead")
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Database status</title>
+    <title>DB maintenance</title>
     <style>
-        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; }
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; }
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
         main { max-width: 1100px; margin: 0 auto; padding: 1rem; }
@@ -19,13 +20,16 @@
         .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
         .muted { color: var(--muted); }
         .overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .75rem; }
-        .metric { border: 1px solid var(--border); border-radius: 10px; padding: .7rem; background: #fff; }
+        .metric { border: 1px solid var(--border); border-radius: 10px; padding: .7rem; }
         .metric .label { font-size: .85rem; color: var(--muted); }
         .metric .value { font-size: 1.1rem; font-weight: 700; margin-top: .25rem; }
         .table-wrap { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 720px; }
+        table { width: 100%; border-collapse: collapse; min-width: 680px; }
         th, td { text-align: left; border-bottom: 1px solid var(--border); padding: .55rem; }
-        th { font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .02em; }
+        .form-grid { display: grid; gap: .8rem; }
+        input, select, button { min-height: 44px; padding: .55rem .65rem; font: inherit; }
+        button { cursor: pointer; }
+        .success { background: #ecfdf3; border: 1px solid #12b76a; color: #027a48; padding: .6rem; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -33,9 +37,18 @@
 <main>
     <div class="stack">
         <section class="card">
-            <h1>Database status</h1>
-            <p class="muted">Read-only database and runtime buffering visibility for operators. Maintenance actions are not enabled in this phase.</p>
+            <h1>DB maintenance</h1>
+            <p class="muted">Admin-only operator tools for database visibility, targeted history pruning, and MySQL backup exports. Pruning is destructive and irreversible.</p>
         </section>
+
+        @if (!string.IsNullOrWhiteSpace(Model.PruneStatusMessage))
+        {
+            <div class="success">@Model.PruneStatusMessage</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.BackupStatusMessage))
+        {
+            <div class="success">@Model.BackupStatusMessage</div>
+        }
 
         <section class="card">
             <h2>Database overview</h2>
@@ -48,34 +61,63 @@
                 <div class="metric"><div class="label">Schema version</div><div class="value">@(Model.CurrentSchemaVersion?.ToString() ?? "n/a") / @Model.RequiredSchemaVersion required</div></div>
                 <div class="metric"><div class="label">Table count</div><div class="value">@Model.TableCount</div></div>
                 <div class="metric"><div class="label">Total DB size</div><div class="value">@DisplayFormatting.FormatBytes(totalBytes)</div></div>
-                <div class="metric"><div class="label">Data size</div><div class="value">@DisplayFormatting.FormatBytes(Model.TotalDataBytes)</div></div>
-                <div class="metric"><div class="label">Index size</div><div class="value">@DisplayFormatting.FormatBytes(Model.TotalIndexBytes)</div></div>
             </div>
         </section>
 
         <section class="card">
-            <h2>Table details</h2>
-            <p class="muted">Row counts are approximate and sourced from MySQL metadata (`information_schema.tables.table_rows`).</p>
+            <h2>Pruning tools</h2>
+            <p class="muted">Supported targets in this phase: SecurityAuthLogs, EventLogs, CheckResults, and StateTransitions older than a selected age in days.</p>
+            <form method="post" action="/admin/database/prune/preview" class="form-grid">
+                @Html.AntiForgeryToken()
+                <label>Target
+                    <select asp-for="PruneForm.Target" asp-items="Html.GetEnumSelectList<DatabasePruneTarget>()"></select>
+                </label>
+                <label>Prune rows older than (days)
+                    <input asp-for="PruneForm.AgeDays" type="number" min="1" max="3650" />
+                </label>
+                <button type="submit">Preview eligible rows</button>
+            </form>
+
+            @if (Model.PrunePreview is not null)
+            {
+                <p><strong>Preview:</strong> @Model.PrunePreview.Target rows older than <strong>@DisplayFormatting.FormatUtcDateTime(Model.PrunePreview.CutoffUtc)</strong>. Eligible rows: <strong>@Model.PrunePreview.EligibleRowCount</strong>.</p>
+            }
+
+            <form method="post" action="/admin/database/prune/execute" class="form-grid">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="PruneForm.Target" />
+                <input type="hidden" asp-for="PruneForm.AgeDays" />
+                <label>Type <strong>PRUNE</strong> to confirm irreversible prune
+                    <input asp-for="PruneForm.ConfirmationText" autocomplete="off" />
+                </label>
+                <button type="submit">Execute prune</button>
+                <span asp-validation-for="PruneForm.ConfirmationText"></span>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>DB backup tool (MySQL logical dump)</h2>
+            <p class="muted">This tool runs <code>mysqldump</code> to create a full logical SQL export of the current MySQL database. This is separate from configuration JSON backups.</p>
+            <form method="post" action="/admin/database/backup/create" class="form-grid">
+                @Html.AntiForgeryToken()
+                <label>
+                    <input asp-for="BackupForm.ConfirmBackup" type="checkbox" /> I confirm I want to create a database backup export now.
+                </label>
+                <button type="submit">Create DB backup</button>
+            </form>
+
+            <h3>Backup files</h3>
             <div class="table-wrap">
                 <table>
-                    <thead>
-                        <tr>
-                            <th>Table</th>
-                            <th>Approx. row count</th>
-                            <th>Data size</th>
-                            <th>Index size</th>
-                            <th>Total size</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>File</th><th>Created (UTC)</th><th>Size</th><th>Download</th></tr></thead>
                     <tbody>
-                    @foreach (var table in Model.Tables)
+                    @foreach (var backup in Model.Backups)
                     {
                         <tr>
-                            <td>@table.TableName</td>
-                            <td>@table.ApproximateRowCount</td>
-                            <td>@DisplayFormatting.FormatBytes(table.DataBytes)</td>
-                            <td>@DisplayFormatting.FormatBytes(table.IndexBytes)</td>
-                            <td>@DisplayFormatting.FormatBytes(table.TotalBytes)</td>
+                            <td>@backup.FileName</td>
+                            <td>@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc)</td>
+                            <td>@DisplayFormatting.FormatBytes(backup.SizeBytes)</td>
+                            <td><a href="/admin/database/backup/download?fileId=@backup.FileId">Download</a></td>
                         </tr>
                     }
                     </tbody>
@@ -84,26 +126,21 @@
         </section>
 
         <section class="card">
-            <h2>Runtime buffer diagnostics</h2>
-            <div class="overview-grid">
-                <div class="metric"><div class="label">Buffering enabled</div><div class="value">@(Model.RuntimeBuffer.BufferingEnabled ? "Yes" : "No")</div></div>
-                <div class="metric"><div class="label">Configured max batch size</div><div class="value">@Model.RuntimeBuffer.ConfiguredMaxBatchSize</div></div>
-                <div class="metric"><div class="label">Configured flush interval</div><div class="value">@Model.RuntimeBuffer.ConfiguredFlushIntervalSeconds s</div></div>
-                <div class="metric"><div class="label">Configured max queue size</div><div class="value">@Model.RuntimeBuffer.ConfiguredMaxQueueSize</div></div>
-                <div class="metric"><div class="label">Current queue depth</div><div class="value">@Model.RuntimeBuffer.CurrentQueueDepth (@DisplayFormatting.FormatPercent(Model.RuntimeBuffer.QueueUtilizationPercent))</div></div>
-                <div class="metric"><div class="label">Dropped results</div><div class="value">@Model.RuntimeBuffer.DroppedResultCount (@DisplayFormatting.FormatPercent(Model.RuntimeBuffer.BufferDropRatePercent))</div></div>
-                <div class="metric"><div class="label">Total enqueued results</div><div class="value">@Model.RuntimeBuffer.TotalEnqueueCount</div></div>
-                <div class="metric"><div class="label">Persisted results (runtime)</div><div class="value">@Model.RuntimeBuffer.PersistedResultCount</div></div>
-                <div class="metric"><div class="label">Flush count</div><div class="value">@Model.RuntimeBuffer.FlushCount</div></div>
-                <div class="metric"><div class="label">Flush success rate</div><div class="value">@DisplayFormatting.FormatPercent(Model.RuntimeBuffer.FlushSuccessRatePercent)</div></div>
-                <div class="metric"><div class="label">Last flush time</div><div class="value">@DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.LastFlushCompletedAtUtc)</div></div>
-                <div class="metric"><div class="label">Last flush summary</div><div class="value">Attempted @Model.RuntimeBuffer.LastFlushAttemptedCount, persisted @Model.RuntimeBuffer.LastFlushPersistedCount</div></div>
+            <h2>Table details</h2>
+            <p class="muted">Row counts are approximate and sourced from MySQL metadata.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Table</th><th>Approx rows</th><th>Data</th><th>Index</th><th>Total</th></tr></thead>
+                    <tbody>
+                    @foreach (var table in Model.Tables)
+                    {
+                        <tr>
+                            <td>@table.TableName</td><td>@table.ApproximateRowCount</td><td>@DisplayFormatting.FormatBytes(table.DataBytes)</td><td>@DisplayFormatting.FormatBytes(table.IndexBytes)</td><td>@DisplayFormatting.FormatBytes(table.TotalBytes)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
             </div>
-            <p class="muted">Cache hit rate: @Model.RuntimeBuffer.CacheHitRateNote</p>
-            @if (!string.IsNullOrWhiteSpace(Model.RuntimeBuffer.LastFlushError))
-            {
-                <p><strong>Last flush error:</strong> @Model.RuntimeBuffer.LastFlushError</p>
-            }
         </section>
     </div>
 </main>

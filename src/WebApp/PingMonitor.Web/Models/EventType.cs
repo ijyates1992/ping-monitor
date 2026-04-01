@@ -22,4 +22,10 @@ public static class EventType
     public const string SecurityAuthLogManualPruneRequested = "security_auth_log_manual_prune_requested";
     public const string SecurityAuthLogManualPruneCompleted = "security_auth_log_manual_prune_completed";
     public const string SecurityAuthLogAutomaticPruneCompleted = "security_auth_log_automatic_prune_completed";
+    public const string DatabasePrunePreviewRequested = "database_prune_preview_requested";
+    public const string DatabasePruneExecuted = "database_prune_executed";
+    public const string DatabasePruneCompleted = "database_prune_completed";
+    public const string DatabaseBackupStarted = "database_backup_started";
+    public const string DatabaseBackupCompleted = "database_backup_completed";
+    public const string DatabaseBackupFailed = "database_backup_failed";
 }
