@@ -87,7 +87,7 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
                     OccurredAtUtc = now,
                     Category = EventCategory.Agent,
                     EventType = nextStatus == AgentHealthStatus.Stale ? EventType.AgentBecameStale : EventType.AgentBecameOffline,
-                    Severity = EventSeverity.Warning,
+                    Severity = EventSeverity.Error,
                     AgentId = agent.AgentId,
                     Message = nextStatus == AgentHealthStatus.Stale
                         ? $"Agent \"{agent.Name ?? agent.InstanceId}\" became stale."

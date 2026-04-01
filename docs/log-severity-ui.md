@@ -25,6 +25,16 @@ For event-log backed views (recent events, endpoint history, agent history):
 
 No message-text parsing is used for severity colour selection.
 
+### Authoritative event severity classification
+
+For endpoint/agent state-change events, the persisted `EventLog.Severity` must follow:
+
+- Endpoint changed to `DOWN` -> `error`
+- Endpoint changed to `UP` (including recovered transitions) -> `info`
+- Agent became `OFFLINE` -> `error`
+- Agent became `ONLINE` -> `info`
+- `warning` is reserved for non-failure conditions (for example `SUPPRESSED`/degraded or other non-critical operational events)
+
 ## Security auth log mapping
 
 `SecurityAuthLog` rows do not store a severity field, so UI severity is derived explicitly:
