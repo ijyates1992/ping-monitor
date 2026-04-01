@@ -2,9 +2,13 @@ using Microsoft.AspNetCore.Authorization;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Models.Identity;
+using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Security;
+using System.Text;
+using System.Text.Json;
 
 namespace PingMonitor.Web.Controllers;
 
@@ -16,17 +20,23 @@ public sealed class AccountController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISecurityAuthLogService _securityAuthLogService;
     private readonly ISecurityEnforcementService _securityEnforcementService;
+    private readonly IEventLogService _eventLogService;
+    private readonly ILogger<AccountController> _logger;
 
     public AccountController(
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
         ISecurityAuthLogService securityAuthLogService,
-        ISecurityEnforcementService securityEnforcementService)
+        ISecurityEnforcementService securityEnforcementService,
+        IEventLogService eventLogService,
+        ILogger<AccountController> logger)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _securityAuthLogService = securityAuthLogService;
         _securityEnforcementService = securityEnforcementService;
+        _eventLogService = eventLogService;
+        _logger = logger;
     }
 
     [HttpGet("login")]
@@ -167,6 +177,77 @@ public sealed class AccountController : Controller
         return RedirectToAction(nameof(Login));
     }
 
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string? userId, [FromQuery] string? code, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(code))
+        {
+            return View("VerifyEmail", new VerifyEmailViewModel
+            {
+                Success = false,
+                Message = "Verification link is invalid. Request a new verification email from your profile."
+            });
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+        {
+            return View("VerifyEmail", new VerifyEmailViewModel
+            {
+                Success = false,
+                Message = "Verification link is invalid. Request a new verification email from your profile."
+            });
+        }
+
+        string decodedToken;
+        try
+        {
+            decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(code));
+        }
+        catch
+        {
+            return View("VerifyEmail", new VerifyEmailViewModel
+            {
+                Success = false,
+                Message = "Verification token is malformed. Request a new verification email from your profile."
+            });
+        }
+
+        var result = await _userManager.ConfirmEmailAsync(user, decodedToken);
+        if (!result.Succeeded)
+        {
+            await _eventLogService.WriteAsync(new EventLogWriteRequest
+            {
+                Category = EventCategory.Security,
+                EventType = "email_verification_confirm_failed",
+                Severity = EventSeverity.Warning,
+                Message = $"Email verification failed for user {user.Id}.",
+                DetailsJson = JsonSerializer.Serialize(new { errors = result.Errors.Select(x => x.Code).ToArray() })
+            }, cancellationToken);
+
+            return View("VerifyEmail", new VerifyEmailViewModel
+            {
+                Success = false,
+                Message = "Verification failed or expired. Request a new verification email from your profile."
+            });
+        }
+
+        await _eventLogService.WriteAsync(new EventLogWriteRequest
+        {
+            Category = EventCategory.Security,
+            EventType = "email_verification_confirmed",
+            Severity = EventSeverity.Info,
+            Message = $"Email verified for user {user.Id}."
+        }, cancellationToken);
+        _logger.LogInformation("Email verification completed for user {UserId}.", user.Id);
+
+        return View("VerifyEmail", new VerifyEmailViewModel
+        {
+            Success = true,
+            Message = "Email verified successfully. SMTP notifications are now eligible for your account."
+        });
+    }
+
     public sealed class LoginViewModel
     {
         [Required]
@@ -177,5 +258,11 @@ public sealed class AccountController : Controller
         public string Password { get; set; } = string.Empty;
 
         public string ReturnUrl { get; set; } = "/status";
+    }
+
+    public sealed class VerifyEmailViewModel
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 }

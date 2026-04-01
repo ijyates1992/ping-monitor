@@ -1,0 +1,36 @@
+@model PingMonitor.Web.Controllers.AccountController.VerifyEmailViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Email verification</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --success:#137333; --error:#b42318; }
+        *{box-sizing:border-box;} body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);} main{max-width:720px;margin:0 auto;padding:1rem;}
+        .card{background:var(--card);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.08);padding:1rem;display:grid;gap:.75rem;}
+        .status-success{color:var(--success);} .status-error{color:var(--error);} .button-secondary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:.7rem 1rem;border-radius:10px;border:1px solid var(--border);color:var(--text);background:#fff;text-decoration:none;font-weight:600;}
+        .muted{color:var(--muted);}
+    </style>
+</head>
+<body>
+<main>
+    <section class="card">
+        <h1>Email verification</h1>
+        @if (Model.Success)
+        {
+            <p class="status-success"><strong>Success:</strong> @Model.Message</p>
+        }
+        else
+        {
+            <p class="status-error"><strong>Unable to verify:</strong> @Model.Message</p>
+        }
+        <p class="muted">You can sign in and open your profile notification settings to resend verification if needed.</p>
+        <div>
+            <a class="button-secondary" href="/account/login">Go to login</a>
+        </div>
+    </section>
+</main>
+</body>
+</html>

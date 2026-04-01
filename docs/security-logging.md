@@ -148,3 +148,20 @@ Pruning must **not** touch:
 - Confirmation is enforced server-side.
 - Manual prune is destructive and irreversible.
 - Manual prune writes auditable security events (request + completion) including cutoff and deleted row count.
+
+
+## Email verification logging
+
+Email verification flows for authenticated users should emit operator-meaningful audit records without secret leakage.
+
+Expected coverage:
+
+- verification email send requested/sent for current authenticated user
+- email verification completed (success/failure)
+- SMTP notification delivery skipped because recipient email is unverified (rate-limited/log-level appropriate to avoid noise)
+
+Never log:
+
+- raw verification tokens
+- SMTP credentials
+- password material

@@ -3,10 +3,16 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using PingMonitor.Web.Models.Identity;
+using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
+using PingMonitor.Web.Services.EventLogs;
+using PingMonitor.Web.Services.SmtpNotifications;
 using PingMonitor.Web.Services.Telegram;
 using PingMonitor.Web.ViewModels.Profile;
+using System.Text;
+using System.Text.Json;
 
 namespace PingMonitor.Web.Controllers;
 
@@ -17,15 +23,24 @@ public sealed class ProfileController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IUserNotificationSettingsService _userNotificationSettingsService;
     private readonly ITelegramLinkService _telegramLinkService;
+    private readonly ISmtpNotificationSender _smtpNotificationSender;
+    private readonly IEventLogService _eventLogService;
+    private readonly ILogger<ProfileController> _logger;
 
     public ProfileController(
         UserManager<ApplicationUser> userManager,
         IUserNotificationSettingsService userNotificationSettingsService,
-        ITelegramLinkService telegramLinkService)
+        ITelegramLinkService telegramLinkService,
+        ISmtpNotificationSender smtpNotificationSender,
+        IEventLogService eventLogService,
+        ILogger<ProfileController> logger)
     {
         _userManager = userManager;
         _userNotificationSettingsService = userNotificationSettingsService;
         _telegramLinkService = telegramLinkService;
+        _smtpNotificationSender = smtpNotificationSender;
+        _eventLogService = eventLogService;
+        _logger = logger;
     }
 
     [HttpGet("")]
@@ -74,6 +89,7 @@ public sealed class ProfileController : Controller
             return View("Index", await BuildModelAsync(cancellationToken, model));
         }
 
+        user.EmailConfirmed = false;
         user.NormalizedEmail = trimmedEmail.ToUpperInvariant();
         var updateResult = await _userManager.UpdateAsync(user);
         if (!updateResult.Succeeded)
@@ -86,9 +102,37 @@ public sealed class ProfileController : Controller
             return View("Index", await BuildModelAsync(cancellationToken, model));
         }
 
+        var sendResult = await SendVerificationEmailAsync(user, cancellationToken);
         var refreshed = await BuildModelAsync(cancellationToken);
         refreshed.AccountSaved = true;
+        refreshed.EmailVerificationResendSucceeded = sendResult.Success;
+        refreshed.EmailVerificationMessage = sendResult.Message;
         return View("Index", refreshed);
+    }
+
+    [HttpPost("email-verification/resend")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResendEmailVerification(CancellationToken cancellationToken)
+    {
+        var user = await RequireUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        if (user.EmailConfirmed)
+        {
+            var alreadyVerified = await BuildModelAsync(cancellationToken);
+            alreadyVerified.EmailVerificationMessage = "Your email is already verified.";
+            alreadyVerified.EmailVerificationResendSucceeded = true;
+            return View("NotificationSettings", alreadyVerified);
+        }
+
+        var sendResult = await SendVerificationEmailAsync(user, cancellationToken);
+        var refreshed = await BuildModelAsync(cancellationToken);
+        refreshed.EmailVerificationResendSucceeded = sendResult.Success;
+        refreshed.EmailVerificationMessage = sendResult.Message;
+        return View("NotificationSettings", refreshed);
     }
 
     [HttpPost("password")]
@@ -259,6 +303,7 @@ public sealed class ProfileController : Controller
         {
             UserName = user.UserName ?? string.Empty,
             Email = source?.Email ?? user.Email ?? string.Empty,
+            EmailVerified = user.EmailConfirmed,
             BrowserNotificationsEnabled = source?.BrowserNotificationsEnabled ?? settings.BrowserNotificationsEnabled,
             BrowserNotifyEndpointDown = source?.BrowserNotifyEndpointDown ?? settings.BrowserNotifyEndpointDown,
             BrowserNotifyEndpointRecovered = source?.BrowserNotifyEndpointRecovered ?? settings.BrowserNotifyEndpointRecovered,
@@ -291,5 +336,45 @@ public sealed class ProfileController : Controller
             TelegramLinkedDisplayName = telegramAccount?.DisplayName,
             TelegramLinkedAtUtc = telegramAccount?.LinkedAtUtc
         };
+    }
+
+    private async Task<SmtpNotificationSendResult> SendVerificationEmailAsync(ApplicationUser user, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email) || !MailAddress.TryCreate(user.Email, out _))
+        {
+            return SmtpNotificationSendResult.Failed("A valid email address is required to send verification.");
+        }
+
+        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+        var callbackUrl = Url.Action(
+            action: "VerifyEmail",
+            controller: "Account",
+            values: new { userId = user.Id, code = encodedToken },
+            protocol: Request.Scheme);
+
+        if (string.IsNullOrWhiteSpace(callbackUrl))
+        {
+            return SmtpNotificationSendResult.Failed("Email verification link generation failed.");
+        }
+
+        var result = await _smtpNotificationSender.SendEmailVerificationAsync(user.Email, callbackUrl, cancellationToken);
+        var eventType = result.Success ? "email_verification_email_sent" : "email_verification_email_send_failed";
+        await _eventLogService.WriteAsync(new EventLogWriteRequest
+        {
+            Category = EventCategory.Security,
+            EventType = eventType,
+            Severity = result.Success ? EventSeverity.Info : EventSeverity.Warning,
+            Message = result.Success
+                ? $"Verification email sent for user {user.Id}."
+                : $"Verification email send failed for user {user.Id}.",
+            DetailsJson = result.Success ? null : JsonSerializer.Serialize(new { reason = result.Message })
+        }, cancellationToken);
+
+        _logger.LogInformation(
+            "Email verification resend requested by user {UserId}. Success={Success}",
+            user.Id,
+            result.Success);
+        return result;
     }
 }

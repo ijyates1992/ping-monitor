@@ -33,10 +33,16 @@
 <section class="card stack">
     <h2>Account details</h2>
     @if (Model.AccountSaved) { <div class="saved">Email updated.</div> }
+    @if (!string.IsNullOrWhiteSpace(Model.EmailVerificationMessage)) { <div class="saved">@Model.EmailVerificationMessage</div> }
     <form method="post" action="/profile/account" class="stack">
         @Html.AntiForgeryToken()
         <div><label>Username</label><input value="@Model.UserName" type="text" readonly /></div>
         <div><label asp-for="Email"></label><input asp-for="Email" type="email" /><div class="field-error"><span asp-validation-for="Email"></span></div></div>
+        <p class="muted">Email verification status: <strong>@(Model.EmailVerified ? "Verified" : "Unverified")</strong>.</p>
+        @if (!Model.EmailVerified)
+        {
+            <p class="muted">SMTP notifications are delivered only after email verification succeeds.</p>
+        }
         <div class="button-row"><button class="button" type="submit">Save account details</button></div>
     </form>
 </section>

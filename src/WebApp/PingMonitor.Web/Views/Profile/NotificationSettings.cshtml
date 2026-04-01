@@ -24,6 +24,19 @@
 <section class="card">
     <h1>Notification settings</h1>
     <p class="muted">Manage your personal notification preferences and Telegram account linking.</p>
+    <p class="muted">Email: <strong>@Model.Email</strong> · Verification: <strong>@(Model.EmailVerified ? "Verified" : "Unverified")</strong></p>
+    @if (!Model.EmailVerified)
+    {
+        <p class="muted">SMTP notifications require a verified email address.</p>
+        <form method="post" action="/profile/email-verification/resend">
+            @Html.AntiForgeryToken()
+            <button class="button-secondary" type="submit">Resend verification email</button>
+        </form>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.EmailVerificationMessage))
+    {
+        <div class="saved">@Model.EmailVerificationMessage</div>
+    }
     <div class="button-row"><a class="button-secondary" href="/profile">Back to my profile</a></div>
 </section>
 @if (!ViewData.ModelState.IsValid) { <div class="errors" asp-validation-summary="ModelOnly"></div> }
