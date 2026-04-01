@@ -1,0 +1,12 @@
+@model PingMonitor.Web.ViewModels.Status.EndpointStatusPageViewModel
+<section class="card" id="summary-section" data-refresh-section="summary">
+    <h2>Summary</h2>
+    <div class="summary-grid">
+        <div class="summary-item"><div class="muted">Total assignments</div><strong>@Model.Summary.TotalAssignments</strong></div>
+        <div class="summary-item"><div class="muted">UP</div><strong>@Model.Summary.UpCount</strong></div>
+        <div class="summary-item"><div class="muted">DOWN</div><strong>@Model.Summary.DownCount</strong></div>
+        <div class="summary-item"><div class="muted">SUPPRESSED</div><strong>@Model.Summary.SuppressedCount</strong></div>
+        <div class="summary-item"><div class="muted">UNKNOWN</div><strong>@Model.Summary.UnknownCount</strong></div>
+        <div class="summary-item"><div class="muted">DEGRADED</div><strong>@Model.Summary.DegradedCount</strong></div>
+    </div>
+</section>

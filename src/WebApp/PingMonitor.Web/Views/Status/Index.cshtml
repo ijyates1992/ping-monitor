@@ -1,65 +1,5 @@
 @model PingMonitor.Web.ViewModels.Status.EndpointStatusPageViewModel
-@using PingMonitor.Web.Models
-@using PingMonitor.Web.Services.Endpoints
 @{
-    static string FormatDate(DateTimeOffset? value) => value.HasValue ? value.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") : "No checks yet";
-    static string FormatDependencies(IReadOnlyList<string> endpointIds, IReadOnlyList<string> endpointNames, string emptyText) => endpointIds.Count == 0
-        ? emptyText
-        : endpointNames.Count == 0
-            ? string.Join(", ", endpointIds)
-            : string.Join(", ", endpointNames);
-    static string FormatDependency(string? endpointId, string? endpointName, string emptyText) => string.IsNullOrWhiteSpace(endpointId) ? emptyText : string.IsNullOrWhiteSpace(endpointName) ? $"{endpointId} (name unavailable)" : endpointName;
-    static string FormatPercent(double? value) => value.HasValue ? $"{value.Value:F1}%" : "Unknown";
-    static string FormatRtt(double? value) => value.HasValue ? $"{value.Value:F1} ms" : "No data";
-    static string EventRowClass(PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind rowKind) => rowKind switch
-    {
-        PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointDown => "event-row event-row-down",
-        PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointRecovery => "event-row event-row-recovery",
-        _ => "event-row"
-    };
-    static string? GetRecentEventDestination(PingMonitor.Web.ViewModels.EventLogs.RecentEventViewModel recentEvent)
-    {
-        var hasEndpoint = !string.IsNullOrWhiteSpace(recentEvent.EndpointId);
-        var hasAgent = !string.IsNullOrWhiteSpace(recentEvent.AgentId);
-
-        if (!hasEndpoint && !hasAgent)
-        {
-            return null;
-        }
-
-        var isEndpointCategory = string.Equals(recentEvent.Category, EventCategory.Endpoint.ToString(), StringComparison.Ordinal);
-        var isAgentCategory = string.Equals(recentEvent.Category, EventCategory.Agent.ToString(), StringComparison.Ordinal);
-
-        if (hasEndpoint && hasAgent)
-        {
-            if (isEndpointCategory)
-            {
-                return $"/endpoints/{recentEvent.EndpointId}/history";
-            }
-
-            if (isAgentCategory)
-            {
-                return $"/agents/{recentEvent.AgentId}/history";
-            }
-
-            return $"/endpoints/{recentEvent.EndpointId}/history";
-        }
-
-        if (hasEndpoint)
-        {
-            return $"/endpoints/{recentEvent.EndpointId}/history";
-        }
-
-        return $"/agents/{recentEvent.AgentId}/history";
-    }
-    static string StateClass(EndpointStateKind state) => state switch
-    {
-        EndpointStateKind.Up => "state-up",
-        EndpointStateKind.Down => "state-down",
-        EndpointStateKind.Suppressed => "state-suppressed",
-        EndpointStateKind.Degraded => "state-degraded",
-        _ => "state-unknown"
-    };
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -210,72 +150,8 @@
             </div>
         </section>
 
-        <section class="card" id="recent-events">
-            <h2>Recent events</h2>
-            @if (Model.RecentEvents.Count == 0)
-            {
-                <p class="muted">No events recorded yet.</p>
-            }
-            else
-            {
-                <div class="recent-events">
-                    @foreach (var recentEvent in Model.RecentEvents)
-                    {
-                        var destination = GetRecentEventDestination(recentEvent);
-                        var rowClassName = destination is null
-                            ? EventRowClass(recentEvent.RowKind)
-                            : $"{EventRowClass(recentEvent.RowKind)} event-row-clickable";
-
-                        if (destination is null)
-                        {
-                            <div class="@rowClassName">
-                                <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
-                                <div>@recentEvent.Message</div>
-                                <div class="muted">
-                                    @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
-                                    {
-                                        <span>Endpoint: @(string.IsNullOrWhiteSpace(recentEvent.EndpointName) ? recentEvent.EndpointId : recentEvent.EndpointName)</span>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(recentEvent.AgentId))
-                                    {
-                                        <span> · Agent: @(string.IsNullOrWhiteSpace(recentEvent.AgentName) ? recentEvent.AgentId : recentEvent.AgentName)</span>
-                                    }
-                                </div>
-                            </div>
-                        }
-                        else
-                        {
-                            <a class="@rowClassName" href="@destination" aria-label="Open details for @recentEvent.EventType event at @recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")">
-                                <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
-                                <div>@recentEvent.Message</div>
-                                <div class="muted">
-                                    @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
-                                    {
-                                        <span>Endpoint: @(string.IsNullOrWhiteSpace(recentEvent.EndpointName) ? recentEvent.EndpointId : recentEvent.EndpointName)</span>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(recentEvent.AgentId))
-                                    {
-                                        <span> · Agent: @(string.IsNullOrWhiteSpace(recentEvent.AgentName) ? recentEvent.AgentId : recentEvent.AgentName)</span>
-                                    }
-                                </div>
-                            </a>
-                        }
-                    }
-                </div>
-            }
-        </section>
-
-        <section class="card">
-            <h2>Summary</h2>
-            <div class="summary-grid">
-                <div class="summary-item"><div class="muted">Total assignments</div><strong>@Model.Summary.TotalAssignments</strong></div>
-                <div class="summary-item"><div class="muted">UP</div><strong>@Model.Summary.UpCount</strong></div>
-                <div class="summary-item"><div class="muted">DOWN</div><strong>@Model.Summary.DownCount</strong></div>
-                <div class="summary-item"><div class="muted">SUPPRESSED</div><strong>@Model.Summary.SuppressedCount</strong></div>
-                <div class="summary-item"><div class="muted">UNKNOWN</div><strong>@Model.Summary.UnknownCount</strong></div>
-                <div class="summary-item"><div class="muted">DEGRADED</div><strong>@Model.Summary.DegradedCount</strong></div>
-            </div>
-        </section>
+        @await Html.PartialAsync("_RecentEventsSection", Model)
+        @await Html.PartialAsync("_SummarySection", Model)
 
         <section class="card">
             <h2>Filters</h2>
@@ -323,89 +199,7 @@
             </form>
         </section>
 
-        <section class="card">
-            <h2>Assignments</h2>
-            @if (Model.Rows.Count == 0)
-            {
-                <div class="empty">
-                    <p><strong>No assignments match the current view.</strong></p>
-                    <p class="muted">If assignments have not been created yet, they will appear here once the server has configuration records. Assignments with no current state snapshot are still shown as UNKNOWN when present.</p>
-                </div>
-            }
-            else
-            {
-                <div class="row-list">
-                    @foreach (var row in Model.Rows)
-                    {
-                        <article class="status-row @row.StatusCssClass">
-                            <details class="status-details">
-                                <summary>
-                                    <div class="row-header">
-                                        <div class="summary-chevron" aria-hidden="true">▶</div>
-                                        <div class="row-header-main">
-                                            <h2>@EndpointIconCatalog.GetSymbol(row.IconKey) @row.EndpointName</h2>
-                                            <div class="row-header-subtitle">@row.Target</div>
-                                        </div>
-                                        <div class="summary-grid-row">
-                                            <div class="summary-item-compact">
-                                                <span>State duration</span>
-                                                <strong>@row.CurrentStateDurationDisplay</strong>
-                                            </div>
-                                            <div class="summary-item-compact">
-                                                <span>Uptime (24h)</span>
-                                                <strong>@FormatPercent(row.UptimePercent)</strong>
-                                            </div>
-                                            <div class="summary-item-compact">
-                                                <span>Last RTT</span>
-                                                <strong>@FormatRtt(row.LastRttMs)</strong>
-                                            </div>
-                                            <div class="summary-item-compact">
-                                                <span>Agent</span>
-                                                <strong>@row.AgentInstanceId</strong>
-                                            </div>
-                                        </div>
-                                        <div class="badge @StateClass(row.CurrentState)">@row.CurrentState</div>
-                                    </div>
-                                </summary>
-                                <div class="status-details-body">
-                                    <div class="row-detail-intro">
-                                        <div>
-                                            <h2>@EndpointIconCatalog.GetSymbol(row.IconKey) @row.EndpointName</h2>
-                                            <div class="muted">@row.Target</div>
-                                        </div>
-                                        <div class="badge @StateClass(row.CurrentState)">@row.CurrentState</div>
-                                    </div>
-
-                                    <div class="row-meta">
-                                        <div class="meta-item"><span>Agent / instance</span><div>@row.AgentName <span class="muted">(@row.AgentInstanceId)</span></div></div>
-                                        <div class="meta-item"><span>Check type</span><div>@row.CheckType</div></div>
-                                        <div class="meta-item"><span>Last check</span><div class="nowrap">@FormatDate(row.LastCheckUtc)</div></div>
-                                        <div class="meta-item"><span>Last state change</span><div class="nowrap">@FormatDate(row.LastStateChangeUtc)</div></div>
-                                        <div class="meta-item"><span>Current state duration</span><div>@row.CurrentStateDurationDisplay</div></div>
-                                        <div class="meta-item"><span>Consecutive failures</span><div>@row.ConsecutiveFailureCount</div></div>
-                                        <div class="meta-item"><span>Consecutive successes</span><div>@row.ConsecutiveSuccessCount</div></div>
-                                        <div class="meta-item"><span>Endpoint uptime (24h)</span><div>@FormatPercent(row.UptimePercent)</div></div>
-                                        <div class="meta-item"><span>Last RTT (24h)</span><div>@FormatRtt(row.LastRttMs)</div></div>
-                                        <div class="meta-item"><span>Groups</span><div>@(row.GroupNames.Count == 0 ? "None" : string.Join(", ", row.GroupNames))</div></div>
-                                        <div class="meta-item"><span>Dependency parents</span><div>@FormatDependencies(row.ParentEndpointIds, row.ParentEndpointNames, "None")</div></div>
-                                        <div class="meta-item"><span>Suppressed by</span><div>@FormatDependency(row.SuppressedByEndpointId, row.SuppressedByEndpointName, "Not suppressed")</div></div>
-                                        <div class="meta-item"><span>Assignment enabled</span><div>@(row.AssignmentEnabled ? "Enabled" : "Disabled")</div></div>
-                                        <div class="meta-item"><span>Endpoint enabled</span><div>@(row.EndpointEnabled ? "Enabled" : "Disabled")</div></div>
-                                        <div class="meta-item"><span>Assignment ID</span><div>@row.AssignmentId</div></div>
-                                        <div class="meta-item"><span>Endpoint ID</span><div>@row.EndpointId</div></div>
-                                    </div>
-                                    <div class="inline-actions">
-                                        <a class="button-secondary" href="/endpoints/@row.AssignmentId/performance">View performance</a>
-                                        <a class="button-secondary" href="/endpoints/@row.EndpointId/history">Endpoint history</a>
-                                        <a class="button-secondary" href="/agents/@row.AgentId/history">Agent history</a>
-                                    </div>
-                                </div>
-                            </details>
-                        </article>
-                    }
-                </div>
-            }
-        </section>
+        @await Html.PartialAsync("_AssignmentsSection", Model)
     </div>
 </main>
 <script>
@@ -500,6 +294,89 @@
 
     pollBrowserNotifications();
     window.setInterval(pollBrowserNotifications, pollIntervalMs);
+})();
+
+(() => {
+    const eventsIntervalMs = 10000;
+    const summaryIntervalMs = 15000;
+    const assignmentsIntervalMs = 15000;
+    const inFlight = new Map();
+
+    const query = window.location.search ?? '';
+    const eventsUrl = `/status/refresh/recent-events${query}`;
+    const summaryUrl = `/status/refresh/summary${query}`;
+    const assignmentsUrl = `/status/refresh/assignments${query}`;
+
+    function getExpandedAssignmentIds() {
+        return Array.from(document.querySelectorAll('#assignments-section details.status-details[open][data-assignment-id]'))
+            .map((element) => element.getAttribute('data-assignment-id'))
+            .filter((value) => typeof value === 'string' && value.length > 0);
+    }
+
+    function restoreExpandedAssignmentIds(ids) {
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return;
+        }
+
+        for (const assignmentId of ids) {
+            const selector = `#assignments-section details.status-details[data-assignment-id="${CSS.escape(assignmentId)}"]`;
+            const details = document.querySelector(selector);
+            if (details) {
+                details.open = true;
+            }
+        }
+    }
+
+    async function refreshSection(key, url, sectionId, options) {
+        if (inFlight.get(key) === true) {
+            return;
+        }
+
+        const currentSection = document.getElementById(sectionId);
+        if (!currentSection || document.hidden) {
+            return;
+        }
+
+        inFlight.set(key, true);
+        try {
+            const response = await fetch(url, { method: 'GET', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!response.ok) {
+                return;
+            }
+
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const nextSection = doc.getElementById(sectionId);
+            if (!nextSection) {
+                return;
+            }
+
+            const preservedAssignmentIds = options?.captureState ? options.captureState() : [];
+            currentSection.replaceWith(nextSection);
+            if (options?.restoreState) {
+                options.restoreState(preservedAssignmentIds);
+            }
+        } catch {
+            // Keep polling quiet on transient failures.
+        } finally {
+            inFlight.set(key, false);
+        }
+    }
+
+    refreshSection('recent-events', eventsUrl, 'recent-events-section');
+    refreshSection('summary', summaryUrl, 'summary-section');
+    refreshSection('assignments', assignmentsUrl, 'assignments-section', {
+        captureState: getExpandedAssignmentIds,
+        restoreState: restoreExpandedAssignmentIds
+    });
+
+    window.setInterval(() => refreshSection('recent-events', eventsUrl, 'recent-events-section'), eventsIntervalMs);
+    window.setInterval(() => refreshSection('summary', summaryUrl, 'summary-section'), summaryIntervalMs);
+    window.setInterval(() => refreshSection('assignments', assignmentsUrl, 'assignments-section', {
+        captureState: getExpandedAssignmentIds,
+        restoreState: restoreExpandedAssignmentIds
+    }), assignmentsIntervalMs);
 })();
 </script>
 </body>

@@ -55,6 +55,13 @@ public sealed class EndpointsController : Controller
         return View("Index", model);
     }
 
+    [HttpGet("refresh/assignments")]
+    public async Task<IActionResult> RefreshAssignments([FromQuery] string? groupId, CancellationToken cancellationToken)
+    {
+        var model = await _endpointManagementQueryService.GetManagePageAsync(groupId, cancellationToken);
+        return PartialView("_AssignmentsSection", model);
+    }
+
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet("new")]
     public async Task<IActionResult> New(CancellationToken cancellationToken)
