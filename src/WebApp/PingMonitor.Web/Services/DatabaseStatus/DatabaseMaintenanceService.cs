@@ -142,10 +142,18 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var safeDatabaseName = string.IsNullOrWhiteSpace(builder.Database) ? "database" : builder.Database.Trim();
         var fileName = $"db-backup-{safeDatabaseName}-{backupTimestamp:yyyyMMdd-HHmmss}.sql";
         var fullPath = Path.Combine(backupDirectory, fileName);
+        var mysqldumpExecutablePath = ResolveMySqlDumpExecutablePath(options.MySqlDumpExecutablePath);
+        if (mysqldumpExecutablePath is null)
+        {
+            return await CreateBackupFailureAsync(
+                "mysqldump executable was not found. Configure DatabaseMaintenance:MySqlDumpExecutablePath with the full executable path.",
+                request.RequestedBy,
+                cancellationToken);
+        }
 
         var processInfo = new ProcessStartInfo
         {
-            FileName = options.MySqlDumpExecutablePath,
+            FileName = mysqldumpExecutablePath,
             WorkingDirectory = backupDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -230,6 +238,94 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
             _logger.LogWarning(ex, "Database backup export failed.");
             return await CreateBackupFailureAsync($"Database backup export failed: {ex.Message}", request.RequestedBy, cancellationToken);
+        }
+    }
+
+    private string? ResolveMySqlDumpExecutablePath(string configuredPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return null;
+        }
+
+        var trimmedPath = configuredPath.Trim();
+        if (Path.IsPathRooted(trimmedPath) || trimmedPath.Contains(Path.DirectorySeparatorChar) || trimmedPath.Contains(Path.AltDirectorySeparatorChar))
+        {
+            var rootedPath = Path.IsPathRooted(trimmedPath)
+                ? trimmedPath
+                : Path.GetFullPath(trimmedPath, _webHostEnvironment.ContentRootPath);
+            return File.Exists(rootedPath) ? rootedPath : null;
+        }
+
+        var pathValue = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(pathValue))
+        {
+            foreach (var pathEntry in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var candidate = Path.Combine(pathEntry, trimmedPath);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                if (OperatingSystem.IsWindows())
+                {
+                    var candidateWithExtension = candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                        ? candidate
+                        : $"{candidate}.exe";
+                    if (File.Exists(candidateWithExtension))
+                    {
+                        return candidateWithExtension;
+                    }
+                }
+            }
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        foreach (var programFilesDirectory in EnumerateWindowsProgramFilesRoots())
+        {
+            if (!Directory.Exists(programFilesDirectory))
+            {
+                continue;
+            }
+
+            var mysqlRoot = Path.Combine(programFilesDirectory, "MySQL");
+            if (!Directory.Exists(mysqlRoot))
+            {
+                continue;
+            }
+
+            var serverDirectories = Directory
+                .EnumerateDirectories(mysqlRoot, "MySQL Server *", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(x => x, StringComparer.OrdinalIgnoreCase);
+            foreach (var serverDirectory in serverDirectories)
+            {
+                var candidate = Path.Combine(serverDirectory, "bin", "mysqldump.exe");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateWindowsProgramFilesRoots()
+    {
+        var roots = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+        };
+
+        foreach (var root in roots.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            yield return root;
         }
     }
 
