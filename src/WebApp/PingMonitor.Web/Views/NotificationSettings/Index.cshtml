@@ -5,7 +5,7 @@
     @await Html.PartialAsync("_ThemeHead")
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Notification infrastructure</title>
+    <title>Notification infrastructure settings</title>
     <style>
         :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --success:#137333; --error-bg:#fee4e2; --error-text:#b42318; }
         *{box-sizing:border-box;} body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);} main{max-width:760px;margin:0 auto;padding:1rem;}
@@ -22,15 +22,15 @@
 <main>
     <div class="stack">
         <section class="card">
-            <h1>Notification infrastructure</h1>
-            <p class="muted">This page controls notification transport infrastructure (SMTP + Telegram polling settings). Per-user notification preferences moved to each user's <a href="/profile">profile page</a>.</p>
+            <h1>Notification infrastructure settings</h1>
+            <p class="muted">This page controls notification transport infrastructure (SMTP + Telegram polling settings). Per-user notification preferences moved to each user's <a href="/profile/notification-settings">profile page</a>.</p>
             <div class="button-row">
-                <a class="button-secondary" href="/admin">Back to admin settings</a>
+                <a class="button-secondary" href="/admin">Back to DB maintenance</a>
                 <a class="button-secondary" href="/status">Back to status</a>
             </div>
         </section>
 
-        <form method="post" action="/settings/notifications" class="stack">
+        <form method="post" action="/admin/notification-infrastructure-settings" class="stack">
             @Html.AntiForgeryToken()
             @if (Model.Saved) { <div class="saved" role="status">Notification infrastructure settings saved.</div> }
             @if (!ViewData.ModelState.IsValid) { <div class="errors" asp-validation-summary="ModelOnly"></div> }
@@ -78,7 +78,7 @@
                     <div class="field-error"><span asp-validation-for="SmtpFromAddress"></span></div>
                 </div>
                 <div><label asp-for="SmtpFromDisplayName"></label><input asp-for="SmtpFromDisplayName" type="text" /></div>
-                <div class="button-row"><button class="button-secondary" type="submit" formaction="/settings/notifications/smtp-test">Send SMTP test email to my account</button></div>
+                <div class="button-row"><button class="button-secondary" type="submit" formaction="/admin/notification-infrastructure-settings/smtp-test">Send SMTP test email to my account</button></div>
             </section>
 
             <section class="card">

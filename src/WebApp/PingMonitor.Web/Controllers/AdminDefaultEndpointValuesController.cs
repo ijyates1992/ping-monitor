@@ -7,12 +7,12 @@ using PingMonitor.Web.ViewModels.Admin;
 namespace PingMonitor.Web.Controllers;
 
 [Authorize(Roles = ApplicationRoles.Admin)]
-[Route("admin")]
-public sealed class AdminController : Controller
+[Route("admin/default-endpoint-values")]
+public sealed class AdminDefaultEndpointValuesController : Controller
 {
     private readonly IApplicationSettingsService _applicationSettingsService;
 
-    public AdminController(IApplicationSettingsService applicationSettingsService)
+    public AdminDefaultEndpointValuesController(IApplicationSettingsService applicationSettingsService)
     {
         _applicationSettingsService = applicationSettingsService;
     }
@@ -26,10 +26,8 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Index([FromForm] AdminSettingsPageViewModel model, CancellationToken cancellationToken)
+    public async Task<IActionResult> Index([FromForm] DefaultEndpointValuesPageViewModel model, CancellationToken cancellationToken)
     {
-        ValidateAbsoluteSiteUrl(model);
-
         if (!ModelState.IsValid)
         {
             return View("Index", model);
@@ -39,31 +37,27 @@ public sealed class AdminController : Controller
         var updated = await _applicationSettingsService.UpdateAsync(
             new UpdateApplicationSettingsCommand
             {
-                SiteUrl = model.SiteUrl,
-                DefaultPingIntervalSeconds = current.DefaultPingIntervalSeconds,
-                DefaultRetryIntervalSeconds = current.DefaultRetryIntervalSeconds,
-                DefaultTimeoutMs = current.DefaultTimeoutMs,
-                DefaultFailureThreshold = current.DefaultFailureThreshold,
-                DefaultRecoveryThreshold = current.DefaultRecoveryThreshold
+                SiteUrl = current.SiteUrl,
+                DefaultPingIntervalSeconds = model.DefaultPingIntervalSeconds,
+                DefaultRetryIntervalSeconds = model.DefaultRetryIntervalSeconds,
+                DefaultTimeoutMs = model.DefaultTimeoutMs,
+                DefaultFailureThreshold = model.DefaultFailureThreshold,
+                DefaultRecoveryThreshold = model.DefaultRecoveryThreshold
             },
             cancellationToken);
 
         return View("Index", ToViewModel(updated, saved: true));
     }
 
-    private void ValidateAbsoluteSiteUrl(AdminSettingsPageViewModel model)
+    private static DefaultEndpointValuesPageViewModel ToViewModel(ApplicationSettingsDto settings, bool saved)
     {
-        if (!Uri.TryCreate(model.SiteUrl?.Trim(), UriKind.Absolute, out _))
+        return new DefaultEndpointValuesPageViewModel
         {
-            ModelState.AddModelError(nameof(AdminSettingsPageViewModel.SiteUrl), "Site URL must be a valid absolute URL.");
-        }
-    }
-
-    private static AdminSettingsPageViewModel ToViewModel(ApplicationSettingsDto settings, bool saved)
-    {
-        return new AdminSettingsPageViewModel
-        {
-            SiteUrl = settings.SiteUrl,
+            DefaultPingIntervalSeconds = settings.DefaultPingIntervalSeconds,
+            DefaultRetryIntervalSeconds = settings.DefaultRetryIntervalSeconds,
+            DefaultTimeoutMs = settings.DefaultTimeoutMs,
+            DefaultFailureThreshold = settings.DefaultFailureThreshold,
+            DefaultRecoveryThreshold = settings.DefaultRecoveryThreshold,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             Saved = saved
         };
