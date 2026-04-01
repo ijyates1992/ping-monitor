@@ -20,24 +20,85 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Endpoint performance</title>
     <style>
-        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --danger:#b42318; --ok:#137333; }
+        :root {
+            color-scheme: light dark;
+            --bg: #f3f6f8;
+            --card: #ffffff;
+            --text: #102a43;
+            --muted: #52606d;
+            --border: #d9e2ec;
+            --accent: #0f62fe;
+            --danger: #b42318;
+            --ok: #137333;
+            --selector-muted: #f8fafc;
+            --chart-grid: rgba(82, 96, 109, 0.25);
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0f172a;
+                --card: #111827;
+                --text: #e5e7eb;
+                --muted: #9ca3af;
+                --border: #334155;
+                --accent: #60a5fa;
+                --danger: #ef4444;
+                --ok: #22c55e;
+                --selector-muted: #1f2937;
+                --chart-grid: rgba(156, 163, 175, 0.3);
+            }
+        }
+
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
-        main { max-width: 1180px; margin: 0 auto; padding: 1rem; }
+        main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
         .stack { display: grid; gap: 1rem; }
-        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; border: 1px solid var(--border); }
         .meta-grid { display: grid; gap: .75rem; grid-template-columns: repeat(1, minmax(0, 1fr)); }
         .meta-item span { display:block; font-size: .85rem; color:var(--muted); margin-bottom: .25rem; }
         .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
-        .button,.button-secondary { display:inline-flex; align-items:center; justify-content:center; min-height:48px; padding:.8rem 1rem; border-radius:10px; font-weight:600; text-decoration:none; }
+        .button, .button-secondary, .selector-button {
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            min-height:48px;
+            padding:.75rem 1rem;
+            border-radius:10px;
+            font-weight:600;
+            text-decoration:none;
+            cursor: pointer;
+        }
         .button { border:0; background:var(--accent); color:#fff; }
-        .button-secondary { border:1px solid var(--border); color:var(--text); background:#fff; }
+        .button-secondary { border:1px solid var(--border); color:var(--text); background:transparent; }
         .range-grid { display:grid; gap: .75rem; grid-template-columns: 1fr; align-items:end; }
         label { display:block; font-weight: 600; margin-bottom: .3rem; }
-        select { width:100%; padding:.85rem; border:1px solid var(--border); border-radius:10px; font-size:1rem; }
-        .chart-wrap { position: relative; min-height: 230px; }
-        .empty { border: 1px dashed var(--border); border-radius: 10px; padding: .9rem; color: var(--muted); background: #f8fafc; }
+        select { width:100%; padding:.85rem; border:1px solid var(--border); border-radius:10px; font-size:1rem; color: var(--text); background: var(--card); }
+
+        .selector-row { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: .75rem; }
+        .selector-button { border: 1px solid var(--border); background: var(--selector-muted); color: var(--text); }
+        .selector-button.active { border-color: var(--accent); color: #fff; background: var(--accent); }
+
+        .chart-title { margin-bottom: .3rem; }
+        .chart-description { color: var(--muted); margin-top: 0; margin-bottom: .75rem; }
+        .chart-scroller {
+            overflow-x: auto;
+            overflow-y: hidden;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+            padding: .6rem;
+        }
+        .chart-host {
+            position: relative;
+            height: min(68vh, 720px);
+            min-height: 420px;
+            min-width: 900px;
+            width: 100%;
+        }
+
+        .empty { border: 1px dashed var(--border); border-radius: 10px; padding: .9rem; color: var(--muted); background: transparent; }
         .muted { color: var(--muted); }
+
         @@media (min-width: 720px) {
             .meta-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
             .range-grid { grid-template-columns: 220px auto; }
@@ -50,7 +111,7 @@
     <div class="stack">
         <section class="card">
             <h1>Endpoint performance</h1>
-            <p style="margin-top:.2rem; color: var(--muted);">Operational graph view from raw check results for one assignment.</p>
+            <p style="margin-top:.2rem; color: var(--muted);">Focused graph view from raw check results for one assignment.</p>
             <div class="button-row">
                 <a class="button-secondary" href="/endpoints">Back to endpoints</a>
                 <a class="button-secondary" href="/status">Back to status</a>
@@ -90,48 +151,34 @@
         </section>
 
         <section class="card">
-            <h2>RTT (successful checks only)</h2>
-            <p class="muted">X axis = check timestamp (UTC), Y axis = round-trip time in milliseconds.</p>
-            @if (Model.RttSeries.Count == 0)
-            {
-                <div class="empty">No successful RTT samples are available in this range.</div>
-            }
-            else
-            {
-                <div class="chart-wrap"><canvas id="rttChart" aria-label="RTT chart"></canvas></div>
-            }
-        </section>
+            <h2 class="chart-title">Performance graph</h2>
+            <p class="chart-description" id="graphDescription"></p>
 
-        <section class="card">
-            <h2>Check outcomes per time bucket</h2>
-            <p class="muted">Failed check counts are shown per bucket, with successful checks included for operational context.</p>
-            @if (Model.FailureSeries.Count == 0)
-            {
-                <div class="empty">No check results are available in this range.</div>
-            }
-            else
-            {
-                <div class="chart-wrap"><canvas id="failureChart" aria-label="Failure chart"></canvas></div>
-            }
-        </section>
+            <div class="selector-row" role="tablist" aria-label="Performance graph selector">
+                <button type="button" class="selector-button active" data-graph="rtt" role="tab" aria-selected="true">RTT</button>
+                <button type="button" class="selector-button" data-graph="outcomes" role="tab" aria-selected="false">Check outcomes</button>
+                <button type="button" class="selector-button" data-graph="jitter" role="tab" aria-selected="false">Jitter</button>
+            </div>
 
-        <section class="card">
-            <h2>Jitter (consecutive successful RTT delta)</h2>
-            <p class="muted">Each point is |current successful RTT - previous successful RTT| in milliseconds.</p>
-            @if (Model.JitterSeries.Count == 0)
-            {
-                <div class="empty">At least two successful RTT samples are required to plot jitter.</div>
-            }
-            else
-            {
-                <div class="chart-wrap"><canvas id="jitterChart" aria-label="Jitter chart"></canvas></div>
-            }
+            <div id="graphEmpty" class="empty" style="display:none;"></div>
+
+            <div id="graphScroller" class="chart-scroller">
+                <div class="chart-host">
+                    <canvas id="performanceChart" aria-label="Endpoint performance chart"></canvas>
+                </div>
+            </div>
         </section>
     </div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+    const chartContext = document.getElementById('performanceChart');
+    const description = document.getElementById('graphDescription');
+    const emptyNotice = document.getElementById('graphEmpty');
+    const chartScroller = document.getElementById('graphScroller');
+    const selectorButtons = Array.from(document.querySelectorAll('.selector-button'));
+
     const rttLabels = @Html.Raw(JsonSerializer.Serialize(rttLabels));
     const rttValues = @Html.Raw(JsonSerializer.Serialize(rttValues));
     const jitterLabels = @Html.Raw(JsonSerializer.Serialize(jitterLabels));
@@ -140,76 +187,158 @@
     const failureCounts = @Html.Raw(JsonSerializer.Serialize(failureCounts));
     const successCounts = @Html.Raw(JsonSerializer.Serialize(successCounts));
 
-    if (rttValues.length > 0) {
-        new Chart(document.getElementById('rttChart'), {
-            type: 'line',
-            data: {
-                labels: rttLabels,
-                datasets: [{
-                    label: 'RTT (ms)',
-                    data: rttValues,
-                    borderColor: '#0f62fe',
-                    backgroundColor: '#0f62fe',
-                    tension: 0.1,
-                    pointRadius: 2
-                }]
+    const graphDefinitions = {
+        rtt: {
+            description: 'X axis = check timestamp (UTC), Y axis = round-trip time in milliseconds.',
+            empty: 'No successful RTT samples are available in this range.',
+            getChartConfig: () => ({
+                type: 'line',
+                data: {
+                    labels: rttLabels,
+                    datasets: [{
+                        label: 'RTT (ms)',
+                        data: rttValues,
+                        borderColor: '#60a5fa',
+                        backgroundColor: '#60a5fa',
+                        borderWidth: 1,
+                        tension: 0.15,
+                        pointRadius: 1,
+                        pointHoverRadius: 3
+                    }]
+                },
+                options: buildBaseOptions('Timestamp (UTC)', 'RTT (ms)', false)
+            }),
+            hasData: () => rttValues.length > 0,
+            pointCount: () => rttValues.length
+        },
+        outcomes: {
+            description: 'Failed and successful check counts are shown per time bucket.',
+            empty: 'No check results are available in this range.',
+            getChartConfig: () => ({
+                type: 'bar',
+                data: {
+                    labels: failureLabels,
+                    datasets: [
+                        { label: 'Failed checks', data: failureCounts, backgroundColor: 'rgba(239, 68, 68, 0.8)', borderWidth: 0 },
+                        { label: 'Successful checks', data: successCounts, backgroundColor: 'rgba(34, 197, 94, 0.8)', borderWidth: 0 }
+                    ]
+                },
+                options: buildBaseOptions('Bucket start (UTC)', 'Count', true)
+            }),
+            hasData: () => failureLabels.length > 0,
+            pointCount: () => failureLabels.length
+        },
+        jitter: {
+            description: 'Each point is |current successful RTT - previous successful RTT| in milliseconds.',
+            empty: 'At least two successful RTT samples are required to plot jitter.',
+            getChartConfig: () => ({
+                type: 'line',
+                data: {
+                    labels: jitterLabels,
+                    datasets: [{
+                        label: 'Jitter (ms)',
+                        data: jitterValues,
+                        borderColor: '#f59e0b',
+                        backgroundColor: '#f59e0b',
+                        borderWidth: 1,
+                        tension: 0.15,
+                        pointRadius: 1,
+                        pointHoverRadius: 3
+                    }]
+                },
+                options: buildBaseOptions('Timestamp (UTC)', 'Jitter (ms)', true)
+            }),
+            hasData: () => jitterValues.length > 0,
+            pointCount: () => jitterValues.length
+        }
+    };
+
+    function cssVar(name, fallback) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+    }
+
+    function buildBaseOptions(xTitle, yTitle, beginAtZero) {
+        const axisColor = cssVar('--text', '#111827');
+        const gridColor = cssVar('--chart-grid', 'rgba(82, 96, 109, 0.25)');
+
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { color: axisColor } },
+                tooltip: { enabled: true }
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { title: { display: true, text: 'Timestamp (UTC)' } },
-                    y: { title: { display: true, text: 'RTT (ms)' } }
+            scales: {
+                x: {
+                    title: { display: true, text: xTitle, color: axisColor },
+                    ticks: { color: axisColor, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+                    grid: { color: gridColor }
+                },
+                y: {
+                    title: { display: true, text: yTitle, color: axisColor },
+                    beginAtZero,
+                    ticks: { color: axisColor },
+                    grid: { color: gridColor }
                 }
             }
+        };
+    }
+
+    function getMinimumChartWidth(pointCount) {
+        if (pointCount <= 40) {
+            return 900;
+        }
+
+        return Math.min(3200, Math.max(900, pointCount * 20));
+    }
+
+    let chart = null;
+
+    function setActiveButton(graphKey) {
+        selectorButtons.forEach((button) => {
+            const isActive = button.dataset.graph === graphKey;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
     }
 
-    if (failureLabels.length > 0) {
-        new Chart(document.getElementById('failureChart'), {
-            type: 'bar',
-            data: {
-                labels: failureLabels,
-                datasets: [
-                    { label: 'Failed checks', data: failureCounts, backgroundColor: '#b42318' },
-                    { label: 'Successful checks', data: successCounts, backgroundColor: '#137333' }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { title: { display: true, text: 'Bucket start (UTC)' } },
-                    y: { title: { display: true, text: 'Count' }, beginAtZero: true }
-                }
-            }
-        });
+    function renderGraph(graphKey) {
+        const definition = graphDefinitions[graphKey];
+        if (!definition) {
+            return;
+        }
+
+        setActiveButton(graphKey);
+        description.textContent = definition.description;
+
+        if (chart !== null) {
+            chart.destroy();
+            chart = null;
+        }
+
+        if (!definition.hasData()) {
+            emptyNotice.style.display = 'block';
+            emptyNotice.textContent = definition.empty;
+            chartScroller.style.display = 'none';
+            return;
+        }
+
+        chartScroller.style.display = 'block';
+        emptyNotice.style.display = 'none';
+
+        const chartHost = chartContext.parentElement;
+        chartHost.style.minWidth = `${getMinimumChartWidth(definition.pointCount())}px`;
+
+        chart = new Chart(chartContext, definition.getChartConfig());
     }
 
-    if (jitterValues.length > 0) {
-        new Chart(document.getElementById('jitterChart'), {
-            type: 'line',
-            data: {
-                labels: jitterLabels,
-                datasets: [{
-                    label: 'Jitter (ms)',
-                    data: jitterValues,
-                    borderColor: '#b54708',
-                    backgroundColor: '#b54708',
-                    tension: 0.1,
-                    pointRadius: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { title: { display: true, text: 'Timestamp (UTC)' } },
-                    y: { title: { display: true, text: 'Jitter (ms)' }, beginAtZero: true }
-                }
-            }
-        });
-    }
+    selectorButtons.forEach((button) => {
+        button.addEventListener('click', () => renderGraph(button.dataset.graph));
+    });
+
+    renderGraph('rtt');
 </script>
 </body>
 </html>
