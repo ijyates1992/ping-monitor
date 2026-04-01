@@ -37,6 +37,7 @@ public sealed class AdminMetricsController : ControllerBase
     }
 
     [HttpPost("rebuild/{assignmentId}")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> RebuildAssignment([FromRoute] string assignmentId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(assignmentId))
@@ -49,6 +50,7 @@ public sealed class AdminMetricsController : ControllerBase
     }
 
     [HttpPost("rebuild-all")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> RebuildAll(CancellationToken cancellationToken)
     {
         await _assignmentMetrics24hService.RebuildAllAsync(cancellationToken);
