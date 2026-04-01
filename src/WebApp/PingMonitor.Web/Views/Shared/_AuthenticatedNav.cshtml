@@ -1,0 +1,202 @@
+@using PingMonitor.Web.Services.Identity
+@{
+    var path = Context?.Request?.Path.Value ?? string.Empty;
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+
+    static bool IsCurrent(string path, params string[] prefixes)
+    {
+        foreach (var prefix in prefixes)
+        {
+            if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    var monitoringOpen = IsCurrent(path, "/", "/status", "/endpoints", "/groups");
+    var agentsOpen = IsCurrent(path, "/agents");
+    var eventsOpen = IsCurrent(path, "/admin/security");
+    var notificationsOpen = IsCurrent(path, "/profile", "/settings/notifications");
+    var adminOpen = IsCurrent(path, "/admin", "/users");
+    var profileOpen = IsCurrent(path, "/profile");
+}
+<style>
+    .site-nav-shell {
+        border-bottom: 1px solid var(--border);
+        background: var(--card);
+        padding: .6rem 1rem;
+    }
+
+    .site-nav {
+        max-width: 1180px;
+        margin: 0 auto;
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+        align-items: stretch;
+    }
+
+    .site-nav details {
+        position: relative;
+        min-width: 160px;
+    }
+
+    .site-nav summary {
+        list-style: none;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--surface-1);
+        color: var(--text);
+        border-radius: 10px;
+        min-height: 44px;
+        padding: .55rem .8rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-weight: 600;
+        gap: .5rem;
+    }
+
+    .site-nav summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .site-nav details[data-active="true"] > summary {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .site-nav-dropdown {
+        margin-top: .35rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface-1);
+        padding: .35rem;
+        min-width: 220px;
+        display: grid;
+        gap: .2rem;
+        z-index: 50;
+    }
+
+    .site-nav-link,
+    .site-nav-logout {
+        display: flex;
+        align-items: center;
+        min-height: 42px;
+        border-radius: 8px;
+        padding: .45rem .6rem;
+        text-decoration: none;
+        color: var(--text);
+        border: 0;
+        background: transparent;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        cursor: pointer;
+    }
+
+    .site-nav-link[data-current="true"] {
+        background: var(--surface-2);
+        font-weight: 700;
+    }
+
+    .site-nav-link:hover,
+    .site-nav-link:focus-visible,
+    .site-nav-logout:hover,
+    .site-nav-logout:focus-visible {
+        outline: none;
+        background: var(--surface-2);
+    }
+
+    .site-nav-logout {
+        color: #b42318;
+    }
+
+    @@media (min-width: 860px) {
+        .site-nav details {
+            min-width: 180px;
+        }
+
+        .site-nav details[open] .site-nav-dropdown {
+            position: absolute;
+            left: 0;
+            top: 100%;
+        }
+    }
+</style>
+<nav class="site-nav-shell" aria-label="Primary">
+    <div class="site-nav">
+        <details data-active="@monitoringOpen">
+            <summary>Monitoring <span aria-hidden="true">▾</span></summary>
+            <div class="site-nav-dropdown">
+                <a class="site-nav-link" data-current="@IsCurrent(path, "/", "/status")" href="/status">Operational status</a>
+                <a class="site-nav-link" data-current="@IsCurrent(path, "/endpoints")" href="/endpoints">Manage endpoints</a>
+                @if (isAdmin)
+                {
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/groups")" href="/groups">Manage groups</a>
+                }
+            </div>
+        </details>
+
+        @if (isAdmin)
+        {
+            <details data-active="@agentsOpen">
+                <summary>Agents <span aria-hidden="true">▾</span></summary>
+                <div class="site-nav-dropdown">
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/agents")" href="/agents">Manage agents</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/agents/deploy")" href="/agents/deploy">Deploy new agent</a>
+                </div>
+            </details>
+        }
+
+        @if (isAdmin)
+        {
+            <details data-active="@eventsOpen">
+                <summary>Events / Logs <span aria-hidden="true">▾</span></summary>
+                <div class="site-nav-dropdown">
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/status")" href="/status#recent-events">Recent events</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/security")" href="/admin/security#security-logs">Security logs</a>
+                </div>
+            </details>
+        }
+
+        <details data-active="@notificationsOpen">
+            <summary>Notifications <span aria-hidden="true">▾</span></summary>
+            <div class="site-nav-dropdown">
+                <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile#notification-preferences">My notification settings</a>
+                @if (isAdmin)
+                {
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/settings/notifications")" href="/settings/notifications">Notification infrastructure settings</a>
+                }
+            </div>
+        </details>
+
+        @if (isAdmin)
+        {
+            <details data-active="@adminOpen">
+                <summary>Admin <span aria-hidden="true">▾</span></summary>
+                <div class="site-nav-dropdown">
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/security")" href="/admin/security#security-settings">Security settings</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/backups")" href="/admin/backups">Configuration backups</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/admin")" href="/admin">DB maintenance</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/users")" href="/users">User management</a>
+                </div>
+            </details>
+        }
+
+        <details data-active="@profileOpen">
+            <summary>Profile <span aria-hidden="true">▾</span></summary>
+            <div class="site-nav-dropdown">
+                <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile">My profile</a>
+                <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile#change-password">Change password</a>
+                <form method="post" action="/account/logout">
+                    @Html.AntiForgeryToken()
+                    <button class="site-nav-logout" type="submit">Logout</button>
+                </form>
+            </div>
+        </details>
+    </div>
+</nav>
