@@ -170,7 +170,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                     OccurredAtUtc = transitionAtUtc,
                     Category = EventCategory.Endpoint,
                     EventType = eventType,
-                    Severity = nextState == EndpointStateKind.Down ? EventSeverity.Warning : EventSeverity.Info,
+                    Severity = nextState == EndpointStateKind.Down ? EventSeverity.Error : EventSeverity.Info,
                     AgentId = assignment.AgentId,
                     EndpointId = assignment.EndpointId,
                     AssignmentId = assignment.AssignmentId,
