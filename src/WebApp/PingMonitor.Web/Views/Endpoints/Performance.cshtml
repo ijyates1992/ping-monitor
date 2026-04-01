@@ -184,7 +184,6 @@
 
     const rttLabels = @Html.Raw(JsonSerializer.Serialize(rttLabels));
     const rttValues = @Html.Raw(JsonSerializer.Serialize(rttValues));
-    const rttSeries = rttLabels.map((label, index) => ({ x: label, y: rttValues[index] }));
     const jitterLabels = @Html.Raw(JsonSerializer.Serialize(jitterLabels));
     const jitterValues = @Html.Raw(JsonSerializer.Serialize(jitterValues));
     const failureLabels = @Html.Raw(JsonSerializer.Serialize(failureLabels));
@@ -200,18 +199,17 @@
                 data: {
                     labels: rttLabels,
                     datasets: [{
-                        type: 'line',
                         label: 'RTT (ms)',
-                        data: rttSeries,
+                        data: rttValues,
                         borderColor: '#60a5fa',
                         borderWidth: 1.25,
+                        backgroundColor: 'transparent',
                         fill: false,
-                        showLine: true,
-                        stepped: false,
-                        tension: 0.15,
+                        tension: 0.1,
+                        cubicInterpolationMode: 'monotone',
                         pointRadius: 0,
                         pointHoverRadius: 2,
-                        pointHitRadius: 8,
+                        pointHitRadius: 6,
                         pointBackgroundColor: '#60a5fa',
                         pointBorderColor: '#60a5fa'
                     }]
