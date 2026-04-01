@@ -80,6 +80,7 @@
         z-index: 50;
     }
 
+    .site-nav-shortcut,
     .site-nav-link,
     .site-nav-logout {
         display: flex;
@@ -97,11 +98,27 @@
         cursor: pointer;
     }
 
+    .site-nav-shortcut {
+        border: 1px solid var(--border);
+        background: var(--surface-1);
+        min-width: 110px;
+        justify-content: center;
+        font-weight: 700;
+    }
+
+    .site-nav-shortcut[data-current="true"] {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+        background: var(--surface-2);
+    }
+
     .site-nav-link[data-current="true"] {
         background: var(--surface-2);
         font-weight: 700;
     }
 
+    .site-nav-shortcut:hover,
+    .site-nav-shortcut:focus-visible,
     .site-nav-link:hover,
     .site-nav-link:focus-visible,
     .site-nav-logout:hover,
@@ -128,6 +145,8 @@
 </style>
 <nav class="site-nav-shell" aria-label="Primary">
     <div class="site-nav" data-site-nav>
+        <a class="site-nav-shortcut" data-current="@(path.Equals("/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/status", StringComparison.OrdinalIgnoreCase))" href="/status">Home</a>
+
         <details data-active="@monitoringOpen">
             <summary aria-controls="nav-menu-monitoring" aria-expanded="false">Monitoring <span aria-hidden="true">▾</span></summary>
             <div class="site-nav-dropdown" id="nav-menu-monitoring">
