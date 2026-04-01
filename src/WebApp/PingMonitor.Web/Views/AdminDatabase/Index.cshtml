@@ -1,0 +1,111 @@
+@model PingMonitor.Web.ViewModels.Admin.DatabaseStatusPageViewModel
+@using PingMonitor.Web.Support
+@{
+    var totalBytes = Model.TotalDataBytes + Model.TotalIndexBytes;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Database status</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .muted { color: var(--muted); }
+        .overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .75rem; }
+        .metric { border: 1px solid var(--border); border-radius: 10px; padding: .7rem; background: #fff; }
+        .metric .label { font-size: .85rem; color: var(--muted); }
+        .metric .value { font-size: 1.1rem; font-weight: 700; margin-top: .25rem; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 720px; }
+        th, td { text-align: left; border-bottom: 1px solid var(--border); padding: .55rem; }
+        th { font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .02em; }
+    </style>
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Database status</h1>
+            <p class="muted">Read-only database and runtime buffering visibility for operators. Maintenance actions are not enabled in this phase.</p>
+        </section>
+
+        <section class="card">
+            <h2>Database overview</h2>
+            <div class="overview-grid">
+                <div class="metric"><div class="label">Provider</div><div class="value">@Model.ProviderName</div></div>
+                <div class="metric"><div class="label">Database</div><div class="value">@Model.DatabaseName</div></div>
+                <div class="metric"><div class="label">Server / host</div><div class="value">@Model.DataSource</div></div>
+                <div class="metric"><div class="label">Server version</div><div class="value">@Model.ServerVersion</div></div>
+                <div class="metric"><div class="label">Connection health</div><div class="value">@(Model.ConnectionHealthy ? "Healthy" : "Unavailable")</div></div>
+                <div class="metric"><div class="label">Schema version</div><div class="value">@(Model.CurrentSchemaVersion?.ToString() ?? "n/a") / @Model.RequiredSchemaVersion required</div></div>
+                <div class="metric"><div class="label">Table count</div><div class="value">@Model.TableCount</div></div>
+                <div class="metric"><div class="label">Total DB size</div><div class="value">@DisplayFormatting.FormatBytes(totalBytes)</div></div>
+                <div class="metric"><div class="label">Data size</div><div class="value">@DisplayFormatting.FormatBytes(Model.TotalDataBytes)</div></div>
+                <div class="metric"><div class="label">Index size</div><div class="value">@DisplayFormatting.FormatBytes(Model.TotalIndexBytes)</div></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Table details</h2>
+            <p class="muted">Row counts are approximate and sourced from MySQL metadata (`information_schema.tables.table_rows`).</p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Table</th>
+                            <th>Approx. row count</th>
+                            <th>Data size</th>
+                            <th>Index size</th>
+                            <th>Total size</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var table in Model.Tables)
+                    {
+                        <tr>
+                            <td>@table.TableName</td>
+                            <td>@table.ApproximateRowCount</td>
+                            <td>@DisplayFormatting.FormatBytes(table.DataBytes)</td>
+                            <td>@DisplayFormatting.FormatBytes(table.IndexBytes)</td>
+                            <td>@DisplayFormatting.FormatBytes(table.TotalBytes)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Runtime buffer diagnostics</h2>
+            <div class="overview-grid">
+                <div class="metric"><div class="label">Buffering enabled</div><div class="value">@(Model.RuntimeBuffer.BufferingEnabled ? "Yes" : "No")</div></div>
+                <div class="metric"><div class="label">Configured max batch size</div><div class="value">@Model.RuntimeBuffer.ConfiguredMaxBatchSize</div></div>
+                <div class="metric"><div class="label">Configured flush interval</div><div class="value">@Model.RuntimeBuffer.ConfiguredFlushIntervalSeconds s</div></div>
+                <div class="metric"><div class="label">Configured max queue size</div><div class="value">@Model.RuntimeBuffer.ConfiguredMaxQueueSize</div></div>
+                <div class="metric"><div class="label">Current queue depth</div><div class="value">@Model.RuntimeBuffer.CurrentQueueDepth (@DisplayFormatting.FormatPercent(Model.RuntimeBuffer.QueueUtilizationPercent))</div></div>
+                <div class="metric"><div class="label">Dropped results</div><div class="value">@Model.RuntimeBuffer.DroppedResultCount (@DisplayFormatting.FormatPercent(Model.RuntimeBuffer.BufferDropRatePercent))</div></div>
+                <div class="metric"><div class="label">Total enqueued results</div><div class="value">@Model.RuntimeBuffer.TotalEnqueueCount</div></div>
+                <div class="metric"><div class="label">Persisted results (runtime)</div><div class="value">@Model.RuntimeBuffer.PersistedResultCount</div></div>
+                <div class="metric"><div class="label">Flush count</div><div class="value">@Model.RuntimeBuffer.FlushCount</div></div>
+                <div class="metric"><div class="label">Flush success rate</div><div class="value">@DisplayFormatting.FormatPercent(Model.RuntimeBuffer.FlushSuccessRatePercent)</div></div>
+                <div class="metric"><div class="label">Last flush time</div><div class="value">@DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.LastFlushCompletedAtUtc)</div></div>
+                <div class="metric"><div class="label">Last flush summary</div><div class="value">Attempted @Model.RuntimeBuffer.LastFlushAttemptedCount, persisted @Model.RuntimeBuffer.LastFlushPersistedCount</div></div>
+            </div>
+            <p class="muted">Cache hit rate: @Model.RuntimeBuffer.CacheHitRateNote</p>
+            @if (!string.IsNullOrWhiteSpace(Model.RuntimeBuffer.LastFlushError))
+            {
+                <p><strong>Last flush error:</strong> @Model.RuntimeBuffer.LastFlushError</p>
+            }
+        </section>
+    </div>
+</main>
+</body>
+</html>

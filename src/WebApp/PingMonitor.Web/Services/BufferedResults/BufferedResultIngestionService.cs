@@ -11,7 +11,12 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
     private readonly ILogger<BufferedResultIngestionService> _logger;
     private readonly ResultBufferOptions _options;
     private long _droppedCount;
+    private long _totalEnqueueCount;
+    private long _flushCount;
+    private long _failedFlushCount;
+    private long _totalPersistedCount;
     private DateTimeOffset? _lastFlushCompletedAtUtc;
+    private int _lastFlushAttemptedCount;
     private int _lastFlushPersistedCount;
     private string? _lastFlushError;
 
@@ -33,6 +38,8 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
         var droppedInWrite = 0;
         lock (_sync)
         {
+            _totalEnqueueCount += results.Count;
+
             foreach (var result in results)
             {
                 if (_queue.Count >= _options.ResultBufferMaxQueueSize)
@@ -94,7 +101,12 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
             return new BufferedResultBufferSnapshot(
                 QueueDepth: _queue.Count,
                 DroppedCount: _droppedCount,
+                TotalEnqueueCount: _totalEnqueueCount,
+                FlushCount: _flushCount,
+                FailedFlushCount: _failedFlushCount,
+                TotalPersistedCount: _totalPersistedCount,
                 LastFlushCompletedAtUtc: _lastFlushCompletedAtUtc,
+                LastFlushAttemptedCount: _lastFlushAttemptedCount,
                 LastFlushPersistedCount: _lastFlushPersistedCount,
                 LastFlushError: _lastFlushError);
         }
@@ -112,11 +124,19 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
         }
     }
 
-    public void RecordFlushOutcome(int persistedCount, DateTimeOffset completedAtUtc, Exception? error)
+    public void RecordFlushOutcome(int attemptedCount, int persistedCount, DateTimeOffset completedAtUtc, Exception? error)
     {
         lock (_sync)
         {
+            _flushCount++;
+            if (error is not null)
+            {
+                _failedFlushCount++;
+            }
+
+            _totalPersistedCount += persistedCount;
             _lastFlushCompletedAtUtc = completedAtUtc;
+            _lastFlushAttemptedCount = attemptedCount;
             _lastFlushPersistedCount = persistedCount;
             _lastFlushError = error?.Message;
         }

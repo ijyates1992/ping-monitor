@@ -8,12 +8,17 @@ public interface IBufferedResultIngestionService
     IReadOnlyList<BufferedCheckResult> DequeueBatch(int maxBatchSize);
     BufferedResultBufferSnapshot GetSnapshot();
     Task<bool> WaitForSignalAsync(TimeSpan timeout, CancellationToken cancellationToken);
-    void RecordFlushOutcome(int persistedCount, DateTimeOffset completedAtUtc, Exception? error);
+    void RecordFlushOutcome(int attemptedCount, int persistedCount, DateTimeOffset completedAtUtc, Exception? error);
 }
 
 public sealed record BufferedResultBufferSnapshot(
     int QueueDepth,
     long DroppedCount,
+    long TotalEnqueueCount,
+    long FlushCount,
+    long FailedFlushCount,
+    long TotalPersistedCount,
     DateTimeOffset? LastFlushCompletedAtUtc,
+    int LastFlushAttemptedCount,
     int LastFlushPersistedCount,
     string? LastFlushError);
