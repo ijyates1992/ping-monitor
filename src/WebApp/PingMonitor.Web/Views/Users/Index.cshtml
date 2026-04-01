@@ -1,16 +1,60 @@
 @model PingMonitor.Web.ViewModels.Users.ManageUsersPageViewModel
-<!DOCTYPE html><html><head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
     @await Html.PartialAsync("_ThemeHead")
-    <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Users</title></head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>User management</title>
+    @await Html.PartialAsync("_UiConsistencyStyles")
+</head>
 <body>
 @await Html.PartialAsync("_AuthenticatedNav")
-<main style="font-family:Arial;max-width:980px;margin:1rem auto;">
-<h1>Manage users</h1>
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <p>@Model.StatusMessage</p> }
-<p><a href="/users/new">Create user</a> | <a href="/status">Status</a></p>
-<table style="width:100%"><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Enabled</th><th></th></tr></thead><tbody>
-@foreach (var user in Model.Users) {
-<tr><td>@user.UserName</td><td>@user.Email</td><td>@user.Role</td><td>@(user.Enabled?"Yes":"No")</td><td><a href="/users/@user.UserId/edit">Edit</a></td></tr>
-}
-</tbody></table>
-</main></body></html>
+<main class="page-shell">
+    <div class="stack">
+        <section class="card stack">
+            <h1 class="section-title">Manage users</h1>
+            <p class="muted">Create and maintain user accounts, role access, and enabled state.</p>
+            <div class="button-row">
+                <a class="button" href="/users/new">Create user</a>
+                <a class="button-secondary" href="/status">Back to status</a>
+            </div>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <div class="saved">@Model.StatusMessage</div>
+        }
+
+        <section class="card stack">
+            <h2 class="section-title">Users</h2>
+            <div class="table-wrap">
+                <table class="table-standard">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Enabled</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var user in Model.Users)
+                    {
+                        <tr>
+                            <td>@user.UserName</td>
+                            <td>@user.Email</td>
+                            <td>@user.Role</td>
+                            <td>@(user.Enabled ? "Yes" : "No")</td>
+                            <td><a class="button-secondary" href="/users/@user.UserId/edit">Edit</a></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</main>
+</body>
+</html>
