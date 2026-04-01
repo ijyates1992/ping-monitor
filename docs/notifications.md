@@ -67,6 +67,14 @@ Initial settings scope is split by ownership:
   - suppress browser notifications during quiet hours
   - suppress SMTP notifications during quiet hours
 
+
+Additional SMTP identity requirements:
+
+- SMTP notifications are delivered only to the authenticated user's current verified email address
+- changing a profile email address resets email verification state until the new address is confirmed
+- profile notification settings must clearly show whether the user email is verified
+- users can request a resend of the email verification message from profile/notification settings
+
 Additional phase 1 per-user Telegram settings:
 
 - Telegram notifications enabled/disabled

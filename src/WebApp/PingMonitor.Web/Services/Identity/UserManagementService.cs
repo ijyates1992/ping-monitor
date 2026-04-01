@@ -100,10 +100,16 @@ internal sealed class UserManagementService : IUserManagementService
             return new UserManagementResult { Success = false, Found = false, Errors = ["User not found."] };
         }
 
+        var trimmedEmail = command.Email.Trim();
+        var emailChanged = !string.Equals(user.Email, trimmedEmail, StringComparison.OrdinalIgnoreCase);
         user.UserName = command.UserName.Trim();
-        user.Email = command.Email.Trim();
+        user.Email = trimmedEmail;
+        if (emailChanged)
+        {
+            user.EmailConfirmed = false;
+        }
         user.NormalizedUserName = command.UserName.Trim().ToUpperInvariant();
-        user.NormalizedEmail = command.Email.Trim().ToUpperInvariant();
+        user.NormalizedEmail = trimmedEmail.ToUpperInvariant();
         user.LockoutEnabled = true;
         user.LockoutEnd = command.Enabled ? null : DateTimeOffset.MaxValue;
 

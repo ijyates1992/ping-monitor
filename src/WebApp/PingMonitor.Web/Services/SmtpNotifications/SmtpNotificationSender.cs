@@ -36,6 +36,29 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
             body: "SMTP notifications are working.",
             eventKey: "smtp_test",
             recipients: [recipientAddress],
+            requireSmtpNotificationChannelEnabled: true,
+            cancellationToken);
+    }
+
+    public async Task<SmtpNotificationSendResult> SendEmailVerificationAsync(string recipientAddress, string verificationLink, CancellationToken cancellationToken)
+    {
+        var body = string.Join(
+            Environment.NewLine,
+            [
+                "Verify your Ping Monitor email address.",
+                "SMTP notifications are sent only to verified email addresses.",
+                string.Empty,
+                $"Verification link: {verificationLink}",
+                string.Empty,
+                "If you did not request this, you can ignore this email."
+            ]);
+
+        return await SendEmailAsync(
+            subject: "Ping Monitor: Verify your email address",
+            body: body,
+            eventKey: "email_verification",
+            recipients: [recipientAddress],
+            requireSmtpNotificationChannelEnabled: false,
             cancellationToken);
     }
 
@@ -54,7 +77,7 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
         }
 
         var body = BuildEventBody(eventLog);
-        return await SendEmailAsync(mapped.Value.Subject, body, eventLog.EventType, eligibleRecipientAddresses, cancellationToken);
+        return await SendEmailAsync(mapped.Value.Subject, body, eventLog.EventType, eligibleRecipientAddresses, requireSmtpNotificationChannelEnabled: true, cancellationToken);
     }
 
     private async Task<SmtpNotificationSendResult> SendEmailAsync(
@@ -62,10 +85,11 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
         string body,
         string eventKey,
         IReadOnlyList<string> recipients,
+        bool requireSmtpNotificationChannelEnabled,
         CancellationToken cancellationToken)
     {
         var settings = await _notificationSettingsService.GetSmtpChannelAsync(cancellationToken);
-        if (!settings.SmtpNotificationsEnabled)
+        if (requireSmtpNotificationChannelEnabled && !settings.SmtpNotificationsEnabled)
         {
             return SmtpNotificationSendResult.Skip("SMTP notifications are disabled.");
         }
@@ -151,7 +175,7 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
     {
         var users = await _dbContext.Users
             .Where(x => !string.IsNullOrWhiteSpace(x.Email))
-            .Select(x => new { x.Id, x.Email })
+            .Select(x => new { x.Id, x.Email, x.EmailConfirmed })
             .ToArrayAsync(cancellationToken);
 
         var recipients = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -166,6 +190,12 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
             var suppressionDecision = _notificationSuppressionService.IsSmtpNotificationSuppressed(userSettings);
             if (suppressionDecision.IsSuppressed)
             {
+                continue;
+            }
+
+            if (!user.EmailConfirmed)
+            {
+                _logger.LogDebug("Skipping SMTP notification eligibility for user {UserId} because email is unverified.", user.Id);
                 continue;
             }
 

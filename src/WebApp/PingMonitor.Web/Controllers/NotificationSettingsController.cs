@@ -149,6 +149,12 @@ public sealed class NotificationSettingsController : Controller
             model.SmtpTestMessage = "Current user requires a valid email address for SMTP test.";
             return View("Index", model);
         }
+        if (!user.EmailConfirmed)
+        {
+            model.SmtpTestSent = false;
+            model.SmtpTestMessage = "Current user email address must be verified before SMTP test send.";
+            return View("Index", model);
+        }
 
         var result = await _smtpNotificationSender.SendTestAsync(user.Email, cancellationToken);
         if (result.Success)

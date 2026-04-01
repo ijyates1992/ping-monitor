@@ -9,6 +9,7 @@ public sealed class ProfilePageViewModel
     [Required]
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
+    public bool EmailVerified { get; set; }
 
     [DataType(DataType.Password)]
     public string CurrentPassword { get; set; } = string.Empty;
@@ -54,4 +55,6 @@ public sealed class ProfilePageViewModel
     public DateTimeOffset? TelegramLinkedAtUtc { get; set; }
     public bool TelegramCodeGenerated { get; set; }
     public bool TelegramAccountRemoved { get; set; }
+    public bool EmailVerificationResendSucceeded { get; set; }
+    public string? EmailVerificationMessage { get; set; }
 }
