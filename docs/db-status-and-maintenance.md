@@ -54,6 +54,7 @@ Method in this phase:
 - MySQL logical SQL export using `mysqldump`
 - creates timestamped `.sql` files under server-side `App_Data/DbBackups` by default
 - backup path is not publicly served static content
+- `DatabaseMaintenance:MySqlDumpExecutablePath` can be set to a full executable path (recommended on Windows hosts where MySQL tools are not on `PATH`)
 
 The page lists created backup files (name, UTC time, size) and supports download.
 
