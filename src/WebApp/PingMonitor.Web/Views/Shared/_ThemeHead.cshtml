@@ -176,14 +176,34 @@
         color: var(--text) !important;
     }
 
-    html[data-theme='dark'] .event-row-down,
-    html[data-theme='dark'] .state-down {
-        background: #3a1516 !important;
+
+    .log-info {
+        background: var(--success-soft);
+        border-left: 4px solid #1f8f4b !important;
     }
 
-    html[data-theme='dark'] .event-row-recovery,
+    .log-warning {
+        background: var(--warning-soft);
+        border-left: 4px solid #dc6803 !important;
+    }
+
+    .log-error {
+        background: var(--error-soft);
+        border-left: 4px solid #d92d20 !important;
+    }
+
+    html[data-theme='dark'] .log-info,
     html[data-theme='dark'] .state-up {
         background: #123221 !important;
+    }
+
+    html[data-theme='dark'] .log-warning {
+        background: #3a2c12 !important;
+    }
+
+    html[data-theme='dark'] .log-error,
+    html[data-theme='dark'] .state-down {
+        background: #3a1516 !important;
     }
 
     html[data-theme='dark'] .state-suppressed {

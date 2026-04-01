@@ -28,6 +28,8 @@ internal sealed class EventLogQueryService : IEventLogQueryService
                 EventType = x.EventType,
                 Severity = x.Severity,
                 Message = x.Message,
+                VisualSeverity = x.VisualSeverity,
+                SeverityCssClass = x.SeverityCssClass,
                 EndpointId = x.EndpointId,
                 EndpointName = x.EndpointName,
                 AgentId = x.AgentId,
@@ -141,6 +143,8 @@ internal sealed class EventLogQueryService : IEventLogQueryService
                 EventType = x.EventType,
                 Severity = x.Severity,
                 Message = x.Message,
+                VisualSeverity = x.VisualSeverity,
+                SeverityCssClass = x.SeverityCssClass,
                 EndpointId = x.EndpointId,
                 EndpointName = x.EndpointName,
                 AgentId = x.AgentId,
@@ -198,21 +202,23 @@ internal sealed class EventLogQueryService : IEventLogQueryService
                 Category = eventLog.EventCategory.ToString(),
                 EventType = eventLog.EventType,
                 Severity = eventLog.Severity.ToString(),
+                VisualSeverity = eventLog.Severity == Models.EventSeverity.Warning
+                    ? Models.LogVisualSeverity.Warning
+                    : eventLog.Severity == Models.EventSeverity.Error
+                        ? Models.LogVisualSeverity.Error
+                        : Models.LogVisualSeverity.Info,
+                SeverityCssClass = eventLog.Severity == Models.EventSeverity.Warning
+                    ? "log-warning"
+                    : eventLog.Severity == Models.EventSeverity.Error
+                        ? "log-error"
+                        : "log-info",
                 Message = eventLog.Message,
                 AgentId = eventLog.AgentId,
                 AgentName = agent != null ? (agent.Name ?? agent.InstanceId) : null,
                 EndpointId = eventLog.EndpointId,
                 EndpointName = endpoint != null ? endpoint.Name : null,
                 AssignmentId = eventLog.AssignmentId,
-                RowKind = eventLog.EventCategory == Models.EventCategory.Endpoint &&
-                          eventLog.EventType == Models.EventType.EndpointStateChanged &&
-                          EF.Functions.Like(eventLog.Message, "Endpoint \"%\" went down.%")
-                    ? RecentEventRowKind.EndpointDown
-                    : eventLog.EventCategory == Models.EventCategory.Endpoint &&
-                      eventLog.EventType == Models.EventType.EndpointStateChanged &&
-                      EF.Functions.Like(eventLog.Message, "Endpoint \"%\" recovered%")
-                        ? RecentEventRowKind.EndpointRecovery
-                        : RecentEventRowKind.Default
+                RowKind = RecentEventRowKind.Default
             };
     }
 
@@ -229,6 +235,8 @@ internal sealed class EventLogQueryService : IEventLogQueryService
         public string EventType { get; init; } = string.Empty;
         public string Severity { get; init; } = string.Empty;
         public string Message { get; init; } = string.Empty;
+        public Models.LogVisualSeverity VisualSeverity { get; init; } = Models.LogVisualSeverity.Info;
+        public string SeverityCssClass { get; init; } = "log-info";
         public string? AgentId { get; init; }
         public string? AgentName { get; init; }
         public string? EndpointId { get; init; }

@@ -8,6 +8,8 @@ public sealed class SecurityAuthLogListItem
     public required string SubjectIdentifier { get; init; }
     public string? SourceIpAddress { get; init; }
     public required bool Success { get; init; }
+    public LogVisualSeverity VisualSeverity { get; init; } = LogVisualSeverity.Info;
+    public string SeverityCssClass { get; init; } = "log-info";
     public string? FailureReason { get; init; }
     public string? UserId { get; init; }
     public string? AgentId { get; init; }

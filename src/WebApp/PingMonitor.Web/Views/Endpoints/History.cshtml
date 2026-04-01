@@ -123,11 +123,11 @@
                         <tbody>
                             @foreach (var row in Model.Rows)
                             {
-                                <tr>
+                                <tr class="@row.SeverityCssClass">
                                     <td>@FormatDate(row.OccurredAtUtc)</td>
                                     <td>@row.EventType</td>
                                     <td>@row.Category</td>
-                                    <td>@row.Severity</td>
+                                    <td><strong>@row.Severity</strong></td>
                                     <td>@row.Message</td>
                                     <td>@FormatRelated(row.EndpointId, row.EndpointName, row.AgentId, row.AgentName)</td>
                                 </tr>
