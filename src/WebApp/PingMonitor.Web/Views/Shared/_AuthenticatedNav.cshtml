@@ -128,10 +128,10 @@
     }
 </style>
 <nav class="site-nav-shell" aria-label="Primary">
-    <div class="site-nav">
+    <div class="site-nav" data-site-nav>
         <details data-active="@monitoringOpen">
-            <summary>Monitoring <span aria-hidden="true">▾</span></summary>
-            <div class="site-nav-dropdown">
+            <summary aria-controls="nav-menu-monitoring" aria-expanded="false">Monitoring <span aria-hidden="true">▾</span></summary>
+            <div class="site-nav-dropdown" id="nav-menu-monitoring">
                 <a class="site-nav-link" data-current="@IsCurrent(path, "/", "/status")" href="/status">Operational status</a>
                 <a class="site-nav-link" data-current="@IsCurrent(path, "/endpoints")" href="/endpoints">Manage endpoints</a>
                 @if (isAdmin)
@@ -144,8 +144,8 @@
         @if (isAdmin)
         {
             <details data-active="@agentsOpen">
-                <summary>Agents <span aria-hidden="true">▾</span></summary>
-                <div class="site-nav-dropdown">
+                <summary aria-controls="nav-menu-agents" aria-expanded="false">Agents <span aria-hidden="true">▾</span></summary>
+                <div class="site-nav-dropdown" id="nav-menu-agents">
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/agents")" href="/agents">Manage agents</a>
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/agents/deploy")" href="/agents/deploy">Deploy new agent</a>
                 </div>
@@ -155,8 +155,8 @@
         @if (isAdmin)
         {
             <details data-active="@eventsOpen">
-                <summary>Events / Logs <span aria-hidden="true">▾</span></summary>
-                <div class="site-nav-dropdown">
+                <summary aria-controls="nav-menu-events" aria-expanded="false">Events / Logs <span aria-hidden="true">▾</span></summary>
+                <div class="site-nav-dropdown" id="nav-menu-events">
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/status")" href="/status#recent-events">Recent events</a>
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/security")" href="/admin/security#security-logs">Security logs</a>
                 </div>
@@ -164,8 +164,8 @@
         }
 
         <details data-active="@notificationsOpen">
-            <summary>Notifications <span aria-hidden="true">▾</span></summary>
-            <div class="site-nav-dropdown">
+            <summary aria-controls="nav-menu-notifications" aria-expanded="false">Notifications <span aria-hidden="true">▾</span></summary>
+            <div class="site-nav-dropdown" id="nav-menu-notifications">
                 <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile#notification-preferences">My notification settings</a>
                 @if (isAdmin)
                 {
@@ -177,8 +177,8 @@
         @if (isAdmin)
         {
             <details data-active="@adminOpen">
-                <summary>Admin <span aria-hidden="true">▾</span></summary>
-                <div class="site-nav-dropdown">
+                <summary aria-controls="nav-menu-admin" aria-expanded="false">Admin <span aria-hidden="true">▾</span></summary>
+                <div class="site-nav-dropdown" id="nav-menu-admin">
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/security")" href="/admin/security#security-settings">Security settings</a>
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/backups")" href="/admin/backups">Configuration backups</a>
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/admin")" href="/admin">DB maintenance</a>
@@ -188,8 +188,8 @@
         }
 
         <details data-active="@profileOpen">
-            <summary>Profile <span aria-hidden="true">▾</span></summary>
-            <div class="site-nav-dropdown">
+            <summary aria-controls="nav-menu-profile" aria-expanded="false">Profile <span aria-hidden="true">▾</span></summary>
+            <div class="site-nav-dropdown" id="nav-menu-profile">
                 <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile">My profile</a>
                 <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile#change-password">Change password</a>
                 <form method="post" action="/account/logout">
@@ -200,3 +200,75 @@
         </details>
     </div>
 </nav>
+<script>
+    (() => {
+        const nav = document.querySelector('[data-site-nav]');
+        if (!nav) {
+            return;
+        }
+
+        const menus = Array.from(nav.querySelectorAll('details'));
+
+        const syncAria = () => {
+            for (const menu of menus) {
+                const summary = menu.querySelector('summary');
+                if (!summary) {
+                    continue;
+                }
+
+                summary.setAttribute('aria-expanded', menu.open ? 'true' : 'false');
+            }
+        };
+
+        const closeAll = () => {
+            for (const menu of menus) {
+                menu.open = false;
+            }
+
+            syncAria();
+        };
+
+        const closeOthers = (activeMenu) => {
+            for (const menu of menus) {
+                if (menu !== activeMenu) {
+                    menu.open = false;
+                }
+            }
+        };
+
+        for (const menu of menus) {
+            menu.addEventListener('toggle', () => {
+                if (menu.open) {
+                    closeOthers(menu);
+                }
+
+                syncAria();
+            });
+
+            menu.addEventListener('mouseenter', () => {
+                const openMenu = menus.find((candidate) => candidate.open);
+                if (!openMenu || openMenu === menu) {
+                    return;
+                }
+
+                openMenu.open = false;
+                menu.open = true;
+                syncAria();
+            });
+        }
+
+        document.addEventListener('click', (event) => {
+            if (!nav.contains(event.target)) {
+                closeAll();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeAll();
+            }
+        });
+
+        syncAria();
+    })();
+</script>
