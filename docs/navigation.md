@@ -16,18 +16,23 @@ The authenticated top navigation uses dropdown menus with this structure:
 - **Events / Logs** (Admin only)
   - Recent events → `/status#recent-events`
   - Security logs → `/admin/security#security-logs`
-- **Notifications**
-  - My notification settings → `/profile#notification-preferences`
-  - Notification infrastructure settings → `/settings/notifications` (Admin only)
 - **Admin** (Admin only)
   - Security settings → `/admin/security#security-settings`
   - Configuration backups → `/admin/backups`
   - DB maintenance → `/admin`
+  - Notification infrastructure settings → `/admin/notification-infrastructure-settings`
+  - Default endpoint values → `/admin/default-endpoint-values`
   - User management → `/users`
 - **Profile**
   - My profile → `/profile`
+  - Notification settings → `/profile/notification-settings`
   - Change password → `/profile#change-password`
   - Logout → `POST /account/logout`
+
+## Notification settings ownership
+
+- **Profile > Notification settings** is user-owned and controls per-user notification preferences plus Telegram account linking.
+- **Admin > Notification infrastructure settings** is admin-owned and controls shared SMTP/Telegram transport infrastructure.
 
 ## Duplicate destination rule
 

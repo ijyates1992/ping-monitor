@@ -12,6 +12,7 @@ using System.Net.Mail;
 namespace PingMonitor.Web.Controllers;
 
 [Authorize(Roles = ApplicationRoles.Admin)]
+[Route("admin/notification-infrastructure-settings")]
 [Route("settings/notifications")]
 public sealed class NotificationSettingsController : Controller
 {

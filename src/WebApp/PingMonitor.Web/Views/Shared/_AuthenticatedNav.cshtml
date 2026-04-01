@@ -19,8 +19,7 @@
     var monitoringOpen = IsCurrent(path, "/", "/status", "/endpoints", "/groups");
     var agentsOpen = IsCurrent(path, "/agents");
     var eventsOpen = IsCurrent(path, "/admin/security");
-    var notificationsOpen = IsCurrent(path, "/profile", "/settings/notifications");
-    var adminOpen = IsCurrent(path, "/admin", "/users");
+    var adminOpen = IsCurrent(path, "/admin", "/users", "/settings/notifications");
     var profileOpen = IsCurrent(path, "/profile");
 }
 <style>
@@ -163,17 +162,6 @@
             </details>
         }
 
-        <details data-active="@notificationsOpen">
-            <summary aria-controls="nav-menu-notifications" aria-expanded="false">Notifications <span aria-hidden="true">▾</span></summary>
-            <div class="site-nav-dropdown" id="nav-menu-notifications">
-                <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile#notification-preferences">My notification settings</a>
-                @if (isAdmin)
-                {
-                    <a class="site-nav-link" data-current="@IsCurrent(path, "/settings/notifications")" href="/settings/notifications">Notification infrastructure settings</a>
-                }
-            </div>
-        </details>
-
         @if (isAdmin)
         {
             <details data-active="@adminOpen">
@@ -182,6 +170,8 @@
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/security")" href="/admin/security#security-settings">Security settings</a>
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/backups")" href="/admin/backups">Configuration backups</a>
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/admin")" href="/admin">DB maintenance</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/notification-infrastructure-settings", "/settings/notifications")" href="/admin/notification-infrastructure-settings">Notification infrastructure settings</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/admin/default-endpoint-values")" href="/admin/default-endpoint-values">Default endpoint values</a>
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/users")" href="/users">User management</a>
                 </div>
             </details>
@@ -191,6 +181,7 @@
             <summary aria-controls="nav-menu-profile" aria-expanded="false">Profile <span aria-hidden="true">▾</span></summary>
             <div class="site-nav-dropdown" id="nav-menu-profile">
                 <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile">My profile</a>
+                <a class="site-nav-link" data-current="@IsCurrent(path, "/profile/notification-settings")" href="/profile/notification-settings">Notification settings</a>
                 <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile#change-password">Change password</a>
                 <form method="post" action="/account/logout">
                     @Html.AntiForgeryToken()

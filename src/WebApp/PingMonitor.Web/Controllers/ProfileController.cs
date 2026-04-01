@@ -35,6 +35,13 @@ public sealed class ProfileController : Controller
         return View("Index", model);
     }
 
+    [HttpGet("notification-settings")]
+    public async Task<IActionResult> NotificationSettings(CancellationToken cancellationToken)
+    {
+        var model = await BuildModelAsync(cancellationToken);
+        return View("NotificationSettings", model);
+    }
+
     [HttpPost("account")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateAccount([FromForm] ProfilePageViewModel model, CancellationToken cancellationToken)
@@ -130,6 +137,7 @@ public sealed class ProfileController : Controller
         return View("Index", refreshed);
     }
 
+    [HttpPost("notification-settings")]
     [HttpPost("notifications")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateNotifications([FromForm] ProfilePageViewModel model, CancellationToken cancellationToken)
@@ -160,7 +168,7 @@ public sealed class ProfileController : Controller
 
         if (!ModelState.IsValid)
         {
-            return View("Index", await BuildModelAsync(cancellationToken, model));
+            return View("NotificationSettings", await BuildModelAsync(cancellationToken, model));
         }
 
         await _userNotificationSettingsService.UpdateAsync(new UpdateUserNotificationSettingsCommand
@@ -193,11 +201,10 @@ public sealed class ProfileController : Controller
 
         var refreshed = await BuildModelAsync(cancellationToken);
         refreshed.NotificationsSaved = true;
-        return View("Index", refreshed);
+        return View("NotificationSettings", refreshed);
     }
 
-
-
+    [HttpPost("notification-settings/telegram/remove")]
     [HttpPost("telegram/remove")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RemoveTelegramAccount(CancellationToken cancellationToken)
@@ -211,9 +218,10 @@ public sealed class ProfileController : Controller
         await _telegramLinkService.UnlinkAccountAsync(user.Id, cancellationToken);
         var refreshed = await BuildModelAsync(cancellationToken);
         refreshed.TelegramAccountRemoved = true;
-        return View("Index", refreshed);
+        return View("NotificationSettings", refreshed);
     }
 
+    [HttpPost("notification-settings/telegram/generate-code")]
     [HttpPost("telegram/generate-code")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> GenerateTelegramCode(CancellationToken cancellationToken)
@@ -227,7 +235,7 @@ public sealed class ProfileController : Controller
         await _telegramLinkService.GenerateCodeAsync(user.Id, cancellationToken);
         var refreshed = await BuildModelAsync(cancellationToken);
         refreshed.TelegramCodeGenerated = true;
-        return View("Index", refreshed);
+        return View("NotificationSettings", refreshed);
     }
 
     private async Task<ApplicationUser?> RequireUserAsync()
@@ -277,7 +285,7 @@ public sealed class ProfileController : Controller
             NotificationSettingsUpdatedAtUtc = settings.UpdatedAtUtc,
             ActiveTelegramCode = pendingCode?.Code,
             ActiveTelegramCodeExpiresAtUtc = pendingCode?.ExpiresAtUtc,
-            TelegramLinked = telegramAccount is not null && telegramAccount.Verified,
+            TelegramLinked = telegramAccount?.Verified ?? false,
             TelegramLinkedChatId = telegramAccount?.ChatId,
             TelegramLinkedUsername = telegramAccount?.Username,
             TelegramLinkedDisplayName = telegramAccount?.DisplayName,
