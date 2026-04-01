@@ -3,18 +3,45 @@
 <html lang="en">
 <head>
     @await Html.PartialAsync("_ThemeHead")
-    <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Login</title></head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in</title>
+    @await Html.PartialAsync("_UiConsistencyStyles")
+</head>
 <body>
-<main style="max-width:420px;margin:2rem auto;font-family:Arial,sans-serif;">
-    <h1>Sign in</h1>
-    @Html.ValidationSummary(false)
-    <form method="post" action="/account/login" style="display:grid;gap:.75rem;">
-        @Html.AntiForgeryToken()
-        <input type="hidden" asp-for="ReturnUrl" />
-        <label>Username <input asp-for="UserName" /></label>
-        <label>Password <input asp-for="Password" type="password" /></label>
-        <button type="submit">Sign in</button>
-    </form>
+<main class="page-shell-auth">
+    <div class="stack">
+        <section class="card stack">
+            <h1 class="section-title">Sign in</h1>
+            <p class="muted">Use your Ping Monitor credentials to access operational status and administration.</p>
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="errors" asp-validation-summary="ModelOnly"></div>
+            }
+
+            <form method="post" action="/account/login" class="stack">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="ReturnUrl" />
+
+                <div class="field-group">
+                    <label asp-for="UserName">Username or email</label>
+                    <input asp-for="UserName" autocomplete="username" />
+                    <div class="field-error"><span asp-validation-for="UserName"></span></div>
+                </div>
+
+                <div class="field-group">
+                    <label asp-for="Password"></label>
+                    <input asp-for="Password" type="password" autocomplete="current-password" />
+                    <div class="field-error"><span asp-validation-for="Password"></span></div>
+                </div>
+
+                <div class="button-row">
+                    <button class="button" type="submit">Sign in</button>
+                </div>
+            </form>
+        </section>
+    </div>
 </main>
 </body>
 </html>

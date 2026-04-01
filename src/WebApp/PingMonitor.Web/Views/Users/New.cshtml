@@ -1,26 +1,93 @@
 @model PingMonitor.Web.ViewModels.Users.UserEditPageViewModel
-@{ ViewData["Title"] = "New User"; }
-<!DOCTYPE html><html><head>
+@{ ViewData["Title"] = "Create user"; }
+<!DOCTYPE html>
+<html lang="en">
+<head>
     @await Html.PartialAsync("_ThemeHead")
-    <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>@ViewData["Title"]</title></head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    @await Html.PartialAsync("_UiConsistencyStyles")
+</head>
 <body>
 @await Html.PartialAsync("_AuthenticatedNav")
-<main style="font-family:Arial;max-width:980px;margin:1rem auto;">
-<h1>Create user</h1>
-@Html.ValidationSummary(false)
-<form method="post" style="display:grid;gap:.75rem;">
-@Html.AntiForgeryToken()
-<label>Username <input asp-for="UserName" /></label>
-<label>Email <input asp-for="Email" /></label>
-<label>Password <input asp-for="Password" type="password" /></label>
-<label>Role <select asp-for="Role"><option>Admin</option><option>User</option></select></label>
-<label><input asp-for="Enabled" type="checkbox"/> Enabled</label>
-<fieldset><legend>Allowed groups</legend>
-@foreach (var group in Model.AvailableGroups) { <label><input type="checkbox" name="GroupIds" value="@group.Id" checked="@(Model.GroupIds.Contains(group.Id))"/> @group.Name</label><br/> }
-</fieldset>
-<fieldset><legend>Allowed endpoints</legend>
-@foreach (var endpoint in Model.AvailableEndpoints) { <label><input type="checkbox" name="EndpointIds" value="@endpoint.Id" checked="@(Model.EndpointIds.Contains(endpoint.Id))"/> @endpoint.Name</label><br/> }
-</fieldset>
-<button type="submit">Create user</button>
-</form>
-</main></body></html>
+<main class="page-shell-narrow">
+    <div class="stack">
+        <section class="card stack">
+            <h1 class="section-title">Create user</h1>
+            <p class="muted">Provision a new user and set access scope before first sign-in.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/users">Back to users</a>
+            </div>
+        </section>
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="errors" asp-validation-summary="ModelOnly"></div>
+        }
+
+        <section class="card stack">
+            <form method="post" class="stack">
+                @Html.AntiForgeryToken()
+
+                <div class="field-grid field-grid-2">
+                    <div class="field-group">
+                        <label asp-for="UserName">Username</label>
+                        <input asp-for="UserName" autocomplete="username" />
+                        <div class="field-error"><span asp-validation-for="UserName"></span></div>
+                    </div>
+                    <div class="field-group">
+                        <label asp-for="Email">Email</label>
+                        <input asp-for="Email" autocomplete="email" />
+                        <div class="field-error"><span asp-validation-for="Email"></span></div>
+                    </div>
+                    <div class="field-group">
+                        <label asp-for="Password">Password</label>
+                        <input asp-for="Password" type="password" autocomplete="new-password" />
+                        <div class="field-error"><span asp-validation-for="Password"></span></div>
+                    </div>
+                    <div class="field-group">
+                        <label asp-for="Role">Role</label>
+                        <select asp-for="Role"><option>Admin</option><option>User</option></select>
+                        <div class="field-error"><span asp-validation-for="Role"></span></div>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label class="check-list-item"><input asp-for="Enabled" type="checkbox" /> Enabled</label>
+                </div>
+
+                <div class="field-group">
+                    <fieldset class="stack">
+                        <legend>Allowed groups</legend>
+                        <div class="check-list">
+                            @foreach (var group in Model.AvailableGroups)
+                            {
+                                <label class="check-list-item"><input type="checkbox" name="GroupIds" value="@group.Id" checked="@(Model.GroupIds.Contains(group.Id))" /> @group.Name</label>
+                            }
+                        </div>
+                    </fieldset>
+                </div>
+
+                <div class="field-group">
+                    <fieldset class="stack">
+                        <legend>Allowed endpoints</legend>
+                        <div class="check-list">
+                            @foreach (var endpoint in Model.AvailableEndpoints)
+                            {
+                                <label class="check-list-item"><input type="checkbox" name="EndpointIds" value="@endpoint.Id" checked="@(Model.EndpointIds.Contains(endpoint.Id))" /> @endpoint.Name</label>
+                            }
+                        </div>
+                    </fieldset>
+                </div>
+
+                <div class="button-row">
+                    <button class="button" type="submit">Create user</button>
+                    <a class="button-secondary" href="/users">Cancel</a>
+                </div>
+            </form>
+        </section>
+    </div>
+</main>
+</body>
+</html>
