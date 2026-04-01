@@ -1,3 +1,5 @@
+using PingMonitor.Web.Models;
+
 namespace PingMonitor.Web.ViewModels.EventLogs;
 
 public sealed class EventLogHistoryPageViewModel
@@ -29,6 +31,8 @@ public sealed class EventLogHistoryRowViewModel
     public string Category { get; init; } = string.Empty;
     public string EventType { get; init; } = string.Empty;
     public string Severity { get; init; } = string.Empty;
+    public LogVisualSeverity VisualSeverity { get; init; } = LogVisualSeverity.Info;
+    public string SeverityCssClass { get; init; } = "log-info";
     public string Message { get; init; } = string.Empty;
     public string? EndpointId { get; init; }
     public string? EndpointName { get; init; }
@@ -54,6 +58,8 @@ public sealed class RecentEventViewModel
     public string Category { get; init; } = string.Empty;
     public string EventType { get; init; } = string.Empty;
     public string Severity { get; init; } = string.Empty;
+    public LogVisualSeverity VisualSeverity { get; init; } = LogVisualSeverity.Info;
+    public string SeverityCssClass { get; init; } = "log-info";
     public string Message { get; init; } = string.Empty;
     public string? EndpointId { get; init; }
     public string? EndpointName { get; init; }

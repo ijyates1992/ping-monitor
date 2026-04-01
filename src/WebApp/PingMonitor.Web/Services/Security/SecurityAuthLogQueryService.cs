@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
+using PingMonitor.Web.Support;
 
 namespace PingMonitor.Web.Services.Security;
 
@@ -37,18 +38,35 @@ internal sealed class SecurityAuthLogQueryService : ISecurityAuthLogQueryService
         var rows = await dbQuery
             .OrderByDescending(x => x.OccurredAtUtc)
             .Take(effectiveLimit)
-            .Select(x => new SecurityAuthLogListItem
+            .Select(x => new
             {
-                OccurredAtUtc = x.OccurredAtUtc,
-                SubjectIdentifier = x.SubjectIdentifier,
-                SourceIpAddress = x.SourceIpAddress,
-                Success = x.Success,
-                FailureReason = x.FailureReason,
-                UserId = x.UserId,
-                AgentId = x.AgentId
+                x.OccurredAtUtc,
+                x.SubjectIdentifier,
+                x.SourceIpAddress,
+                x.Success,
+                x.FailureReason,
+                x.UserId,
+                x.AgentId
             })
             .ToListAsync(cancellationToken);
 
-        return rows;
+        return rows
+            .Select(x =>
+            {
+                var visualSeverity = LogSeverityPresentation.FromSecurityAuthAttempt(x.Success, x.FailureReason);
+                return new SecurityAuthLogListItem
+                {
+                    OccurredAtUtc = x.OccurredAtUtc,
+                    SubjectIdentifier = x.SubjectIdentifier,
+                    SourceIpAddress = x.SourceIpAddress,
+                    Success = x.Success,
+                    VisualSeverity = visualSeverity,
+                    SeverityCssClass = LogSeverityPresentation.ToCssClass(visualSeverity),
+                    FailureReason = x.FailureReason,
+                    UserId = x.UserId,
+                    AgentId = x.AgentId
+                };
+            })
+            .ToList();
     }
 }

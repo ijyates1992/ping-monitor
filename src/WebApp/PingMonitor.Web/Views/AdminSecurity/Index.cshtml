@@ -37,10 +37,11 @@
         table { width: 100%; border-collapse: collapse; min-width: 740px; }
         th, td { border-bottom: 1px solid var(--border); text-align: left; padding: .6rem; vertical-align: top; }
         .log-box { border: 1px solid var(--border); border-radius: 10px; max-height: 320px; overflow-y: auto; background: #fbfdff; }
-        .log-item { padding: .7rem; border-bottom: 1px solid var(--border); font-size: .95rem; }
+        .log-item { padding: .7rem; border-bottom: 1px solid var(--border); font-size: .95rem; border-left: 4px solid transparent; }
         .log-item:last-child { border-bottom: 0; }
-        .status-ok { color: var(--ok); font-weight: 700; }
-        .status-bad { color: var(--bad); font-weight: 700; }
+        .severity-text-info { color: #166534; font-weight: 700; }
+        .severity-text-warning { color: #9a3412; font-weight: 700; }
+        .severity-text-error { color: #b42318; font-weight: 700; }
         .entry-meta { display: grid; gap: .25rem; }
         .empty { padding: 1rem; color: var(--muted); }
         @@media (min-width: 840px) {
@@ -374,12 +375,12 @@
             {
                 @foreach (var entry in Model.UserAttempts)
                 {
-                    <div class="log-item">
+                    <div class="log-item @entry.SeverityCssClass">
                         <div class="entry-meta">
                             <div><strong>@entry.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong></div>
                             <div>Subject: @entry.SubjectIdentifier</div>
                             <div>Source IP: @(string.IsNullOrWhiteSpace(entry.SourceIpAddress) ? "n/a" : entry.SourceIpAddress)</div>
-                            <div>Status: <span class="@(entry.Success ? "status-ok" : "status-bad")">@(entry.Success ? "SUCCESS" : "FAILED")</span></div>
+                            <div>Status: <span class="@(entry.VisualSeverity == PingMonitor.Web.Models.LogVisualSeverity.Error ? "severity-text-error" : entry.VisualSeverity == PingMonitor.Web.Models.LogVisualSeverity.Warning ? "severity-text-warning" : "severity-text-info")">@(entry.Success ? "SUCCESS" : "FAILED")</span></div>
                             @if (!string.IsNullOrWhiteSpace(entry.FailureReason))
                             {
                                 <div>Failure reason: @entry.FailureReason</div>
@@ -402,12 +403,12 @@
             {
                 @foreach (var entry in Model.AgentAttempts)
                 {
-                    <div class="log-item">
+                    <div class="log-item @entry.SeverityCssClass">
                         <div class="entry-meta">
                             <div><strong>@entry.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong></div>
                             <div>Subject: @entry.SubjectIdentifier</div>
                             <div>Source IP: @(string.IsNullOrWhiteSpace(entry.SourceIpAddress) ? "n/a" : entry.SourceIpAddress)</div>
-                            <div>Status: <span class="@(entry.Success ? "status-ok" : "status-bad")">@(entry.Success ? "SUCCESS" : "FAILED")</span></div>
+                            <div>Status: <span class="@(entry.VisualSeverity == PingMonitor.Web.Models.LogVisualSeverity.Error ? "severity-text-error" : entry.VisualSeverity == PingMonitor.Web.Models.LogVisualSeverity.Warning ? "severity-text-warning" : "severity-text-info")">@(entry.Success ? "SUCCESS" : "FAILED")</span></div>
                             @if (!string.IsNullOrWhiteSpace(entry.FailureReason))
                             {
                                 <div>Failure reason: @entry.FailureReason</div>

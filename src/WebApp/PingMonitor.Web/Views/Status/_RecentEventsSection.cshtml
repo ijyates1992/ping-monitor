@@ -1,12 +1,6 @@
 @model PingMonitor.Web.ViewModels.Status.EndpointStatusPageViewModel
 @using PingMonitor.Web.Models
 @{
-    static string EventRowClass(PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind rowKind) => rowKind switch
-    {
-        PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointDown => "event-row event-row-down",
-        PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointRecovery => "event-row event-row-recovery",
-        _ => "event-row"
-    };
     static string? GetRecentEventDestination(PingMonitor.Web.ViewModels.EventLogs.RecentEventViewModel recentEvent)
     {
         var hasEndpoint = !string.IsNullOrWhiteSpace(recentEvent.EndpointId);
@@ -55,9 +49,10 @@
             @foreach (var recentEvent in Model.RecentEvents)
             {
                 var destination = GetRecentEventDestination(recentEvent);
+                var severityClassName = recentEvent.SeverityCssClass;
                 var rowClassName = destination is null
-                    ? EventRowClass(recentEvent.RowKind)
-                    : $"{EventRowClass(recentEvent.RowKind)} event-row-clickable";
+                    ? $"event-row {severityClassName}"
+                    : $"event-row {severityClassName} event-row-clickable";
 
                 if (destination is null)
                 {
