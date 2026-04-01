@@ -195,6 +195,7 @@
     </style>
 </head>
 <body>
+@await Html.PartialAsync("_AuthenticatedNav")
 <main>
     <div class="stack">
         <section class="card">
@@ -222,7 +223,7 @@
             </div>
         </section>
 
-        <section class="card">
+        <section class="card" id="recent-events">
             <h2>Recent events</h2>
             @if (Model.RecentEvents.Count == 0)
             {

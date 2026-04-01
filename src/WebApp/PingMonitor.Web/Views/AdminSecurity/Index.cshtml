@@ -49,6 +49,7 @@
     </style>
 </head>
 <body>
+@await Html.PartialAsync("_AuthenticatedNav")
 <main>
     <section class="card">
         <h1>Security logs and settings</h1>
@@ -107,7 +108,7 @@
     </section>
 
     <section class="card">
-        <h2>Authentication protection settings</h2>
+        <h2 id="security-settings">Authentication protection settings</h2>
         @if (Model.SettingsSaved)
         {
             <div class="saved" role="status">Security settings saved successfully.</div>
@@ -326,7 +327,7 @@
     </section>
 
     <section class="card">
-        <h2>Authentication log filters</h2>
+        <h2 id="security-logs">Authentication log filters</h2>
         <p class="muted">All log filters use UTC values and apply to both user and agent authentication panels.</p>
         <form method="get" action="/admin/security" class="grid-two" style="margin-bottom: .8rem;">
             <div class="field">
