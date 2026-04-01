@@ -1,0 +1,87 @@
+@{
+    var path = Context?.Request?.Path.Value ?? string.Empty;
+    var isAdmin = User.IsInRole("Admin");
+    var userName = User?.Identity?.Name ?? "User";
+
+    static bool IsActive(string requestPath, params string[] prefixes)
+    {
+        foreach (var prefix in prefixes)
+        {
+            if (requestPath.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+                requestPath.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    var navItems = new List<(string Label, string Href, bool Active, bool Visible)>
+    {
+        ("Dashboard", "/status", IsActive(path, "/", "/status"), true),
+        ("Events / Logs", "/status#recent-events", IsActive(path, "/status", "/endpoints", "/agents"), true),
+        ("Security", "/admin/security", IsActive(path, "/admin/security"), isAdmin),
+        ("Notifications", "/settings/notifications", IsActive(path, "/settings/notifications"), isAdmin),
+        ("Backups", "/admin/backups", IsActive(path, "/admin/backups"), isAdmin),
+        ("Settings", "/admin", IsActive(path, "/admin"), isAdmin),
+        ("Profile", "/profile", IsActive(path, "/profile"), true)
+    };
+}
+<style>
+    .pm-nav { background: var(--card, #fff); border-bottom: 1px solid var(--border, #d9e2ec); position: sticky; top: 0; z-index: 40; }
+    .pm-nav-wrap { max-width: 1180px; margin: 0 auto; padding: .6rem .9rem; display: grid; gap: .6rem; }
+    .pm-nav-top { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
+    .pm-brand { font-weight:700; color: var(--text, #102a43); text-decoration:none; }
+    .pm-user { color: var(--muted, #52606d); font-size:.92rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+    .pm-user form { margin:0; }
+    .pm-link-list { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .pm-link { text-decoration:none; color: var(--text, #102a43); border:1px solid transparent; border-radius:10px; padding:.48rem .7rem; font-weight:600; min-height:42px; display:inline-flex; align-items:center; }
+    .pm-link:hover, .pm-link:focus-visible { border-color: var(--border, #d9e2ec); background: var(--bg, #f3f6f8); outline:none; }
+    .pm-link.active { border-color: var(--accent, #0f62fe); color: var(--accent, #0f62fe); background: rgba(15, 98, 254, 0.12); }
+    .pm-logout { background:none; border:1px solid var(--border, #d9e2ec); border-radius:9px; padding:.35rem .65rem; min-height:36px; font-weight:600; cursor:pointer; color: var(--text, #102a43); }
+    .pm-nav-menu { display:none; }
+    @@media (max-width: 760px) {
+        .pm-nav-links { display:none; }
+        .pm-nav-menu { display:block; }
+        .pm-nav-menu details summary { list-style:none; border:1px solid var(--border, #d9e2ec); border-radius:10px; padding:.55rem .7rem; font-weight:600; cursor:pointer; }
+        .pm-nav-menu details summary::-webkit-details-marker { display:none; }
+        .pm-nav-menu-list { margin-top:.55rem; display:grid; gap:.4rem; }
+    }
+</style>
+<nav class="pm-nav" aria-label="Primary navigation">
+    <div class="pm-nav-wrap">
+        <div class="pm-nav-top">
+            <a class="pm-brand" href="/status">Ping Monitor</a>
+            <div class="pm-user">
+                <span>@userName</span>
+                <a class="pm-link" href="/profile">Profile</a>
+                <form method="post" action="/account/logout">
+                    @Html.AntiForgeryToken()
+                    <button class="pm-logout" type="submit">Log out</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="pm-nav-links">
+            <div class="pm-link-list">
+                @foreach (var item in navItems.Where(item => item.Visible))
+                {
+                    <a class="pm-link @(item.Active ? "active" : string.Empty)" href="@item.Href" aria-current="@(item.Active ? "page" : null)">@item.Label</a>
+                }
+            </div>
+        </div>
+
+        <div class="pm-nav-menu">
+            <details>
+                <summary>Menu</summary>
+                <div class="pm-nav-menu-list">
+                    @foreach (var item in navItems.Where(item => item.Visible))
+                    {
+                        <a class="pm-link @(item.Active ? "active" : string.Empty)" href="@item.Href" aria-current="@(item.Active ? "page" : null)">@item.Label</a>
+                    }
+                </div>
+            </details>
+        </div>
+    </div>
+</nav>
