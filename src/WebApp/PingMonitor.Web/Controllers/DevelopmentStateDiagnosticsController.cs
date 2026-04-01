@@ -1,12 +1,15 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Contracts.Diagnostics;
 using PingMonitor.Web.Data;
+using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Models;
 
 namespace PingMonitor.Web.Controllers;
 
 [ApiController]
+[Authorize(Roles = ApplicationRoles.Admin)]
 [Route("internal/dev/state")]
 public sealed class DevelopmentStateDiagnosticsController : ControllerBase
 {

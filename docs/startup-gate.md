@@ -131,6 +131,8 @@ Local access is allowed to:
 - apply schema changes  
 - create initial admin user  
 
+When the app is deployed behind a reverse proxy, forwarded headers must be trusted only from explicitly configured proxy IPs/networks. Do not trust arbitrary `X-Forwarded-*` values from the public internet, because local-vs-remote startup-gate enforcement depends on resolved client address integrity.
+
 ---
 
 ### Remote access (untrusted)

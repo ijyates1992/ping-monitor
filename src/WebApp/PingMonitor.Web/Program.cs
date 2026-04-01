@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using MySql.EntityFrameworkCore.Extensions;
+using System.Net;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
@@ -108,8 +109,43 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         ForwardedHeaders.XForwardedFor |
         ForwardedHeaders.XForwardedProto |
         ForwardedHeaders.XForwardedHost;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    options.ForwardLimit = 1;
+    options.RequireHeaderSymmetry = true;
+
+    var knownProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+    var knownNetworks = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
+
+    if (knownProxies.Length > 0 || knownNetworks.Length > 0)
+    {
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+
+        foreach (var proxy in knownProxies)
+        {
+            if (!IPAddress.TryParse(proxy?.Trim(), out var parsedProxy))
+            {
+                throw new InvalidOperationException($"Invalid ForwardedHeaders:KnownProxies entry '{proxy}'.");
+            }
+
+            options.KnownProxies.Add(parsedProxy);
+        }
+
+        foreach (var network in knownNetworks)
+        {
+            var normalized = network?.Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                continue;
+            }
+
+            if (!System.Net.IPNetwork.TryParse(normalized, out var parsedNetwork))
+            {
+                throw new InvalidOperationException($"Invalid ForwardedHeaders:KnownNetworks entry '{network}'. Use CIDR format (for example 10.0.0.0/8).");
+            }
+
+            options.KnownIPNetworks.Add(parsedNetwork);
+        }
+    }
 });
 
 builder.Services.AddScoped<IAgentApiKeyHasher, AgentApiKeyHasher>();

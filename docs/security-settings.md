@@ -106,6 +106,14 @@ Manual and automatic block/unblock actions are persisted as security IP block re
 Manual user unlock actions (success and rejected attempts) are event logged with operator identity context when available.
 Settings updates are also event logged.
 
+## Reverse proxy header trust requirements
+
+Authentication IP-based protections (temporary/permanent IP block and failed-attempt thresholding) depend on accurate source IP resolution.
+
+- Only trust `X-Forwarded-*` headers from explicitly configured proxy IPs/networks.
+- Do not run with unrestricted forwarded-header trust in public deployments.
+- If no trusted proxies are configured, forwarded headers should remain limited to default local proxy trust only.
+
 ## Security auth log prune controls
 
 - Security page exposes current retention values, computed cutoff, and current eligible auth-log count.
