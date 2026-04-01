@@ -4,5 +4,6 @@ public enum EventCategory
 {
     Endpoint = 0,
     Agent = 1,
-    Security = 2
+    Security = 2,
+    System = 3
 }

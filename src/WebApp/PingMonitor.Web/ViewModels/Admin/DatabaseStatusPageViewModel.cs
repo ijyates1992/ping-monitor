@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using PingMonitor.Web.Services.DatabaseStatus;
+
 namespace PingMonitor.Web.ViewModels.Admin;
 
 public sealed class DatabaseStatusPageViewModel
@@ -14,6 +17,12 @@ public sealed class DatabaseStatusPageViewModel
     public long TotalIndexBytes { get; init; }
     public IReadOnlyList<DatabaseStatusTableViewModel> Tables { get; init; } = Array.Empty<DatabaseStatusTableViewModel>();
     public DatabaseStatusRuntimeBufferViewModel RuntimeBuffer { get; init; } = new();
+    public DatabasePruneForm PruneForm { get; init; } = new();
+    public DatabasePrunePreviewViewModel? PrunePreview { get; init; }
+    public string? PruneStatusMessage { get; init; }
+    public DatabaseBackupForm BackupForm { get; init; } = new();
+    public string? BackupStatusMessage { get; init; }
+    public IReadOnlyList<DatabaseBackupRowViewModel> Backups { get; init; } = [];
 }
 
 public sealed class DatabaseStatusTableViewModel
@@ -45,4 +54,36 @@ public sealed class DatabaseStatusRuntimeBufferViewModel
     public double BufferDropRatePercent { get; init; }
     public double FlushSuccessRatePercent { get; init; }
     public string CacheHitRateNote { get; init; } = "No request/result cache hit-rate metric is currently instrumented.";
+}
+
+public sealed class DatabasePruneForm
+{
+    [Required]
+    public DatabasePruneTarget Target { get; set; } = DatabasePruneTarget.CheckResults;
+
+    [Range(1, 3650)]
+    public int AgeDays { get; set; } = 30;
+
+    public string ConfirmationText { get; set; } = string.Empty;
+}
+
+public sealed class DatabasePrunePreviewViewModel
+{
+    public DatabasePruneTarget Target { get; init; }
+    public int AgeDays { get; init; }
+    public DateTimeOffset CutoffUtc { get; init; }
+    public long EligibleRowCount { get; init; }
+}
+
+public sealed class DatabaseBackupForm
+{
+    public bool ConfirmBackup { get; set; }
+}
+
+public sealed class DatabaseBackupRowViewModel
+{
+    public string FileName { get; init; } = string.Empty;
+    public string FileId { get; init; } = string.Empty;
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public long SizeBytes { get; init; }
 }
