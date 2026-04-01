@@ -23,6 +23,7 @@
     </style>
 </head>
 <body>
+@await Html.PartialAsync("_MainNavigation")
 <main>
     <form method="post" asp-controller="Groups" asp-action="Edit" asp-route-id="@Model.GroupId" class="stack">
         @Html.AntiForgeryToken()

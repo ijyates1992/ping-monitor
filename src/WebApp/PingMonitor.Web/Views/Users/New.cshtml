@@ -4,6 +4,7 @@
     @await Html.PartialAsync("_ThemeHead")
     <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>@ViewData["Title"]</title></head>
 <body>
+@await Html.PartialAsync("_MainNavigation")
 <main style="font-family:Arial;max-width:980px;margin:1rem auto;">
 <h1>Create user</h1>
 @Html.ValidationSummary(false)
