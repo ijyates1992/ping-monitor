@@ -22,4 +22,25 @@ public sealed class StatusController : Controller
         var viewModel = await _endpointStatusQueryService.GetStatusPageAsync(state, agent, groupId, search, cancellationToken);
         return View("Index", viewModel);
     }
+
+    [HttpGet("refresh/recent-events")]
+    public async Task<IActionResult> RefreshRecentEvents([FromQuery] string? state, [FromQuery] string? agent, [FromQuery] string? groupId, [FromQuery] string? search, CancellationToken cancellationToken)
+    {
+        var viewModel = await _endpointStatusQueryService.GetStatusPageAsync(state, agent, groupId, search, cancellationToken);
+        return PartialView("_RecentEventsSection", viewModel);
+    }
+
+    [HttpGet("refresh/summary")]
+    public async Task<IActionResult> RefreshSummary([FromQuery] string? state, [FromQuery] string? agent, [FromQuery] string? groupId, [FromQuery] string? search, CancellationToken cancellationToken)
+    {
+        var viewModel = await _endpointStatusQueryService.GetStatusPageAsync(state, agent, groupId, search, cancellationToken);
+        return PartialView("_SummarySection", viewModel);
+    }
+
+    [HttpGet("refresh/assignments")]
+    public async Task<IActionResult> RefreshAssignments([FromQuery] string? state, [FromQuery] string? agent, [FromQuery] string? groupId, [FromQuery] string? search, CancellationToken cancellationToken)
+    {
+        var viewModel = await _endpointStatusQueryService.GetStatusPageAsync(state, agent, groupId, search, cancellationToken);
+        return PartialView("_AssignmentsSection", viewModel);
+    }
 }

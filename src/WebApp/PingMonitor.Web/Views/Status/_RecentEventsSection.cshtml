@@ -1,0 +1,99 @@
+@model PingMonitor.Web.ViewModels.Status.EndpointStatusPageViewModel
+@using PingMonitor.Web.Models
+@{
+    static string EventRowClass(PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind rowKind) => rowKind switch
+    {
+        PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointDown => "event-row event-row-down",
+        PingMonitor.Web.ViewModels.EventLogs.RecentEventRowKind.EndpointRecovery => "event-row event-row-recovery",
+        _ => "event-row"
+    };
+    static string? GetRecentEventDestination(PingMonitor.Web.ViewModels.EventLogs.RecentEventViewModel recentEvent)
+    {
+        var hasEndpoint = !string.IsNullOrWhiteSpace(recentEvent.EndpointId);
+        var hasAgent = !string.IsNullOrWhiteSpace(recentEvent.AgentId);
+
+        if (!hasEndpoint && !hasAgent)
+        {
+            return null;
+        }
+
+        var isEndpointCategory = string.Equals(recentEvent.Category, EventCategory.Endpoint.ToString(), StringComparison.Ordinal);
+        var isAgentCategory = string.Equals(recentEvent.Category, EventCategory.Agent.ToString(), StringComparison.Ordinal);
+
+        if (hasEndpoint && hasAgent)
+        {
+            if (isEndpointCategory)
+            {
+                return $"/endpoints/{recentEvent.EndpointId}/history";
+            }
+
+            if (isAgentCategory)
+            {
+                return $"/agents/{recentEvent.AgentId}/history";
+            }
+
+            return $"/endpoints/{recentEvent.EndpointId}/history";
+        }
+
+        if (hasEndpoint)
+        {
+            return $"/endpoints/{recentEvent.EndpointId}/history";
+        }
+
+        return $"/agents/{recentEvent.AgentId}/history";
+    }
+}
+<section class="card" id="recent-events-section" data-refresh-section="recent-events">
+    <h2>Recent events</h2>
+    @if (Model.RecentEvents.Count == 0)
+    {
+        <p class="muted">No events recorded yet.</p>
+    }
+    else
+    {
+        <div class="recent-events">
+            @foreach (var recentEvent in Model.RecentEvents)
+            {
+                var destination = GetRecentEventDestination(recentEvent);
+                var rowClassName = destination is null
+                    ? EventRowClass(recentEvent.RowKind)
+                    : $"{EventRowClass(recentEvent.RowKind)} event-row-clickable";
+
+                if (destination is null)
+                {
+                    <div class="@rowClassName">
+                        <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
+                        <div>@recentEvent.Message</div>
+                        <div class="muted">
+                            @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
+                            {
+                                <span>Endpoint: @(string.IsNullOrWhiteSpace(recentEvent.EndpointName) ? recentEvent.EndpointId : recentEvent.EndpointName)</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(recentEvent.AgentId))
+                            {
+                                <span> · Agent: @(string.IsNullOrWhiteSpace(recentEvent.AgentName) ? recentEvent.AgentId : recentEvent.AgentName)</span>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <a class="@rowClassName" href="@destination" aria-label="Open details for @recentEvent.EventType event at @recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")">
+                        <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
+                        <div>@recentEvent.Message</div>
+                        <div class="muted">
+                            @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
+                            {
+                                <span>Endpoint: @(string.IsNullOrWhiteSpace(recentEvent.EndpointName) ? recentEvent.EndpointId : recentEvent.EndpointName)</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(recentEvent.AgentId))
+                            {
+                                <span> · Agent: @(string.IsNullOrWhiteSpace(recentEvent.AgentName) ? recentEvent.AgentId : recentEvent.AgentName)</span>
+                            }
+                        </div>
+                    </a>
+                }
+            }
+        </div>
+    }
+</section>

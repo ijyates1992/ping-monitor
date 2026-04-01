@@ -1,0 +1,75 @@
+@model PingMonitor.Web.ViewModels.Endpoints.ManageEndpointsPageViewModel
+@using PingMonitor.Web.Models
+@using PingMonitor.Web.Services.Endpoints
+@{
+    static string StateClass(EndpointStateKind state) => state switch
+    {
+        EndpointStateKind.Up => "state-up",
+        EndpointStateKind.Down => "state-down",
+        EndpointStateKind.Suppressed => "state-suppressed",
+        EndpointStateKind.Degraded => "state-degraded",
+        _ => "state-unknown"
+    };
+    static string FormatRtt(double? value) => value.HasValue ? $"{value.Value:F1} ms" : "No data";
+}
+<section class="card" id="manage-assignments-section" data-refresh-section="manage-assignments">
+    <h2>Assignments</h2>
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice" role="status">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="error" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="muted">No endpoint assignments are available.</p>
+    }
+    else
+    {
+        <div class="row-list">
+            @foreach (var row in Model.Rows)
+            {
+                <article class="row">
+                    <div class="row-header">
+                        <div>
+                            <div><strong>@EndpointIconCatalog.GetSymbol(row.IconKey) @row.EndpointName</strong></div>
+                            <div class="muted">@row.Target</div>
+                        </div>
+                        <div class="badge @StateClass(row.CurrentState)">@row.CurrentState</div>
+                    </div>
+                    <div class="row-meta">
+                        <div class="meta-item"><span>Assignment ID</span><div>@row.AssignmentId</div></div>
+                        <div class="meta-item"><span>Agent / instance</span><div>@row.AgentDisplay</div></div>
+                        <div class="meta-item"><span>Groups</span><div>@(row.GroupNames.Count == 0 ? "None" : string.Join(", ", row.GroupNames))</div></div>
+                        <div class="meta-item"><span>Dependency parents</span><div>@(row.DependencyEndpointNames.Count == 0 ? "None" : string.Join(", ", row.DependencyEndpointNames))</div></div>
+                        <div class="meta-item"><span>Endpoint enabled</span><div>@(row.EndpointEnabled ? "Enabled" : "Disabled")</div></div>
+                        <div class="meta-item"><span>Assignment enabled</span><div>@(row.AssignmentEnabled ? "Enabled" : "Disabled")</div></div>
+                        <div class="meta-item"><span>Ping interval</span><div>@row.PingIntervalSeconds s</div></div>
+                        <div class="meta-item"><span>Retry interval</span><div>@row.RetryIntervalSeconds s</div></div>
+                        <div class="meta-item"><span>Timeout</span><div>@row.TimeoutMs ms</div></div>
+                        <div class="meta-item"><span>Last RTT (24h)</span><div>@FormatRtt(row.LastRttMs)</div></div>
+                        <div class="meta-item"><span>Average RTT (24h)</span><div>@FormatRtt(row.AverageRttMs)</div></div>
+                        <div class="meta-item"><span>High RTT (24h)</span><div>@FormatRtt(row.HighestRttMs)</div></div>
+                        <div class="meta-item"><span>Low RTT (24h)</span><div>@FormatRtt(row.LowestRttMs)</div></div>
+                        <div class="meta-item"><span>Jitter (24h)</span><div>@FormatRtt(row.JitterMs)</div></div>
+                        <div class="meta-item"><span>Failure threshold</span><div>@row.FailureThreshold</div></div>
+                        <div class="meta-item"><span>Recovery threshold</span><div>@row.RecoveryThreshold</div></div>
+                    </div>
+                    <div class="button-row" style="margin-top:.85rem;">
+                        <a class="button-secondary" href="/endpoints/@row.AssignmentId/performance">View performance</a>
+                        <a class="button-secondary" href="/endpoints/@row.EndpointId/history">View history</a>
+                        @if (User.IsInRole("Admin"))
+                        {
+                            <a class="button-secondary" href="/endpoints/@row.AssignmentId/edit">Edit assignment</a>
+                            <a class="button-secondary" href="/endpoints/@row.AssignmentId/remove">Remove endpoint</a>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
