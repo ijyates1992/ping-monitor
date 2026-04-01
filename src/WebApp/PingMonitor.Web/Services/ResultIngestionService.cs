@@ -2,8 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Contracts.Results;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Options;
+using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Support;
+using Microsoft.Extensions.Options;
 
 namespace PingMonitor.Web.Services;
 
@@ -11,18 +14,24 @@ internal sealed class ResultIngestionService : IResultIngestionService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly IStateEvaluationService _stateEvaluationService;
+    private readonly IBufferedResultIngestionService _bufferedResultIngestionService;
     private readonly IEventLogService _eventLogService;
     private readonly ILogger<ResultIngestionService> _logger;
+    private readonly ResultBufferOptions _resultBufferOptions;
 
     public ResultIngestionService(
         PingMonitorDbContext dbContext,
         IStateEvaluationService stateEvaluationService,
+        IBufferedResultIngestionService bufferedResultIngestionService,
         IEventLogService eventLogService,
+        IOptions<ResultBufferOptions> resultBufferOptions,
         ILogger<ResultIngestionService> logger)
     {
         _dbContext = dbContext;
         _stateEvaluationService = stateEvaluationService;
+        _bufferedResultIngestionService = bufferedResultIngestionService;
         _eventLogService = eventLogService;
+        _resultBufferOptions = resultBufferOptions.Value;
         _logger = logger;
     }
 
@@ -130,7 +139,6 @@ internal sealed class ResultIngestionService : IResultIngestionService
                 AcceptedCount = storedResults.Length
             };
 
-            _dbContext.CheckResults.AddRange(storedResults);
             _dbContext.ResultBatches.Add(batch);
 
             var wasOnline = agent.Status == AgentHealthStatus.Online;
@@ -139,6 +147,33 @@ internal sealed class ResultIngestionService : IResultIngestionService
 
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            var bufferedResults = storedResults.Select(x => new BufferedCheckResult
+            {
+                CheckResultId = x.CheckResultId,
+                AssignmentId = x.AssignmentId,
+                AgentId = x.AgentId,
+                EndpointId = x.EndpointId,
+                CheckedAtUtc = x.CheckedAtUtc,
+                Success = x.Success,
+                RoundTripMs = x.RoundTripMs,
+                ErrorCode = x.ErrorCode,
+                ErrorMessage = x.ErrorMessage,
+                ReceivedAtUtc = x.ReceivedAtUtc,
+                BatchId = x.BatchId
+            }).ToArray();
+
+            // Buffering boundary: only raw agent-ingested CheckResults use in-memory buffering.
+            // Critical writes (event logs, auth/security/admin/config changes) remain direct DB writes.
+            if (_resultBufferOptions.ResultBufferEnabled)
+            {
+                _bufferedResultIngestionService.Enqueue(bufferedResults);
+            }
+            else
+            {
+                _dbContext.CheckResults.AddRange(storedResults);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
 
             if (!wasOnline)
             {
@@ -153,23 +188,26 @@ internal sealed class ResultIngestionService : IResultIngestionService
                 }, cancellationToken);
             }
 
-            var affectedAssignmentIds = storedResults
-                .Select(x => x.AssignmentId)
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
+            if (!_resultBufferOptions.ResultBufferEnabled)
+            {
+                var affectedAssignmentIds = storedResults
+                    .Select(x => x.AssignmentId)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
 
-            try
-            {
-                await _stateEvaluationService.EvaluateAssignmentsAsync(affectedAssignmentIds, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Result ingestion persisted batch {BatchId} for agent {AgentId}, but state evaluation failed for assignments: {AssignmentIds}.",
-                    normalizedBatchId,
-                    agent.AgentId,
-                    affectedAssignmentIds);
+                try
+                {
+                    await _stateEvaluationService.EvaluateAssignmentsAsync(affectedAssignmentIds, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Result ingestion persisted batch {BatchId} for agent {AgentId}, but state evaluation failed for assignments: {AssignmentIds}.",
+                        normalizedBatchId,
+                        agent.AgentId,
+                        affectedAssignmentIds);
+                }
             }
 
             return new SubmitResultsResponse(true, storedResults.Length, false, serverTimeUtc);

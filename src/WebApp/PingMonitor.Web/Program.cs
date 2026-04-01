@@ -11,6 +11,7 @@ using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Agents;
 using PingMonitor.Web.Services.Backups;
+using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Groups;
 using PingMonitor.Web.Services.Identity;
@@ -37,6 +38,7 @@ builder.Services.Configure<DevelopmentSeedAgentOptions>(builder.Configuration.Ge
 builder.Services.Configure<StartupGateOptions>(builder.Configuration.GetSection(StartupGateOptions.SectionName));
 builder.Services.Configure<AgentProvisioningOptions>(builder.Configuration.GetSection(AgentProvisioningOptions.SectionName));
 builder.Services.Configure<BackupOptions>(builder.Configuration.GetSection(BackupOptions.SectionName));
+builder.Services.Configure<ResultBufferOptions>(builder.Configuration.GetSection(ResultBufferOptions.SectionName));
 
 builder.Services.AddSingleton<IDbContextFactory<PingMonitorDbContext>, DynamicPingMonitorDbContextFactory>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<PingMonitorDbContext>>().CreateDbContext());
@@ -113,6 +115,7 @@ builder.Services.AddScoped<IAgentAuthenticationService, AgentAuthenticationServi
 builder.Services.AddScoped<IAgentHelloService, AgentHelloService>();
 builder.Services.AddScoped<IAgentConfigurationService, AgentConfigurationService>();
 builder.Services.AddScoped<IResultIngestionService, ResultIngestionService>();
+builder.Services.AddSingleton<IBufferedResultIngestionService, BufferedResultIngestionService>();
 builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
 builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();
 builder.Services.AddScoped<IEventLogService, EventLogService>();
@@ -169,6 +172,7 @@ builder.Services.AddSingleton<ConfigurationAutoBackupBackgroundService>();
 builder.Services.AddSingleton<IConfigurationChangeBackupSignal>(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 builder.Services.AddHostedService<AgentStatusTransitionBackgroundService>();
+builder.Services.AddHostedService<BufferedResultFlushBackgroundService>();
 builder.Services.AddHostedService<TelegramPollingBackgroundService>();
 
 var app = builder.Build();
