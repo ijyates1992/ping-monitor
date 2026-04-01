@@ -208,19 +208,6 @@
                     @await Html.PartialAsync("_ThemeSelector")
                 </div>
             </div>
-            <div class="button-row">
-                <a class="button-secondary" href="/endpoints">Endpoints</a>
-                <a class="button-secondary" href="/profile">My profile</a>
-                @if (User.IsInRole("Admin"))
-                {
-                    <a class="button" href="/agents">Manage agents</a>
-                    <a class="button-secondary" href="/agents/deploy">Deploy new agent</a>
-                    <a class="button-secondary" href="/groups">Manage groups</a>
-                    <a class="button-secondary" href="/endpoints/new">Add new endpoint</a>
-                    <a class="button-secondary" href="/admin">Admin settings</a>
-                    <a class="button-secondary" href="/users">Manage users</a>
-                }
-            </div>
         </section>
 
         <section class="card" id="recent-events">
