@@ -139,6 +139,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "UpdatedAtUtc"
     ];
 
+    private static readonly string[] RequiredAssignmentMetrics24hColumns =
+    [
+        "AssignmentId",
+        "WindowStartUtc",
+        "WindowEndUtc",
+        "UptimeSeconds",
+        "DowntimeSeconds",
+        "UnknownSeconds",
+        "SuppressedSeconds",
+        "LastRttMs",
+        "HighestRttMs",
+        "LowestRttMs",
+        "AverageRttMs",
+        "JitterMs",
+        "LastSuccessfulCheckUtc",
+        "UpdatedAtUtc"
+    ];
+
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
     private readonly StartupGateOptions _options;
@@ -227,6 +245,14 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"UserNotificationSettings table is missing required columns: {string.Join(", ", missingUserNotificationSettingsColumns)}.");
+            return status;
+        }
+
+        var missingAssignmentMetrics24hColumns = await GetMissingAssignmentMetrics24hColumnsAsync(connection, cancellationToken);
+        if (missingAssignmentMetrics24hColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AssignmentMetrics24h table is missing required columns: {string.Join(", ", missingAssignmentMetrics24hColumns)}.");
             return status;
         }
 
@@ -487,6 +513,10 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `UnknownSeconds` bigint NOT NULL,
                 `SuppressedSeconds` bigint NOT NULL,
                 `LastRttMs` int NULL,
+                `HighestRttMs` int NULL,
+                `LowestRttMs` int NULL,
+                `AverageRttMs` double NULL,
+                `JitterMs` double NULL,
                 `LastSuccessfulCheckUtc` datetime(6) NULL,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 PRIMARY KEY (`AssignmentId`)
@@ -621,6 +651,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
+        await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
@@ -774,6 +805,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
 
         return RequiredUserNotificationSettingsColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
+    }
+
+    private static async Task<string[]> GetMissingAssignmentMetrics24hColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'AssignmentMetrics24h';
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return RequiredAssignmentMetrics24hColumns
             .Where(column => !existingColumns.Contains(column))
             .ToArray();
     }
@@ -1367,6 +1420,55 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
     }
 
+    private static async Task EnsureAssignmentMetrics24hColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await HasAssignmentMetrics24hColumnAsync(connection, "HighestRttMs", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `AssignmentMetrics24h`
+                ADD COLUMN `HighestRttMs` int NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasAssignmentMetrics24hColumnAsync(connection, "LowestRttMs", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `AssignmentMetrics24h`
+                ADD COLUMN `LowestRttMs` int NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasAssignmentMetrics24hColumnAsync(connection, "AverageRttMs", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `AssignmentMetrics24h`
+                ADD COLUMN `AverageRttMs` double NULL;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasAssignmentMetrics24hColumnAsync(connection, "JitterMs", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `AssignmentMetrics24h`
+                ADD COLUMN `JitterMs` double NULL;
+                """,
+                cancellationToken);
+        }
+    }
+
     private static async Task<bool> HasEndpointColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -1375,6 +1477,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
               AND table_name = 'Endpoints'
+              AND column_name = @columnName;
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+    private static async Task<bool> HasAssignmentMetrics24hColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'AssignmentMetrics24h'
               AND column_name = @columnName;
             """;
         var parameter = command.CreateParameter();

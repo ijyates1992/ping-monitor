@@ -10,14 +10,14 @@ namespace PingMonitor.Web.Services.Endpoints;
 internal sealed class EndpointManagementQueryService : IEndpointManagementQueryService
 {
     private readonly PingMonitorDbContext _dbContext;
-    private readonly IEndpointMetricsService _endpointMetricsService;
+    private readonly IAssignmentMetrics24hService _assignmentMetrics24hService;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
-    public EndpointManagementQueryService(PingMonitorDbContext dbContext, IEndpointMetricsService endpointMetricsService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService)
+    public EndpointManagementQueryService(PingMonitorDbContext dbContext, IAssignmentMetrics24hService assignmentMetrics24hService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService)
     {
         _dbContext = dbContext;
-        _endpointMetricsService = endpointMetricsService;
+        _assignmentMetrics24hService = assignmentMetrics24hService;
         _httpContextAccessor = httpContextAccessor;
         _userAccessScopeService = userAccessScopeService;
     }
@@ -90,21 +90,36 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).ToArray(),
                 StringComparer.Ordinal);
 
-        var metricsByAssignmentId = await _endpointMetricsService.GetEndpointMetricSummariesAsync(
-            rows.Select(x => x.AssignmentId).ToArray(),
+        var assignmentIds = rows.Select(x => x.AssignmentId).ToArray();
+        var metricsByAssignmentId = await _assignmentMetrics24hService.GetSummariesAsync(
+            assignmentIds,
             cancellationToken);
+
+        var missingSummaryAssignmentIds = assignmentIds
+            .Where(assignmentId => !metricsByAssignmentId.ContainsKey(assignmentId))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (missingSummaryAssignmentIds.Length > 0)
+        {
+            await _assignmentMetrics24hService.RefreshAssignmentsAsync(missingSummaryAssignmentIds, cancellationToken);
+            metricsByAssignmentId = await _assignmentMetrics24hService.GetSummariesAsync(assignmentIds, cancellationToken);
+        }
 
         return new ManageEndpointsPageViewModel
         {
             GroupId = normalizedGroupId,
             AvailableGroups = groups.Select(x => new EndpointGroupOptionViewModel { GroupId = x.GroupId, Name = x.Name }).ToArray(),
-            Rows = rows.Select(row => new ManageEndpointRowViewModel
+            Rows = rows.Select(row =>
             {
-                LastRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.LastRttMs,
-                AverageRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.AverageRttMs,
-                HighestRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.HighestRttMs,
-                LowestRttMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.LowestRttMs,
-                JitterMs = metricsByAssignmentId.GetValueOrDefault(row.AssignmentId)?.JitterMs,
+                metricsByAssignmentId.TryGetValue(row.AssignmentId, out var metrics);
+                return new ManageEndpointRowViewModel
+                {
+                    LastRttMs = metrics?.LastRttMs,
+                    AverageRttMs = metrics?.AverageRttMs,
+                    HighestRttMs = metrics?.HighestRttMs,
+                    LowestRttMs = metrics?.LowestRttMs,
+                    JitterMs = metrics?.JitterMs,
                 AssignmentId = row.AssignmentId,
                 EndpointId = row.EndpointId,
                 EndpointName = row.EndpointName,
@@ -127,6 +142,7 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 FailureThreshold = row.FailureThreshold,
                 RecoveryThreshold = row.RecoveryThreshold,
                 CurrentState = row.CurrentState
+                };
             }).ToArray()
         };
     }

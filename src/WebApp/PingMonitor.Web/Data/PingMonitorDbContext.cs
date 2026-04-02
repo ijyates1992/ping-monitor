@@ -221,6 +221,10 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         assignmentMetrics24h.Property(x => x.UnknownSeconds).IsRequired();
         assignmentMetrics24h.Property(x => x.SuppressedSeconds).IsRequired();
         assignmentMetrics24h.Property(x => x.LastRttMs);
+        assignmentMetrics24h.Property(x => x.HighestRttMs);
+        assignmentMetrics24h.Property(x => x.LowestRttMs);
+        assignmentMetrics24h.Property(x => x.AverageRttMs);
+        assignmentMetrics24h.Property(x => x.JitterMs);
         assignmentMetrics24h.Property(x => x.LastSuccessfulCheckUtc);
         assignmentMetrics24h.Property(x => x.UpdatedAtUtc).IsRequired();
         assignmentMetrics24h.HasIndex(x => x.AssignmentId).IsUnique();

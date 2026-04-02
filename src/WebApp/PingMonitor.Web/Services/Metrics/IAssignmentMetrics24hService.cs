@@ -23,6 +23,10 @@ public sealed class AssignmentMetrics24hSummary
     public long SuppressedSeconds { get; init; }
     public double? UptimePercent { get; init; }
     public int? LastRttMs { get; init; }
+    public int? HighestRttMs { get; init; }
+    public int? LowestRttMs { get; init; }
+    public double? AverageRttMs { get; init; }
+    public double? JitterMs { get; init; }
     public DateTimeOffset? LastSuccessfulCheckUtc { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
 }
