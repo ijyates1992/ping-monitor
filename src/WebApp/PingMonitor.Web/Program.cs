@@ -193,7 +193,6 @@ builder.Services.AddScoped<IEndpointPerformanceQueryService, EndpointPerformance
 builder.Services.AddScoped<IGroupManagementService, GroupManagementService>();
 builder.Services.AddScoped<IAgentManagementQueryService, AgentManagementQueryService>();
 builder.Services.AddScoped<IAssignmentMetrics24hService, AssignmentMetrics24hService>();
-builder.Services.AddScoped<IEndpointMetricsService, EndpointMetricsService>();
 builder.Services.AddScoped<IAgentMetricsService, AgentMetricsService>();
 builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();

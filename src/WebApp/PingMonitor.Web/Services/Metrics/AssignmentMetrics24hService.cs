@@ -10,6 +10,14 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
     private static readonly TimeSpan Window = TimeSpan.FromHours(24);
     private readonly PingMonitorDbContext _dbContext;
 
+    private sealed class RttSample
+    {
+        public required int RoundTripMs { get; init; }
+        public required DateTimeOffset CheckedAtUtc { get; init; }
+        public required DateTimeOffset ReceivedAtUtc { get; init; }
+        public required string CheckResultId { get; init; }
+    }
+
     public AssignmentMetrics24hService(PingMonitorDbContext dbContext)
     {
         _dbContext = dbContext;
@@ -41,6 +49,10 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
                     SuppressedSeconds = x.SuppressedSeconds,
                     UptimePercent = ComputeUptimePercent(x.UptimeSeconds, x.WindowStartUtc, x.WindowEndUtc),
                     LastRttMs = x.LastRttMs,
+                    HighestRttMs = x.HighestRttMs,
+                    LowestRttMs = x.LowestRttMs,
+                    AverageRttMs = x.AverageRttMs,
+                    JitterMs = x.JitterMs,
                     LastSuccessfulCheckUtc = x.LastSuccessfulCheckUtc,
                     UpdatedAtUtc = x.UpdatedAtUtc
                 },
@@ -95,7 +107,7 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             .Select(group => group.OrderByDescending(x => x.TransitionAtUtc).First())
             .ToListAsync(cancellationToken);
 
-        var latestSuccessfulChecks = await ApplyAssignmentFilter(
+        var successfulChecks = await ApplyAssignmentFilter(
                 _dbContext.CheckResults.AsNoTracking(),
                 x => x.AssignmentId,
                 normalizedAssignmentIds)
@@ -103,13 +115,14 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
                 && x.RoundTripMs.HasValue
                 && x.CheckedAtUtc >= windowStartUtc
                 && x.CheckedAtUtc <= nowUtc)
-            .GroupBy(x => x.AssignmentId)
-            .Select(group => group
-                .OrderByDescending(x => x.CheckedAtUtc)
-                .ThenByDescending(x => x.ReceivedAtUtc)
-                .ThenByDescending(x => x.CheckResultId)
-                .Select(x => new { x.AssignmentId, x.RoundTripMs, x.CheckedAtUtc })
-                .First())
+            .Select(x => new
+            {
+                x.AssignmentId,
+                RoundTripMs = x.RoundTripMs!.Value,
+                x.CheckedAtUtc,
+                x.ReceivedAtUtc,
+                x.CheckResultId
+            })
             .ToListAsync(cancellationToken);
 
         var transitionsInWindowByAssignment = transitionsInWindow
@@ -119,10 +132,19 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
         var transitionsBeforeWindowLookup = transitionsBeforeWindow
             .ToDictionary(x => x.AssignmentId, x => x, StringComparer.Ordinal);
 
-        var latestSuccessfulCheckLookup = latestSuccessfulChecks
+        var successfulChecksByAssignment = successfulChecks
+            .GroupBy(x => x.AssignmentId, StringComparer.Ordinal)
             .ToDictionary(
-                x => x.AssignmentId,
-                x => new { LastRttMs = (int?)x.RoundTripMs, LastSuccessfulCheckUtc = (DateTimeOffset?)x.CheckedAtUtc },
+                group => group.Key,
+                group => (IReadOnlyList<RttSample>)group
+                    .Select(x => new RttSample
+                    {
+                        RoundTripMs = x.RoundTripMs,
+                        CheckedAtUtc = x.CheckedAtUtc,
+                        ReceivedAtUtc = x.ReceivedAtUtc,
+                        CheckResultId = x.CheckResultId
+                    })
+                    .ToArray(),
                 StringComparer.Ordinal);
 
         foreach (var assignmentId in normalizedAssignmentIds)
@@ -130,7 +152,7 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             endpointStates.TryGetValue(assignmentId, out var endpointState);
             transitionsInWindowByAssignment.TryGetValue(assignmentId, out var assignmentTransitions);
             transitionsBeforeWindowLookup.TryGetValue(assignmentId, out var transitionBeforeWindow);
-            latestSuccessfulCheckLookup.TryGetValue(assignmentId, out var latestSuccessfulCheck);
+            successfulChecksByAssignment.TryGetValue(assignmentId, out var successfulCheckSamples);
 
             var durations = CalculateStateDurations(
                 endpointState,
@@ -154,8 +176,14 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             row.DowntimeSeconds = durations.DowntimeSeconds;
             row.UnknownSeconds = durations.UnknownSeconds;
             row.SuppressedSeconds = durations.SuppressedSeconds;
-            row.LastRttMs = latestSuccessfulCheck?.LastRttMs;
-            row.LastSuccessfulCheckUtc = latestSuccessfulCheck?.LastSuccessfulCheckUtc;
+            var rttSummary = CalculateRttSummary(successfulCheckSamples ?? []);
+
+            row.LastRttMs = rttSummary.LastRttMs;
+            row.HighestRttMs = rttSummary.HighestRttMs;
+            row.LowestRttMs = rttSummary.LowestRttMs;
+            row.AverageRttMs = rttSummary.AverageRttMs;
+            row.JitterMs = rttSummary.JitterMs;
+            row.LastSuccessfulCheckUtc = rttSummary.LastSuccessfulCheckUtc;
             row.UpdatedAtUtc = nowUtc;
         }
 
@@ -241,6 +269,45 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
         return EndpointStateKind.Unknown;
     }
 
+
+    private static AssignmentRttSummary CalculateRttSummary(IReadOnlyList<RttSample> successfulRttSamples)
+    {
+        if (successfulRttSamples.Count == 0)
+        {
+            return AssignmentRttSummary.Empty;
+        }
+
+        var orderedSamples = successfulRttSamples
+            .OrderBy(x => x.CheckedAtUtc)
+            .ThenBy(x => x.ReceivedAtUtc)
+            .ThenBy(x => x.CheckResultId, StringComparer.Ordinal)
+            .ToArray();
+
+        var orderedRttValues = orderedSamples.Select(x => x.RoundTripMs).ToArray();
+
+        double? jitterMs = null;
+        if (orderedRttValues.Length >= 2)
+        {
+            var deltas = new double[orderedRttValues.Length - 1];
+            for (var index = 1; index < orderedRttValues.Length; index++)
+            {
+                deltas[index - 1] = Math.Abs(orderedRttValues[index] - orderedRttValues[index - 1]);
+            }
+
+            jitterMs = deltas.Average();
+        }
+
+        var lastSample = orderedSamples[^1];
+
+        return new AssignmentRttSummary(
+            LastRttMs: lastSample.RoundTripMs,
+            HighestRttMs: orderedRttValues.Max(),
+            LowestRttMs: orderedRttValues.Min(),
+            AverageRttMs: orderedRttValues.Average(),
+            JitterMs: jitterMs,
+            LastSuccessfulCheckUtc: lastSample.CheckedAtUtc);
+    }
+
     private static long ToWholeSeconds(TimeSpan duration)
     {
         if (duration <= TimeSpan.Zero)
@@ -306,5 +373,16 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
         long SuppressedSeconds)
     {
         public static AssignmentDurationSummary Empty => new(0, 0, 0, 0);
+    }
+
+    private readonly record struct AssignmentRttSummary(
+        int? LastRttMs,
+        int? HighestRttMs,
+        int? LowestRttMs,
+        double? AverageRttMs,
+        double? JitterMs,
+        DateTimeOffset? LastSuccessfulCheckUtc)
+    {
+        public static AssignmentRttSummary Empty => new(null, null, null, null, null, null);
     }
 }
