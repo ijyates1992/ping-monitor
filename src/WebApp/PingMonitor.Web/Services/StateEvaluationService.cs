@@ -130,10 +130,11 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             ? parentContext.ParentEndpointId
             : null;
 
+        DateTimeOffset? transitionAtUtc = null;
         if (previousState != nextState)
         {
             state.LastStateChangeUtc = DateTimeOffset.UtcNow;
-            var transitionAtUtc = state.LastStateChangeUtc.Value;
+            transitionAtUtc = state.LastStateChangeUtc.Value;
             _dbContext.StateTransitions.Add(new StateTransition
             {
                 TransitionId = Guid.NewGuid().ToString(),
@@ -142,7 +143,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                 EndpointId = assignment.EndpointId,
                 PreviousState = previousState,
                 NewState = nextState,
-                TransitionAtUtc = transitionAtUtc,
+                TransitionAtUtc = transitionAtUtc.Value,
                 ReasonCode = reasonCode,
                 DependencyEndpointId = nextState == EndpointStateKind.Suppressed ? parentContext.ParentEndpointId : null
             });
@@ -179,7 +180,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                         endpoint.Name,
                         previousState,
                         nextState,
-                        transitionAtUtc,
+                        transitionAtUtc.Value,
                         cancellationToken),
                     DetailsJson = JsonSerializer.Serialize(new
                     {
@@ -196,7 +197,13 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _assignmentMetrics24hService.RefreshAssignmentAsync(assignment.AssignmentId, cancellationToken);
+        await _assignmentMetrics24hService.ApplyStateEvaluationAsync(
+            assignment.AssignmentId,
+            state.CurrentState,
+            transitionAtUtc,
+            state.LastStateChangeUtc ?? DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
 
         if (CrossedDownBoundary(previousState, nextState))
         {

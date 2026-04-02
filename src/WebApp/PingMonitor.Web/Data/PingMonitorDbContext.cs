@@ -30,6 +30,8 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<EndpointState> EndpointStates => Set<EndpointState>();
     public DbSet<StateTransition> StateTransitions => Set<StateTransition>();
     public DbSet<AssignmentMetrics24h> AssignmentMetrics24h => Set<AssignmentMetrics24h>();
+    public DbSet<AssignmentRttMinuteBucket> AssignmentRttMinuteBuckets => Set<AssignmentRttMinuteBucket>();
+    public DbSet<AssignmentStateInterval> AssignmentStateIntervals => Set<AssignmentStateInterval>();
     public DbSet<EventLog> EventLogs => Set<EventLog>();
     public DbSet<SecurityAuthLog> SecurityAuthLogs => Set<SecurityAuthLog>();
     public DbSet<AppSchemaInfo> AppSchemaInfos => Set<AppSchemaInfo>();
@@ -228,6 +230,35 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         assignmentMetrics24h.Property(x => x.LastSuccessfulCheckUtc);
         assignmentMetrics24h.Property(x => x.UpdatedAtUtc).IsRequired();
         assignmentMetrics24h.HasIndex(x => x.AssignmentId).IsUnique();
+
+        var assignmentRttMinuteBucket = modelBuilder.Entity<AssignmentRttMinuteBucket>();
+        assignmentRttMinuteBucket.ToTable("AssignmentRttMinuteBuckets");
+        assignmentRttMinuteBucket.HasKey(x => new { x.AssignmentId, x.BucketStartUtc });
+        assignmentRttMinuteBucket.Property(x => x.AssignmentId).HasMaxLength(64);
+        assignmentRttMinuteBucket.Property(x => x.BucketStartUtc).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.SampleCount).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.SumRttMs).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.MinRttMs).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.MaxRttMs).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.FirstRttMs).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.LastRttMs).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.FirstSampleUtc).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.LastSampleUtc).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.IntraBucketDeltaSumMs).IsRequired();
+        assignmentRttMinuteBucket.Property(x => x.UpdatedAtUtc).IsRequired();
+        assignmentRttMinuteBucket.HasIndex(x => new { x.AssignmentId, x.LastSampleUtc });
+
+        var assignmentStateInterval = modelBuilder.Entity<AssignmentStateInterval>();
+        assignmentStateInterval.ToTable("AssignmentStateIntervals");
+        assignmentStateInterval.HasKey(x => x.AssignmentStateIntervalId);
+        assignmentStateInterval.Property(x => x.AssignmentStateIntervalId).HasMaxLength(64);
+        assignmentStateInterval.Property(x => x.AssignmentId).HasMaxLength(64).IsRequired();
+        assignmentStateInterval.Property(x => x.State).HasConversion<string>().HasMaxLength(16).IsRequired();
+        assignmentStateInterval.Property(x => x.StartedAtUtc).IsRequired();
+        assignmentStateInterval.Property(x => x.EndedAtUtc);
+        assignmentStateInterval.Property(x => x.UpdatedAtUtc).IsRequired();
+        assignmentStateInterval.HasIndex(x => new { x.AssignmentId, x.StartedAtUtc });
+        assignmentStateInterval.HasIndex(x => new { x.AssignmentId, x.EndedAtUtc });
 
         var eventLog = modelBuilder.Entity<EventLog>();
         eventLog.ToTable("EventLogs");
