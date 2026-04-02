@@ -17,6 +17,10 @@ public sealed class DatabaseStatusPageViewModel
     public long TotalIndexBytes { get; init; }
     public IReadOnlyList<DatabaseStatusTableViewModel> Tables { get; init; } = Array.Empty<DatabaseStatusTableViewModel>();
     public DatabaseStatusRuntimeBufferViewModel RuntimeBuffer { get; init; } = new();
+}
+
+public sealed class DatabaseMaintenancePageViewModel
+{
     public DatabasePruneForm PruneForm { get; init; } = new();
     public DatabasePrunePreviewViewModel? PrunePreview { get; init; }
     public string? PruneStatusMessage { get; init; }

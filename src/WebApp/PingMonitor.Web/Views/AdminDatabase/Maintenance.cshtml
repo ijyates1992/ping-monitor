@@ -1,9 +1,6 @@
-@model PingMonitor.Web.ViewModels.Admin.DatabaseStatusPageViewModel
+@model PingMonitor.Web.ViewModels.Admin.DatabaseMaintenancePageViewModel
 @using PingMonitor.Web.Services.DatabaseStatus
 @using PingMonitor.Web.Support
-@{
-    var totalBytes = Model.TotalDataBytes + Model.TotalIndexBytes;
-}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,10 +16,6 @@
         .stack { display: grid; gap: 1rem; }
         .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
         .muted { color: var(--muted); }
-        .overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .75rem; }
-        .metric { border: 1px solid var(--border); border-radius: 10px; padding: .7rem; }
-        .metric .label { font-size: .85rem; color: var(--muted); }
-        .metric .value { font-size: 1.1rem; font-weight: 700; margin-top: .25rem; }
         .table-wrap { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 680px; }
         th, td { text-align: left; border-bottom: 1px solid var(--border); padding: .55rem; }
@@ -30,6 +23,7 @@
         input, select, button { min-height: 44px; padding: .55rem .65rem; font: inherit; }
         button { cursor: pointer; }
         .success { background: #ecfdf3; border: 1px solid #12b76a; color: #027a48; padding: .6rem; border-radius: 10px; }
+        .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .55rem .8rem; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); text-decoration: none; }
     </style>
 </head>
 <body>
@@ -38,7 +32,8 @@
     <div class="stack">
         <section class="card">
             <h1>DB maintenance</h1>
-            <p class="muted">Admin-only operator tools for database visibility, targeted history pruning, and MySQL backup exports. Pruning is destructive and irreversible.</p>
+            <p class="muted">Admin-only operator tools for targeted history pruning and MySQL backup exports. Pruning is destructive and irreversible.</p>
+            <a class="button-secondary" href="/admin/database/status">Go to DB status (read-only)</a>
         </section>
 
         @if (!string.IsNullOrWhiteSpace(Model.PruneStatusMessage))
@@ -49,20 +44,6 @@
         {
             <div class="success">@Model.BackupStatusMessage</div>
         }
-
-        <section class="card">
-            <h2>Database overview</h2>
-            <div class="overview-grid">
-                <div class="metric"><div class="label">Provider</div><div class="value">@Model.ProviderName</div></div>
-                <div class="metric"><div class="label">Database</div><div class="value">@Model.DatabaseName</div></div>
-                <div class="metric"><div class="label">Server / host</div><div class="value">@Model.DataSource</div></div>
-                <div class="metric"><div class="label">Server version</div><div class="value">@Model.ServerVersion</div></div>
-                <div class="metric"><div class="label">Connection health</div><div class="value">@(Model.ConnectionHealthy ? "Healthy" : "Unavailable")</div></div>
-                <div class="metric"><div class="label">Schema version</div><div class="value">@(Model.CurrentSchemaVersion?.ToString() ?? "n/a") / @Model.RequiredSchemaVersion required</div></div>
-                <div class="metric"><div class="label">Table count</div><div class="value">@Model.TableCount</div></div>
-                <div class="metric"><div class="label">Total DB size</div><div class="value">@DisplayFormatting.FormatBytes(totalBytes)</div></div>
-            </div>
-        </section>
 
         <section class="card">
             <h2>Pruning tools</h2>
@@ -118,24 +99,6 @@
                             <td>@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc)</td>
                             <td>@DisplayFormatting.FormatBytes(backup.SizeBytes)</td>
                             <td><a href="/admin/database/backup/download?fileId=@backup.FileId">Download</a></td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="card">
-            <h2>Table details</h2>
-            <p class="muted">Row counts are approximate and sourced from MySQL metadata.</p>
-            <div class="table-wrap">
-                <table>
-                    <thead><tr><th>Table</th><th>Approx rows</th><th>Data</th><th>Index</th><th>Total</th></tr></thead>
-                    <tbody>
-                    @foreach (var table in Model.Tables)
-                    {
-                        <tr>
-                            <td>@table.TableName</td><td>@table.ApproximateRowCount</td><td>@DisplayFormatting.FormatBytes(table.DataBytes)</td><td>@DisplayFormatting.FormatBytes(table.IndexBytes)</td><td>@DisplayFormatting.FormatBytes(table.TotalBytes)</td>
                         </tr>
                     }
                     </tbody>

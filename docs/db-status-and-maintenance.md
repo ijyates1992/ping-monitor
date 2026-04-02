@@ -2,74 +2,52 @@
 
 ## Purpose
 
-`/admin/database` is an admin-only operations page for:
+Database operations are intentionally split across two admin pages:
 
-- database status visibility
-- deliberate, targeted historical-data pruning
-- operator-triggered MySQL backup export
+- `/admin/database/status` = **DB status** (read-only visibility)
+- `/admin/database/maintenance` = **DB maintenance** (operator actions/tools)
 
-This page is intentionally operational (not a general DB admin console).
+`/admin/database` redirects to `/admin/database/maintenance` for compatibility.
 
-## DB status section
+## DB status (read-only)
 
-The page shows:
+The DB status page shows visibility only and does not include destructive actions.
 
-- provider/database/server metadata (without secrets)
-- schema version visibility
-- table inventory and MySQL metadata-backed size/row estimates
-- result-buffer runtime diagnostics
+Sections:
 
-## Pruning tools (phase 2 scope)
+- database overview (provider, database name, host, server version, connection health)
+- schema version visibility (`current / required`)
+- total DB size and table count
+- table details from MySQL `information_schema` (row count is labeled approximate)
+- DB/result-buffer runtime status
 
-Pruning is **destructive and irreversible**.
+DB/result-buffer runtime status includes:
 
-Supported prune targets in this phase:
+- result buffering enabled/disabled
+- configured max queue size
+- current queue depth
+- configured max batch size
+- configured flush interval
+- last flush completion time (UTC)
+- last flush persisted/attempted counts
+- dropped-result count
+- flush failure indicator/last flush error (if present)
 
-- `SecurityAuthLogs` older than cutoff
-- `EventLogs` older than cutoff
-- `CheckResults` older than cutoff
-- `StateTransitions` older than cutoff
+A cache hit-rate metric is **not** shown as a measured value because no cache hit-rate instrumentation currently exists.
 
-Not in scope for pruning here:
+## DB maintenance (actions/tools)
 
-- users, agents, endpoints, assignments, notification settings
-- startup-gate/configuration tables
-- backup files/catalog
-- active security enforcement records (`SecurityIpBlocks`, Identity lockout state)
+The DB maintenance page is action-oriented and keeps all existing maintenance tools:
 
-Prune workflow:
+- prune preview/count
+- prune execution (typed confirmation required)
+- DB backup creation (`mysqldump` logical export)
+- backup file listing/download
 
-1. operator selects target + age (days)
-2. server calculates UTC cutoff and preview eligible row count
-3. operator types `PRUNE`
-4. server validates confirmation and executes targeted delete
-5. result summary includes deleted row count
+DB maintenance intentionally does **not** include full database overview or table-inventory status sections.
 
-## DB backup tool (phase 2 scope)
+## Scope guardrail
 
-Backup action is **operator-triggered only**.
-
-Method in this phase:
-
-- MySQL logical SQL export using `mysqldump`
-- creates timestamped `.sql` files under server-side `App_Data/DbBackups` by default
-- backup path is not publicly served static content
-- `DatabaseMaintenance:MySqlDumpExecutablePath` can be set to a full executable path (recommended on Windows hosts where MySQL tools are not on `PATH`)
-
-The page lists created backup files (name, UTC time, size) and supports download.
-
-If required tooling is unavailable or backup fails, the page reports failure honestly with operator-usable diagnostics.
-
-## Auditability and limitations
-
-Maintenance actions are auditable via event logs:
-
-- prune preview requested
-- prune started/completed (including counts)
-- backup started/completed/failed
-
-Limitations in this phase:
-
-- no in-app DB restore workflow yet
-- no retention policy automation for DB backup files yet
-- no schema-edit/repair/rebuild actions
+Do not move maintenance actions onto DB status.
+Do not make DB status destructive.
+Do not remove existing maintenance capabilities when refining page structure.
