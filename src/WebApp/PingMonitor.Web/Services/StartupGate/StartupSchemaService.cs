@@ -29,6 +29,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "EndpointStates",
         "StateTransitions",
         "AssignmentMetrics24h",
+        "AssignmentRttMinuteBuckets",
+        "AssignmentStateIntervals",
         "EventLogs",
         "SecurityAuthLogs",
         "ApplicationSettings",
@@ -522,6 +524,37 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 PRIMARY KEY (`AssignmentId`)
             );
             """;
+        const string createAssignmentRttMinuteBucketsSql = """
+            CREATE TABLE IF NOT EXISTS `AssignmentRttMinuteBuckets` (
+                `AssignmentId` varchar(64) NOT NULL,
+                `BucketStartUtc` datetime(6) NOT NULL,
+                `SampleCount` int NOT NULL,
+                `SumRttMs` bigint NOT NULL,
+                `MinRttMs` int NOT NULL,
+                `MaxRttMs` int NOT NULL,
+                `FirstRttMs` int NOT NULL,
+                `LastRttMs` int NOT NULL,
+                `FirstSampleUtc` datetime(6) NOT NULL,
+                `LastSampleUtc` datetime(6) NOT NULL,
+                `IntraBucketDeltaSumMs` double NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AssignmentId`, `BucketStartUtc`),
+                KEY `IX_AssignmentRttMinuteBuckets_AssignmentId_LastSampleUtc` (`AssignmentId`, `LastSampleUtc`)
+            );
+            """;
+        const string createAssignmentStateIntervalsSql = """
+            CREATE TABLE IF NOT EXISTS `AssignmentStateIntervals` (
+                `AssignmentStateIntervalId` varchar(64) NOT NULL,
+                `AssignmentId` varchar(64) NOT NULL,
+                `State` varchar(16) NOT NULL,
+                `StartedAtUtc` datetime(6) NOT NULL,
+                `EndedAtUtc` datetime(6) NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AssignmentStateIntervalId`),
+                KEY `IX_AssignmentStateIntervals_AssignmentId_StartedAtUtc` (`AssignmentId`, `StartedAtUtc`),
+                KEY `IX_AssignmentStateIntervals_AssignmentId_EndedAtUtc` (`AssignmentId`, `EndedAtUtc`)
+            );
+            """;
 
         const string createEventLogsSql = """
             CREATE TABLE IF NOT EXISTS `EventLogs` (
@@ -631,6 +664,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAssignmentMetrics24hSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAssignmentRttMinuteBucketsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAssignmentStateIntervalsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEventLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityAuthLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);

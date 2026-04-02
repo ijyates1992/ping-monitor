@@ -8,6 +8,7 @@ namespace PingMonitor.Web.Services.Metrics;
 internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
 {
     private static readonly TimeSpan Window = TimeSpan.FromHours(24);
+    private static readonly TimeSpan PruneRetention = TimeSpan.FromHours(48);
     private readonly PingMonitorDbContext _dbContext;
 
     private sealed class RttSample
@@ -33,7 +34,7 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             return new Dictionary<string, AssignmentMetrics24hSummary>(StringComparer.Ordinal);
         }
 
-        var summaries = await ApplyAssignmentFilter(
+        return await ApplyAssignmentFilter(
                 _dbContext.AssignmentMetrics24h.AsNoTracking(),
                 x => x.AssignmentId,
                 normalizedAssignmentIds)
@@ -57,8 +58,140 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
                     UpdatedAtUtc = x.UpdatedAtUtc
                 },
                 cancellationToken);
+    }
 
-        return summaries;
+    public async Task ApplyCheckResultsBatchAsync(IReadOnlyCollection<CheckResult> checkResults, CancellationToken cancellationToken)
+    {
+        var successfulResults = checkResults
+            .Where(x => x.Success && x.RoundTripMs.HasValue)
+            .Select(x => new
+            {
+                x.AssignmentId,
+                MinuteStartUtc = TruncateToMinute(x.CheckedAtUtc)
+            })
+            .Distinct()
+            .ToArray();
+
+        if (successfulResults.Length == 0)
+        {
+            return;
+        }
+
+        foreach (var assignmentMinute in successfulResults)
+        {
+            await RebuildRttBucketAsync(assignmentMinute.AssignmentId, assignmentMinute.MinuteStartUtc, cancellationToken);
+        }
+
+        var assignmentIds = successfulResults
+            .Select(x => x.AssignmentId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        await PruneSupportDataAsync(assignmentIds, DateTimeOffset.UtcNow, cancellationToken);
+        await RecomputeSummariesFromSupportAsync(assignmentIds, DateTimeOffset.UtcNow, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ApplyStateEvaluationAsync(
+        string assignmentId,
+        EndpointStateKind previousState,
+        EndpointStateKind currentState,
+        DateTimeOffset? transitionAtUtc,
+        DateTimeOffset stateChangedAtUtc,
+        DateTimeOffset evaluatedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var activeInterval = await _dbContext.AssignmentStateIntervals
+            .Where(x => x.AssignmentId == assignmentId && x.EndedAtUtc == null)
+            .OrderByDescending(x => x.StartedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (transitionAtUtc.HasValue)
+        {
+            if (activeInterval is not null)
+            {
+                if (activeInterval.StartedAtUtc < transitionAtUtc.Value)
+                {
+                    activeInterval.EndedAtUtc = transitionAtUtc.Value;
+                }
+                else
+                {
+                    activeInterval.EndedAtUtc = activeInterval.StartedAtUtc;
+                }
+
+                activeInterval.UpdatedAtUtc = evaluatedAtUtc;
+            }
+            else
+            {
+                var previousStateStartedAtUtc = stateChangedAtUtc > DateTimeOffset.MinValue
+                    ? stateChangedAtUtc
+                    : transitionAtUtc.Value;
+
+                _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
+                {
+                    AssignmentStateIntervalId = Guid.NewGuid().ToString(),
+                    AssignmentId = assignmentId,
+                    State = previousState,
+                    StartedAtUtc = previousStateStartedAtUtc <= transitionAtUtc.Value
+                        ? previousStateStartedAtUtc
+                        : transitionAtUtc.Value,
+                    EndedAtUtc = transitionAtUtc.Value,
+                    UpdatedAtUtc = evaluatedAtUtc
+                });
+            }
+
+            _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
+            {
+                AssignmentStateIntervalId = Guid.NewGuid().ToString(),
+                AssignmentId = assignmentId,
+                State = currentState,
+                StartedAtUtc = transitionAtUtc.Value,
+                EndedAtUtc = null,
+                UpdatedAtUtc = evaluatedAtUtc
+            });
+        }
+        else
+        {
+            var targetStartUtc = stateChangedAtUtc > DateTimeOffset.MinValue
+                ? stateChangedAtUtc
+                : evaluatedAtUtc;
+
+            if (activeInterval is null)
+            {
+                _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
+                {
+                    AssignmentStateIntervalId = Guid.NewGuid().ToString(),
+                    AssignmentId = assignmentId,
+                    State = currentState,
+                    StartedAtUtc = targetStartUtc,
+                    EndedAtUtc = null,
+                    UpdatedAtUtc = evaluatedAtUtc
+                });
+            }
+            else if (activeInterval.State != currentState)
+            {
+                activeInterval.EndedAtUtc = evaluatedAtUtc;
+                activeInterval.UpdatedAtUtc = evaluatedAtUtc;
+
+                _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
+                {
+                    AssignmentStateIntervalId = Guid.NewGuid().ToString(),
+                    AssignmentId = assignmentId,
+                    State = currentState,
+                    StartedAtUtc = targetStartUtc <= evaluatedAtUtc ? targetStartUtc : evaluatedAtUtc,
+                    EndedAtUtc = null,
+                    UpdatedAtUtc = evaluatedAtUtc
+                });
+            }
+            else
+            {
+                activeInterval.UpdatedAtUtc = evaluatedAtUtc;
+            }
+        }
+
+        await PruneSupportDataAsync([assignmentId], evaluatedAtUtc, cancellationToken);
+        await RecomputeSummariesFromSupportAsync([assignmentId], evaluatedAtUtc, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task RefreshAssignmentAsync(string assignmentId, CancellationToken cancellationToken)
@@ -75,118 +208,13 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
         }
 
         var nowUtc = DateTimeOffset.UtcNow;
-        var windowStartUtc = nowUtc - Window;
-
-        var existingRows = await ApplyAssignmentFilter(
-                _dbContext.AssignmentMetrics24h,
-                x => x.AssignmentId,
-                normalizedAssignmentIds)
-            .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
-
-        var endpointStates = await ApplyAssignmentFilter(
-                _dbContext.EndpointStates.AsNoTracking(),
-                x => x.AssignmentId,
-                normalizedAssignmentIds)
-            .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
-
-        var transitionsInWindow = await ApplyAssignmentFilter(
-                _dbContext.StateTransitions.AsNoTracking(),
-                x => x.AssignmentId,
-                normalizedAssignmentIds)
-            .Where(x => x.TransitionAtUtc >= windowStartUtc
-                && x.TransitionAtUtc <= nowUtc)
-            .OrderBy(x => x.TransitionAtUtc)
-            .ToListAsync(cancellationToken);
-
-        var transitionsBeforeWindow = await ApplyAssignmentFilter(
-                _dbContext.StateTransitions.AsNoTracking(),
-                x => x.AssignmentId,
-                normalizedAssignmentIds)
-            .Where(x => x.TransitionAtUtc < windowStartUtc)
-            .GroupBy(x => x.AssignmentId)
-            .Select(group => group.OrderByDescending(x => x.TransitionAtUtc).First())
-            .ToListAsync(cancellationToken);
-
-        var successfulChecks = await ApplyAssignmentFilter(
-                _dbContext.CheckResults.AsNoTracking(),
-                x => x.AssignmentId,
-                normalizedAssignmentIds)
-            .Where(x => x.Success
-                && x.RoundTripMs.HasValue
-                && x.CheckedAtUtc >= windowStartUtc
-                && x.CheckedAtUtc <= nowUtc)
-            .Select(x => new
-            {
-                x.AssignmentId,
-                RoundTripMs = x.RoundTripMs!.Value,
-                x.CheckedAtUtc,
-                x.ReceivedAtUtc,
-                x.CheckResultId
-            })
-            .ToListAsync(cancellationToken);
-
-        var transitionsInWindowByAssignment = transitionsInWindow
-            .GroupBy(x => x.AssignmentId, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => (IReadOnlyList<StateTransition>)group.OrderBy(x => x.TransitionAtUtc).ToArray(), StringComparer.Ordinal);
-
-        var transitionsBeforeWindowLookup = transitionsBeforeWindow
-            .ToDictionary(x => x.AssignmentId, x => x, StringComparer.Ordinal);
-
-        var successfulChecksByAssignment = successfulChecks
-            .GroupBy(x => x.AssignmentId, StringComparer.Ordinal)
-            .ToDictionary(
-                group => group.Key,
-                group => (IReadOnlyList<RttSample>)group
-                    .Select(x => new RttSample
-                    {
-                        RoundTripMs = x.RoundTripMs,
-                        CheckedAtUtc = x.CheckedAtUtc,
-                        ReceivedAtUtc = x.ReceivedAtUtc,
-                        CheckResultId = x.CheckResultId
-                    })
-                    .ToArray(),
-                StringComparer.Ordinal);
-
         foreach (var assignmentId in normalizedAssignmentIds)
         {
-            endpointStates.TryGetValue(assignmentId, out var endpointState);
-            transitionsInWindowByAssignment.TryGetValue(assignmentId, out var assignmentTransitions);
-            transitionsBeforeWindowLookup.TryGetValue(assignmentId, out var transitionBeforeWindow);
-            successfulChecksByAssignment.TryGetValue(assignmentId, out var successfulCheckSamples);
-
-            var durations = CalculateStateDurations(
-                endpointState,
-                assignmentTransitions ?? [],
-                transitionBeforeWindow,
-                windowStartUtc,
-                nowUtc);
-
-            if (!existingRows.TryGetValue(assignmentId, out var row))
-            {
-                row = new AssignmentMetrics24h
-                {
-                    AssignmentId = assignmentId
-                };
-                _dbContext.AssignmentMetrics24h.Add(row);
-            }
-
-            row.WindowStartUtc = windowStartUtc;
-            row.WindowEndUtc = nowUtc;
-            row.UptimeSeconds = durations.UptimeSeconds;
-            row.DowntimeSeconds = durations.DowntimeSeconds;
-            row.UnknownSeconds = durations.UnknownSeconds;
-            row.SuppressedSeconds = durations.SuppressedSeconds;
-            var rttSummary = CalculateRttSummary(successfulCheckSamples ?? []);
-
-            row.LastRttMs = rttSummary.LastRttMs;
-            row.HighestRttMs = rttSummary.HighestRttMs;
-            row.LowestRttMs = rttSummary.LowestRttMs;
-            row.AverageRttMs = rttSummary.AverageRttMs;
-            row.JitterMs = rttSummary.JitterMs;
-            row.LastSuccessfulCheckUtc = rttSummary.LastSuccessfulCheckUtc;
-            row.UpdatedAtUtc = nowUtc;
+            await RebuildRttBucketsFromRawAsync(assignmentId, nowUtc, cancellationToken);
+            await RebuildStateIntervalsFromRawAsync(assignmentId, nowUtc, cancellationToken);
         }
 
+        await RecomputeSummariesFromSupportAsync(normalizedAssignmentIds, nowUtc, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -199,10 +227,238 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
         await RefreshAssignmentsAsync(assignmentIds, cancellationToken);
     }
 
-    private static AssignmentDurationSummary CalculateStateDurations(
-        EndpointState? endpointState,
-        IReadOnlyList<StateTransition> transitionsInWindow,
-        StateTransition? transitionBeforeWindow,
+    private async Task RebuildRttBucketAsync(string assignmentId, DateTimeOffset minuteStartUtc, CancellationToken cancellationToken)
+    {
+        var minuteEndUtc = minuteStartUtc.AddMinutes(1);
+        var samples = await _dbContext.CheckResults.AsNoTracking()
+            .Where(x => x.AssignmentId == assignmentId
+                && x.Success
+                && x.RoundTripMs.HasValue
+                && x.CheckedAtUtc >= minuteStartUtc
+                && x.CheckedAtUtc < minuteEndUtc)
+            .OrderBy(x => x.CheckedAtUtc)
+            .ThenBy(x => x.ReceivedAtUtc)
+            .ThenBy(x => x.CheckResultId)
+            .Select(x => new RttSample
+            {
+                RoundTripMs = x.RoundTripMs!.Value,
+                CheckedAtUtc = x.CheckedAtUtc,
+                ReceivedAtUtc = x.ReceivedAtUtc,
+                CheckResultId = x.CheckResultId
+            })
+            .ToArrayAsync(cancellationToken);
+
+        var existingBucket = await _dbContext.AssignmentRttMinuteBuckets
+            .SingleOrDefaultAsync(x => x.AssignmentId == assignmentId && x.BucketStartUtc == minuteStartUtc, cancellationToken);
+
+        if (samples.Length == 0)
+        {
+            if (existingBucket is not null)
+            {
+                _dbContext.AssignmentRttMinuteBuckets.Remove(existingBucket);
+            }
+
+            return;
+        }
+
+        var orderedRttValues = samples.Select(x => x.RoundTripMs).ToArray();
+        var intraDeltaSum = 0d;
+        for (var index = 1; index < orderedRttValues.Length; index++)
+        {
+            intraDeltaSum += Math.Abs(orderedRttValues[index] - orderedRttValues[index - 1]);
+        }
+
+        if (existingBucket is null)
+        {
+            existingBucket = new AssignmentRttMinuteBucket
+            {
+                AssignmentId = assignmentId,
+                BucketStartUtc = minuteStartUtc
+            };
+
+            _dbContext.AssignmentRttMinuteBuckets.Add(existingBucket);
+        }
+
+        existingBucket.SampleCount = orderedRttValues.Length;
+        existingBucket.SumRttMs = orderedRttValues.Sum(x => (long)x);
+        existingBucket.MinRttMs = orderedRttValues.Min();
+        existingBucket.MaxRttMs = orderedRttValues.Max();
+        existingBucket.FirstRttMs = orderedRttValues[0];
+        existingBucket.LastRttMs = orderedRttValues[^1];
+        existingBucket.FirstSampleUtc = samples[0].CheckedAtUtc;
+        existingBucket.LastSampleUtc = samples[^1].CheckedAtUtc;
+        existingBucket.IntraBucketDeltaSumMs = intraDeltaSum;
+        existingBucket.UpdatedAtUtc = DateTimeOffset.UtcNow;
+    }
+
+    private async Task RebuildRttBucketsFromRawAsync(string assignmentId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        var pruneCutoffUtc = nowUtc - PruneRetention;
+
+        var existingBuckets = await _dbContext.AssignmentRttMinuteBuckets
+            .Where(x => x.AssignmentId == assignmentId)
+            .ToArrayAsync(cancellationToken);
+
+        if (existingBuckets.Length > 0)
+        {
+            _dbContext.AssignmentRttMinuteBuckets.RemoveRange(existingBuckets);
+        }
+
+        var windowSamples = await _dbContext.CheckResults.AsNoTracking()
+            .Where(x => x.AssignmentId == assignmentId
+                && x.Success
+                && x.RoundTripMs.HasValue
+                && x.CheckedAtUtc >= pruneCutoffUtc
+                && x.CheckedAtUtc <= nowUtc)
+            .Select(x => new
+            {
+                x.AssignmentId,
+                MinuteStartUtc = TruncateToMinute(x.CheckedAtUtc)
+            })
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        foreach (var sample in windowSamples)
+        {
+            await RebuildRttBucketAsync(sample.AssignmentId, sample.MinuteStartUtc, cancellationToken);
+        }
+    }
+
+    private async Task RebuildStateIntervalsFromRawAsync(string assignmentId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        var existingIntervals = await _dbContext.AssignmentStateIntervals
+            .Where(x => x.AssignmentId == assignmentId)
+            .ToArrayAsync(cancellationToken);
+
+        if (existingIntervals.Length > 0)
+        {
+            _dbContext.AssignmentStateIntervals.RemoveRange(existingIntervals);
+        }
+
+        var transitions = await _dbContext.StateTransitions.AsNoTracking()
+            .Where(x => x.AssignmentId == assignmentId)
+            .OrderBy(x => x.TransitionAtUtc)
+            .ToArrayAsync(cancellationToken);
+
+        var endpointState = await _dbContext.EndpointStates.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.AssignmentId == assignmentId, cancellationToken);
+
+        if (transitions.Length == 0)
+        {
+            _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
+            {
+                AssignmentStateIntervalId = Guid.NewGuid().ToString(),
+                AssignmentId = assignmentId,
+                State = endpointState?.CurrentState ?? EndpointStateKind.Unknown,
+                StartedAtUtc = endpointState?.LastStateChangeUtc ?? nowUtc,
+                EndedAtUtc = null,
+                UpdatedAtUtc = nowUtc
+            });
+
+            return;
+        }
+
+        for (var index = 0; index < transitions.Length; index++)
+        {
+            var transition = transitions[index];
+            DateTimeOffset? endedAtUtc = null;
+            if (index < transitions.Length - 1)
+            {
+                endedAtUtc = transitions[index + 1].TransitionAtUtc;
+            }
+
+            _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
+            {
+                AssignmentStateIntervalId = Guid.NewGuid().ToString(),
+                AssignmentId = assignmentId,
+                State = transition.NewState,
+                StartedAtUtc = transition.TransitionAtUtc,
+                EndedAtUtc = endedAtUtc,
+                UpdatedAtUtc = nowUtc
+            });
+        }
+    }
+
+    private async Task RecomputeSummariesFromSupportAsync(
+        IReadOnlyCollection<string> assignmentIds,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var normalizedAssignmentIds = NormalizeAssignmentIds(assignmentIds);
+        if (normalizedAssignmentIds.Length == 0)
+        {
+            return;
+        }
+
+        var windowStartUtc = nowUtc - Window;
+
+        var existingRows = await ApplyAssignmentFilter(
+                _dbContext.AssignmentMetrics24h,
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
+            .ToDictionaryAsync(x => x.AssignmentId, cancellationToken);
+
+        var rttBuckets = await ApplyAssignmentFilter(
+                _dbContext.AssignmentRttMinuteBuckets.AsNoTracking(),
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
+            .Where(x => x.LastSampleUtc >= windowStartUtc && x.FirstSampleUtc <= nowUtc)
+            .OrderBy(x => x.BucketStartUtc)
+            .ToArrayAsync(cancellationToken);
+
+        var intervals = await ApplyAssignmentFilter(
+                _dbContext.AssignmentStateIntervals.AsNoTracking(),
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
+            .Where(x => x.StartedAtUtc <= nowUtc
+                && (x.EndedAtUtc == null || x.EndedAtUtc >= windowStartUtc))
+            .OrderBy(x => x.StartedAtUtc)
+            .ToArrayAsync(cancellationToken);
+
+        var rttByAssignment = rttBuckets
+            .GroupBy(x => x.AssignmentId, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.ToArray(), StringComparer.Ordinal);
+
+        var intervalsByAssignment = intervals
+            .GroupBy(x => x.AssignmentId, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.ToArray(), StringComparer.Ordinal);
+
+        foreach (var assignmentId in normalizedAssignmentIds)
+        {
+            rttByAssignment.TryGetValue(assignmentId, out var assignmentBuckets);
+            intervalsByAssignment.TryGetValue(assignmentId, out var assignmentIntervals);
+
+            var rttSummary = CalculateRttSummaryFromBuckets(assignmentBuckets ?? []);
+            var durationSummary = CalculateDurationsFromIntervals(assignmentIntervals ?? [], windowStartUtc, nowUtc);
+
+            if (!existingRows.TryGetValue(assignmentId, out var row))
+            {
+                row = new AssignmentMetrics24h
+                {
+                    AssignmentId = assignmentId
+                };
+
+                _dbContext.AssignmentMetrics24h.Add(row);
+            }
+
+            row.WindowStartUtc = windowStartUtc;
+            row.WindowEndUtc = nowUtc;
+            row.UptimeSeconds = durationSummary.UptimeSeconds;
+            row.DowntimeSeconds = durationSummary.DowntimeSeconds;
+            row.UnknownSeconds = durationSummary.UnknownSeconds;
+            row.SuppressedSeconds = durationSummary.SuppressedSeconds;
+            row.LastRttMs = rttSummary.LastRttMs;
+            row.HighestRttMs = rttSummary.HighestRttMs;
+            row.LowestRttMs = rttSummary.LowestRttMs;
+            row.AverageRttMs = rttSummary.AverageRttMs;
+            row.JitterMs = rttSummary.JitterMs;
+            row.LastSuccessfulCheckUtc = rttSummary.LastSuccessfulCheckUtc;
+            row.UpdatedAtUtc = nowUtc;
+        }
+    }
+
+    private static AssignmentDurationSummary CalculateDurationsFromIntervals(
+        IReadOnlyList<AssignmentStateInterval> intervals,
         DateTimeOffset windowStartUtc,
         DateTimeOffset windowEndUtc)
     {
@@ -220,28 +476,17 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             [EndpointStateKind.Suppressed] = TimeSpan.Zero
         };
 
-        var activeState = DetermineStateAtWindowStart(endpointState, transitionBeforeWindow, windowStartUtc);
-        var segmentStart = windowStartUtc;
-
-        foreach (var transition in transitionsInWindow)
+        foreach (var interval in intervals)
         {
-            if (transition.TransitionAtUtc < windowStartUtc || transition.TransitionAtUtc > windowEndUtc)
+            var effectiveStartUtc = interval.StartedAtUtc < windowStartUtc ? windowStartUtc : interval.StartedAtUtc;
+            var intervalEndUtc = interval.EndedAtUtc ?? windowEndUtc;
+            var effectiveEndUtc = intervalEndUtc > windowEndUtc ? windowEndUtc : intervalEndUtc;
+            if (effectiveEndUtc <= effectiveStartUtc)
             {
                 continue;
             }
 
-            if (transition.TransitionAtUtc > segmentStart)
-            {
-                durationsByState[activeState] += transition.TransitionAtUtc - segmentStart;
-            }
-
-            segmentStart = transition.TransitionAtUtc;
-            activeState = transition.NewState;
-        }
-
-        if (windowEndUtc > segmentStart)
-        {
-            durationsByState[activeState] += windowEndUtc - segmentStart;
+            durationsByState[interval.State] += effectiveEndUtc - effectiveStartUtc;
         }
 
         return new AssignmentDurationSummary(
@@ -251,61 +496,91 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             SuppressedSeconds: ToWholeSeconds(durationsByState[EndpointStateKind.Suppressed]));
     }
 
-    private static EndpointStateKind DetermineStateAtWindowStart(
-        EndpointState? endpointState,
-        StateTransition? transitionBeforeWindow,
-        DateTimeOffset windowStartUtc)
+    private static AssignmentRttSummary CalculateRttSummaryFromBuckets(IReadOnlyList<AssignmentRttMinuteBucket> buckets)
     {
-        if (endpointState is not null && endpointState.LastStateChangeUtc.HasValue && endpointState.LastStateChangeUtc.Value <= windowStartUtc)
-        {
-            return endpointState.CurrentState;
-        }
-
-        if (transitionBeforeWindow is not null)
-        {
-            return transitionBeforeWindow.NewState;
-        }
-
-        return EndpointStateKind.Unknown;
-    }
-
-
-    private static AssignmentRttSummary CalculateRttSummary(IReadOnlyList<RttSample> successfulRttSamples)
-    {
-        if (successfulRttSamples.Count == 0)
+        if (buckets.Count == 0)
         {
             return AssignmentRttSummary.Empty;
         }
 
-        var orderedSamples = successfulRttSamples
-            .OrderBy(x => x.CheckedAtUtc)
-            .ThenBy(x => x.ReceivedAtUtc)
-            .ThenBy(x => x.CheckResultId, StringComparer.Ordinal)
+        var ordered = buckets
+            .OrderBy(x => x.BucketStartUtc)
+            .ThenBy(x => x.LastSampleUtc)
             .ToArray();
 
-        var orderedRttValues = orderedSamples.Select(x => x.RoundTripMs).ToArray();
+        var totalSamples = 0;
+        long totalRttMs = 0;
+        int? minRttMs = null;
+        int? maxRttMs = null;
+        double deltaSumMs = 0d;
 
-        double? jitterMs = null;
-        if (orderedRttValues.Length >= 2)
+        for (var index = 0; index < ordered.Length; index++)
         {
-            var deltas = new double[orderedRttValues.Length - 1];
-            for (var index = 1; index < orderedRttValues.Length; index++)
-            {
-                deltas[index - 1] = Math.Abs(orderedRttValues[index] - orderedRttValues[index - 1]);
-            }
+            var bucket = ordered[index];
+            totalSamples += bucket.SampleCount;
+            totalRttMs += bucket.SumRttMs;
+            minRttMs = !minRttMs.HasValue ? bucket.MinRttMs : Math.Min(minRttMs.Value, bucket.MinRttMs);
+            maxRttMs = !maxRttMs.HasValue ? bucket.MaxRttMs : Math.Max(maxRttMs.Value, bucket.MaxRttMs);
+            deltaSumMs += bucket.IntraBucketDeltaSumMs;
 
-            jitterMs = deltas.Average();
+            if (index > 0)
+            {
+                var previous = ordered[index - 1];
+                deltaSumMs += Math.Abs(bucket.FirstRttMs - previous.LastRttMs);
+            }
         }
 
-        var lastSample = orderedSamples[^1];
+        var lastBucket = ordered[^1];
+        var averageRtt = totalSamples > 0 ? totalRttMs / (double)totalSamples : (double?)null;
+        var jitterMs = totalSamples >= 2 ? deltaSumMs / (totalSamples - 1) : (double?)null;
 
         return new AssignmentRttSummary(
-            LastRttMs: lastSample.RoundTripMs,
-            HighestRttMs: orderedRttValues.Max(),
-            LowestRttMs: orderedRttValues.Min(),
-            AverageRttMs: orderedRttValues.Average(),
+            LastRttMs: lastBucket.LastRttMs,
+            HighestRttMs: maxRttMs,
+            LowestRttMs: minRttMs,
+            AverageRttMs: averageRtt,
             JitterMs: jitterMs,
-            LastSuccessfulCheckUtc: lastSample.CheckedAtUtc);
+            LastSuccessfulCheckUtc: lastBucket.LastSampleUtc);
+    }
+
+    private async Task PruneSupportDataAsync(IReadOnlyCollection<string> assignmentIds, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        var normalizedAssignmentIds = NormalizeAssignmentIds(assignmentIds);
+        if (normalizedAssignmentIds.Length == 0)
+        {
+            return;
+        }
+
+        var pruneCutoffUtc = nowUtc - PruneRetention;
+
+        var staleBuckets = await ApplyAssignmentFilter(
+                _dbContext.AssignmentRttMinuteBuckets,
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
+            .Where(x => x.BucketStartUtc < pruneCutoffUtc)
+            .ToArrayAsync(cancellationToken);
+
+        if (staleBuckets.Length > 0)
+        {
+            _dbContext.AssignmentRttMinuteBuckets.RemoveRange(staleBuckets);
+        }
+
+        var staleIntervals = await ApplyAssignmentFilter(
+                _dbContext.AssignmentStateIntervals,
+                x => x.AssignmentId,
+                normalizedAssignmentIds)
+            .Where(x => x.EndedAtUtc.HasValue && x.EndedAtUtc.Value < pruneCutoffUtc)
+            .ToArrayAsync(cancellationToken);
+
+        if (staleIntervals.Length > 0)
+        {
+            _dbContext.AssignmentStateIntervals.RemoveRange(staleIntervals);
+        }
+    }
+
+    private static DateTimeOffset TruncateToMinute(DateTimeOffset value)
+    {
+        return new DateTimeOffset(value.Year, value.Month, value.Day, value.Hour, value.Minute, 0, TimeSpan.Zero);
     }
 
     private static long ToWholeSeconds(TimeSpan duration)

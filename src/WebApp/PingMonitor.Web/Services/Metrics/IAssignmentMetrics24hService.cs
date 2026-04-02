@@ -1,3 +1,5 @@
+using PingMonitor.Web.Models;
+
 namespace PingMonitor.Web.Services.Metrics;
 
 public interface IAssignmentMetrics24hService
@@ -9,6 +11,17 @@ public interface IAssignmentMetrics24hService
     Task RefreshAssignmentAsync(string assignmentId, CancellationToken cancellationToken);
 
     Task RefreshAssignmentsAsync(IReadOnlyCollection<string> assignmentIds, CancellationToken cancellationToken);
+
+    Task ApplyCheckResultsBatchAsync(IReadOnlyCollection<CheckResult> checkResults, CancellationToken cancellationToken);
+
+    Task ApplyStateEvaluationAsync(
+        string assignmentId,
+        EndpointStateKind previousState,
+        EndpointStateKind currentState,
+        DateTimeOffset? transitionAtUtc,
+        DateTimeOffset stateChangedAtUtc,
+        DateTimeOffset evaluatedAtUtc,
+        CancellationToken cancellationToken);
 
     Task RebuildAllAsync(CancellationToken cancellationToken);
 }

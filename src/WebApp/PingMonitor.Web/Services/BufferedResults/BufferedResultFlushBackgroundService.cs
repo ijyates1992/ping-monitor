@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Services.Metrics;
 
 namespace PingMonitor.Web.Services.BufferedResults;
 
@@ -98,6 +99,7 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PingMonitorDbContext>();
         var stateEvaluationService = scope.ServiceProvider.GetRequiredService<IStateEvaluationService>();
+        var assignmentMetrics24hService = scope.ServiceProvider.GetRequiredService<IAssignmentMetrics24hService>();
 
         var checkResults = batch.Select(item => new CheckResult
         {
@@ -116,6 +118,7 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
 
         dbContext.CheckResults.AddRange(checkResults);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await assignmentMetrics24hService.ApplyCheckResultsBatchAsync(checkResults, cancellationToken);
 
         var affectedAssignmentIds = checkResults
             .Select(x => x.AssignmentId)
