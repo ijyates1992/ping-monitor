@@ -122,6 +122,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 
         var parentContext = await GetParentContextAsync(assignment, endpoint.EndpointId, cancellationToken);
         var previousState = state.CurrentState;
+        var previousStateChangedAtUtc = state.LastStateChangeUtc ?? DateTimeOffset.UtcNow;
         var nextState = DetermineNextState(assignment, state, agent, parentContext);
         var reasonCode = GetReasonCode(previousState, nextState, parentContext.DependencyDown);
 
@@ -199,9 +200,10 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _assignmentMetrics24hService.ApplyStateEvaluationAsync(
             assignment.AssignmentId,
+            previousState,
             state.CurrentState,
             transitionAtUtc,
-            state.LastStateChangeUtc ?? DateTimeOffset.UtcNow,
+            previousStateChangedAtUtc,
             DateTimeOffset.UtcNow,
             cancellationToken);
 

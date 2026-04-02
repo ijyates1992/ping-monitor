@@ -16,6 +16,7 @@ public interface IAssignmentMetrics24hService
 
     Task ApplyStateEvaluationAsync(
         string assignmentId,
+        EndpointStateKind previousState,
         EndpointStateKind currentState,
         DateTimeOffset? transitionAtUtc,
         DateTimeOffset stateChangedAtUtc,

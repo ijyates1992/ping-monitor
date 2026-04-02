@@ -94,6 +94,7 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
 
     public async Task ApplyStateEvaluationAsync(
         string assignmentId,
+        EndpointStateKind previousState,
         EndpointStateKind currentState,
         DateTimeOffset? transitionAtUtc,
         DateTimeOffset stateChangedAtUtc,
@@ -119,6 +120,24 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
                 }
 
                 activeInterval.UpdatedAtUtc = evaluatedAtUtc;
+            }
+            else
+            {
+                var previousStateStartedAtUtc = stateChangedAtUtc > DateTimeOffset.MinValue
+                    ? stateChangedAtUtc
+                    : transitionAtUtc.Value;
+
+                _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
+                {
+                    AssignmentStateIntervalId = Guid.NewGuid().ToString(),
+                    AssignmentId = assignmentId,
+                    State = previousState,
+                    StartedAtUtc = previousStateStartedAtUtc <= transitionAtUtc.Value
+                        ? previousStateStartedAtUtc
+                        : transitionAtUtc.Value,
+                    EndedAtUtc = transitionAtUtc.Value,
+                    UpdatedAtUtc = evaluatedAtUtc
+                });
             }
 
             _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
