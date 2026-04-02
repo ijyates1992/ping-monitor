@@ -23,16 +23,29 @@ public sealed class AdminDatabaseController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken cancellationToken)
+    public IActionResult Index()
     {
-        var model = await BuildModelAsync(
+        return RedirectToAction(nameof(Maintenance));
+    }
+
+    [HttpGet("status")]
+    public async Task<IActionResult> Status(CancellationToken cancellationToken)
+    {
+        var model = await BuildStatusModelAsync(cancellationToken);
+        return View("Status", model);
+    }
+
+    [HttpGet("maintenance")]
+    public async Task<IActionResult> Maintenance(CancellationToken cancellationToken)
+    {
+        var model = await BuildMaintenanceModelAsync(
             new DatabasePruneForm(),
             null,
             pruneStatusMessage: TempData["DbPruneStatus"] as string,
             backupStatusMessage: TempData["DbBackupStatus"] as string,
             cancellationToken);
 
-        return View("Index", model);
+        return View("Maintenance", model);
     }
 
     [HttpPost("prune/preview")]
@@ -41,8 +54,8 @@ public sealed class AdminDatabaseController : Controller
     {
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildModelAsync(pruneForm, null, null, null, cancellationToken);
-            return View("Index", invalidModel);
+            var invalidModel = await BuildMaintenanceModelAsync(pruneForm, null, null, null, cancellationToken);
+            return View("Maintenance", invalidModel);
         }
 
         var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-pruneForm.AgeDays);
@@ -55,7 +68,7 @@ public sealed class AdminDatabaseController : Controller
             },
             cancellationToken);
 
-        var model = await BuildModelAsync(
+        var model = await BuildMaintenanceModelAsync(
             pruneForm,
             new DatabasePrunePreviewViewModel
             {
@@ -68,7 +81,7 @@ public sealed class AdminDatabaseController : Controller
             null,
             cancellationToken);
 
-        return View("Index", model);
+        return View("Maintenance", model);
     }
 
     [HttpPost("prune/execute")]
@@ -77,15 +90,15 @@ public sealed class AdminDatabaseController : Controller
     {
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildModelAsync(pruneForm, null, null, null, cancellationToken);
-            return View("Index", invalidModel);
+            var invalidModel = await BuildMaintenanceModelAsync(pruneForm, null, null, null, cancellationToken);
+            return View("Maintenance", invalidModel);
         }
 
         if (!string.Equals(pruneForm.ConfirmationText?.Trim(), DatabasePruneExecuteRequest.ConfirmationKeyword, StringComparison.Ordinal))
         {
             ModelState.AddModelError($"{nameof(DatabasePruneForm)}.{nameof(DatabasePruneForm.ConfirmationText)}", $"Type {DatabasePruneExecuteRequest.ConfirmationKeyword} to confirm prune.");
-            var invalidModel = await BuildModelAsync(pruneForm, null, null, null, cancellationToken);
-            return View("Index", invalidModel);
+            var invalidModel = await BuildMaintenanceModelAsync(pruneForm, null, null, null, cancellationToken);
+            return View("Maintenance", invalidModel);
         }
 
         var cutoffUtc = DateTimeOffset.UtcNow.AddDays(-pruneForm.AgeDays);
@@ -100,7 +113,7 @@ public sealed class AdminDatabaseController : Controller
             cancellationToken);
 
         TempData["DbPruneStatus"] = $"Prune completed for {result.Target}. Deleted {result.RowsDeleted} rows older than {result.CutoffUtc:yyyy-MM-dd HH:mm:ss} UTC.";
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Maintenance));
     }
 
     [HttpPost("backup/create")]
@@ -110,8 +123,8 @@ public sealed class AdminDatabaseController : Controller
         if (!backupForm.ConfirmBackup)
         {
             ModelState.AddModelError($"{nameof(DatabaseBackupForm)}.{nameof(DatabaseBackupForm.ConfirmBackup)}", "Confirm backup creation before continuing.");
-            var invalidModel = await BuildModelAsync(new DatabasePruneForm(), null, null, null, cancellationToken);
-            return View("Index", invalidModel);
+            var invalidModel = await BuildMaintenanceModelAsync(new DatabasePruneForm(), null, null, null, cancellationToken);
+            return View("Maintenance", invalidModel);
         }
 
         var result = await _databaseMaintenanceService.CreateBackupAsync(
@@ -125,7 +138,7 @@ public sealed class AdminDatabaseController : Controller
             ? $"Database backup created: {result.FileName} ({result.FileSizeBytes} bytes)."
             : $"Database backup failed: {result.Message}";
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Maintenance));
     }
 
     [HttpGet("backup/download")]
@@ -142,15 +155,9 @@ public sealed class AdminDatabaseController : Controller
         }
     }
 
-    private async Task<DatabaseStatusPageViewModel> BuildModelAsync(
-        DatabasePruneForm pruneForm,
-        DatabasePrunePreviewViewModel? prunePreview,
-        string? pruneStatusMessage,
-        string? backupStatusMessage,
-        CancellationToken cancellationToken)
+    private async Task<DatabaseStatusPageViewModel> BuildStatusModelAsync(CancellationToken cancellationToken)
     {
         var snapshot = await _databaseStatusQueryService.GetSnapshotAsync(cancellationToken);
-        var backups = await _databaseMaintenanceService.ListBackupsAsync(cancellationToken);
 
         var tables = snapshot.Tables
             .Select(x => new DatabaseStatusTableViewModel
@@ -187,18 +194,6 @@ public sealed class AdminDatabaseController : Controller
             TotalDataBytes = snapshot.TotalDataBytes,
             TotalIndexBytes = snapshot.TotalIndexBytes,
             Tables = tables,
-            PruneForm = pruneForm,
-            PrunePreview = prunePreview,
-            PruneStatusMessage = pruneStatusMessage,
-            BackupStatusMessage = backupStatusMessage,
-            BackupForm = new DatabaseBackupForm(),
-            Backups = backups.Select(x => new DatabaseBackupRowViewModel
-            {
-                FileName = x.FileName,
-                FileId = x.FileId,
-                CreatedAtUtc = x.CreatedAtUtc,
-                SizeBytes = x.FileSizeBytes
-            }).ToArray(),
             RuntimeBuffer = new DatabaseStatusRuntimeBufferViewModel
             {
                 BufferingEnabled = runtimeBuffer.BufferingEnabled,
@@ -219,6 +214,32 @@ public sealed class AdminDatabaseController : Controller
                 BufferDropRatePercent = bufferDropRatePercent,
                 FlushSuccessRatePercent = flushSuccessRatePercent
             }
+        };
+    }
+
+    private async Task<DatabaseMaintenancePageViewModel> BuildMaintenanceModelAsync(
+        DatabasePruneForm pruneForm,
+        DatabasePrunePreviewViewModel? prunePreview,
+        string? pruneStatusMessage,
+        string? backupStatusMessage,
+        CancellationToken cancellationToken)
+    {
+        var backups = await _databaseMaintenanceService.ListBackupsAsync(cancellationToken);
+
+        return new DatabaseMaintenancePageViewModel
+        {
+            PruneForm = pruneForm,
+            PrunePreview = prunePreview,
+            PruneStatusMessage = pruneStatusMessage,
+            BackupStatusMessage = backupStatusMessage,
+            BackupForm = new DatabaseBackupForm(),
+            Backups = backups.Select(x => new DatabaseBackupRowViewModel
+            {
+                FileName = x.FileName,
+                FileId = x.FileId,
+                CreatedAtUtc = x.CreatedAtUtc,
+                SizeBytes = x.FileSizeBytes
+            }).ToArray()
         };
     }
 
