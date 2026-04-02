@@ -123,9 +123,10 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
             }
             else
             {
+                var fallbackPreviousStateStartedAtUtc = transitionAtUtc.Value - Window;
                 var previousStateStartedAtUtc = stateChangedAtUtc > DateTimeOffset.MinValue
                     ? stateChangedAtUtc
-                    : transitionAtUtc.Value;
+                    : fallbackPreviousStateStartedAtUtc;
 
                 _dbContext.AssignmentStateIntervals.Add(new AssignmentStateInterval
                 {
