@@ -192,6 +192,7 @@ builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService
 builder.Services.AddScoped<IEndpointPerformanceQueryService, EndpointPerformanceQueryService>();
 builder.Services.AddScoped<IGroupManagementService, GroupManagementService>();
 builder.Services.AddScoped<IAgentManagementQueryService, AgentManagementQueryService>();
+builder.Services.AddSingleton<IRollingAssignmentWindowStore, RollingAssignmentWindowStore>();
 builder.Services.AddScoped<IAssignmentMetrics24hService, AssignmentMetrics24hService>();
 builder.Services.AddScoped<IAgentMetricsService, AgentMetricsService>();
 builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
