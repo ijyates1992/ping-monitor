@@ -19,6 +19,9 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
     private int _lastFlushAttemptedCount;
     private int _lastFlushPersistedCount;
     private string? _lastFlushError;
+    private long _lastPersistDurationMs;
+    private int _lastEnqueuedAssignmentCount;
+    private DateTimeOffset? _lastAssignmentsEnqueuedAtUtc;
 
     public BufferedResultIngestionService(
         IOptions<ResultBufferOptions> options,
@@ -108,7 +111,10 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
                 LastFlushCompletedAtUtc: _lastFlushCompletedAtUtc,
                 LastFlushAttemptedCount: _lastFlushAttemptedCount,
                 LastFlushPersistedCount: _lastFlushPersistedCount,
-                LastFlushError: _lastFlushError);
+                LastFlushError: _lastFlushError,
+                LastPersistDurationMs: _lastPersistDurationMs,
+                LastEnqueuedAssignmentCount: _lastEnqueuedAssignmentCount,
+                LastAssignmentsEnqueuedAtUtc: _lastAssignmentsEnqueuedAtUtc);
         }
     }
 
@@ -124,7 +130,14 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
         }
     }
 
-    public void RecordFlushOutcome(int attemptedCount, int persistedCount, DateTimeOffset completedAtUtc, Exception? error)
+    public void RecordFlushOutcome(
+        int attemptedCount,
+        int persistedCount,
+        DateTimeOffset completedAtUtc,
+        Exception? error,
+        long persistDurationMs,
+        int enqueuedAssignmentCount,
+        DateTimeOffset? lastAssignmentsEnqueuedAtUtc)
     {
         lock (_sync)
         {
@@ -139,6 +152,9 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
             _lastFlushAttemptedCount = attemptedCount;
             _lastFlushPersistedCount = persistedCount;
             _lastFlushError = error?.Message;
+            _lastPersistDurationMs = persistDurationMs;
+            _lastEnqueuedAssignmentCount = enqueuedAssignmentCount;
+            _lastAssignmentsEnqueuedAtUtc = lastAssignmentsEnqueuedAtUtc;
         }
     }
 }

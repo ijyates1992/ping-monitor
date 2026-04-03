@@ -63,7 +63,10 @@
                 <div class="metric"><div class="label">Configured max batch size</div><div class="value">@Model.RuntimeBuffer.ConfiguredMaxBatchSize</div></div>
                 <div class="metric"><div class="label">Configured flush interval</div><div class="value">@Model.RuntimeBuffer.ConfiguredFlushIntervalSeconds sec</div></div>
                 <div class="metric"><div class="label">Last flush time (UTC)</div><div class="value">@(Model.RuntimeBuffer.LastFlushCompletedAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.LastFlushCompletedAtUtc.Value))</div></div>
+                <div class="metric"><div class="label">Last persist duration</div><div class="value">@Model.RuntimeBuffer.LastPersistDurationMs ms</div></div>
                 <div class="metric"><div class="label">Last flush result</div><div class="value">@Model.RuntimeBuffer.LastFlushPersistedCount / @Model.RuntimeBuffer.LastFlushAttemptedCount persisted</div></div>
+                <div class="metric"><div class="label">Assignments enqueued (last flush)</div><div class="value">@Model.RuntimeBuffer.LastEnqueuedAssignmentCount</div></div>
+                <div class="metric"><div class="label">Last assignment enqueue time (UTC)</div><div class="value">@(Model.RuntimeBuffer.LastAssignmentsEnqueuedAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.LastAssignmentsEnqueuedAtUtc.Value))</div></div>
                 <div class="metric"><div class="label">Dropped-result count</div><div class="value">@Model.RuntimeBuffer.DroppedResultCount</div></div>
                 <div class="metric"><div class="label">Drop rate</div><div class="value">@Model.RuntimeBuffer.BufferDropRatePercent.ToString("0.##")%</div></div>
                 <div class="metric"><div class="label">Flush success rate</div><div class="value">@Model.RuntimeBuffer.FlushSuccessRatePercent.ToString("0.##")%</div></div>
@@ -74,6 +77,25 @@
                 <p class="muted">Last flush error details: @Model.RuntimeBuffer.LastFlushError</p>
             }
             <p class="muted">@Model.RuntimeBuffer.CacheHitRateNote</p>
+        </section>
+
+        <section class="card">
+            <h2>Downstream assignment processing</h2>
+            <p class="muted">Runtime metrics for asynchronous state/metrics processing queued after raw result persistence.</p>
+            <div class="overview-grid">
+                <div class="metric"><div class="label">Queue depth</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.QueueDepth</div></div>
+                <div class="metric"><div class="label">Pending assignment count</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.PendingAssignmentCount</div></div>
+                <div class="metric"><div class="label">Total enqueue count</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.TotalEnqueueCount</div></div>
+                <div class="metric"><div class="label">Coalesced duplicates</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.CoalescedDuplicateCount</div></div>
+                <div class="metric"><div class="label">Processed count</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.ProcessedCount</div></div>
+                <div class="metric"><div class="label">Failed count</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.FailedCount</div></div>
+                <div class="metric"><div class="label">Last processed (UTC)</div><div class="value">@(Model.RuntimeBuffer.AssignmentProcessingQueue.LastProcessedAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.AssignmentProcessingQueue.LastProcessedAtUtc.Value))</div></div>
+                <div class="metric"><div class="label">Last failure (UTC)</div><div class="value">@(Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureAtUtc.Value))</div></div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureError))
+            {
+                <p class="muted">Last assignment-processing error: @Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureError</p>
+            }
         </section>
 
         <section class="card">
