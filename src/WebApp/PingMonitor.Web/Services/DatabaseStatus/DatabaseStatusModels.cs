@@ -40,4 +40,24 @@ public sealed class ResultBufferRuntimeSnapshot
     public int LastFlushPersistedCount { get; init; }
     public DateTimeOffset? LastFlushCompletedAtUtc { get; init; }
     public string? LastFlushError { get; init; }
+    public long LastPersistDurationMs { get; init; }
+    public int LastEnqueuedAssignmentCount { get; init; }
+    public DateTimeOffset? LastAssignmentsEnqueuedAtUtc { get; init; }
+    public AssignmentProcessingQueueRuntimeSnapshot AssignmentProcessingQueue { get; init; } = new();
+}
+
+public sealed class AssignmentProcessingQueueRuntimeSnapshot
+{
+    public int QueueDepth { get; init; }
+    public int PendingAssignmentCount { get; init; }
+    public long TotalEnqueueCount { get; init; }
+    public long CoalescedDuplicateCount { get; init; }
+    public long DequeueCount { get; init; }
+    public long ProcessedCount { get; init; }
+    public long FailedCount { get; init; }
+    public DateTimeOffset? LastEnqueueAtUtc { get; init; }
+    public DateTimeOffset? LastDequeuedAtUtc { get; init; }
+    public DateTimeOffset? LastProcessedAtUtc { get; init; }
+    public DateTimeOffset? LastFailureAtUtc { get; init; }
+    public string? LastFailureError { get; init; }
 }

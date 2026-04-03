@@ -210,6 +210,24 @@ public sealed class AdminDatabaseController : Controller
                 LastFlushPersistedCount = runtimeBuffer.LastFlushPersistedCount,
                 LastFlushCompletedAtUtc = runtimeBuffer.LastFlushCompletedAtUtc,
                 LastFlushError = runtimeBuffer.LastFlushError,
+                LastPersistDurationMs = runtimeBuffer.LastPersistDurationMs,
+                LastEnqueuedAssignmentCount = runtimeBuffer.LastEnqueuedAssignmentCount,
+                LastAssignmentsEnqueuedAtUtc = runtimeBuffer.LastAssignmentsEnqueuedAtUtc,
+                AssignmentProcessingQueue = new AssignmentProcessingQueueViewModel
+                {
+                    QueueDepth = runtimeBuffer.AssignmentProcessingQueue.QueueDepth,
+                    PendingAssignmentCount = runtimeBuffer.AssignmentProcessingQueue.PendingAssignmentCount,
+                    TotalEnqueueCount = runtimeBuffer.AssignmentProcessingQueue.TotalEnqueueCount,
+                    CoalescedDuplicateCount = runtimeBuffer.AssignmentProcessingQueue.CoalescedDuplicateCount,
+                    DequeueCount = runtimeBuffer.AssignmentProcessingQueue.DequeueCount,
+                    ProcessedCount = runtimeBuffer.AssignmentProcessingQueue.ProcessedCount,
+                    FailedCount = runtimeBuffer.AssignmentProcessingQueue.FailedCount,
+                    LastEnqueueAtUtc = runtimeBuffer.AssignmentProcessingQueue.LastEnqueueAtUtc,
+                    LastDequeuedAtUtc = runtimeBuffer.AssignmentProcessingQueue.LastDequeuedAtUtc,
+                    LastProcessedAtUtc = runtimeBuffer.AssignmentProcessingQueue.LastProcessedAtUtc,
+                    LastFailureAtUtc = runtimeBuffer.AssignmentProcessingQueue.LastFailureAtUtc,
+                    LastFailureError = runtimeBuffer.AssignmentProcessingQueue.LastFailureError
+                },
                 QueueUtilizationPercent = queueUtilizationPercent,
                 BufferDropRatePercent = bufferDropRatePercent,
                 FlushSuccessRatePercent = flushSuccessRatePercent

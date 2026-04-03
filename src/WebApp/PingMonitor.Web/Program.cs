@@ -18,6 +18,8 @@ using PingMonitor.Web.Services.Groups;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Metrics;
+using PingMonitor.Web.Services.State;
+using PingMonitor.Web.Services.Background;
 using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.Services.Status;
 using PingMonitor.Web.Services.Security;
@@ -156,6 +158,7 @@ builder.Services.AddScoped<IResultIngestionService, ResultIngestionService>();
 builder.Services.AddSingleton<IBufferedResultIngestionService, BufferedResultIngestionService>();
 builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
 builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();
+builder.Services.AddSingleton<IAssignmentProcessingQueue, AssignmentProcessingQueue>();
 builder.Services.AddScoped<IEventLogService, EventLogService>();
 builder.Services.AddScoped<IEventLogQueryService, EventLogQueryService>();
 builder.Services.AddScoped<ISecurityAuthLogService, SecurityAuthLogService>();
@@ -213,6 +216,7 @@ builder.Services.AddSingleton<IConfigurationChangeBackupSignal>(sp => sp.GetRequ
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 builder.Services.AddHostedService<AgentStatusTransitionBackgroundService>();
 builder.Services.AddHostedService<BufferedResultFlushBackgroundService>();
+builder.Services.AddHostedService<AssignmentProcessingBackgroundService>();
 builder.Services.AddHostedService<TelegramPollingBackgroundService>();
 
 var app = builder.Build();

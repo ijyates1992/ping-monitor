@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.BufferedResults;
+using PingMonitor.Web.Services.State;
 using PingMonitor.Web.Services.StartupGate;
 using System.Data;
 
@@ -12,17 +13,20 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly IBufferedResultIngestionService _bufferedResultIngestionService;
+    private readonly IAssignmentProcessingQueue _assignmentProcessingQueue;
     private readonly IOptions<ResultBufferOptions> _resultBufferOptions;
     private readonly IOptions<StartupGateOptions> _startupGateOptions;
 
     public DatabaseStatusQueryService(
         PingMonitorDbContext dbContext,
         IBufferedResultIngestionService bufferedResultIngestionService,
+        IAssignmentProcessingQueue assignmentProcessingQueue,
         IOptions<ResultBufferOptions> resultBufferOptions,
         IOptions<StartupGateOptions> startupGateOptions)
     {
         _dbContext = dbContext;
         _bufferedResultIngestionService = bufferedResultIngestionService;
+        _assignmentProcessingQueue = assignmentProcessingQueue;
         _resultBufferOptions = resultBufferOptions;
         _startupGateOptions = startupGateOptions;
     }
@@ -46,6 +50,7 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
         var indexBytes = tables.Sum(x => x.IndexBytes);
         var bufferSnapshot = _bufferedResultIngestionService.GetSnapshot();
         var bufferOptions = _resultBufferOptions.Value;
+        var assignmentQueueSnapshot = _assignmentProcessingQueue.GetSnapshot();
 
         return new DatabaseStatusSnapshot
         {
@@ -75,7 +80,25 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
                 LastFlushAttemptedCount = bufferSnapshot.LastFlushAttemptedCount,
                 LastFlushPersistedCount = bufferSnapshot.LastFlushPersistedCount,
                 LastFlushCompletedAtUtc = bufferSnapshot.LastFlushCompletedAtUtc,
-                LastFlushError = bufferSnapshot.LastFlushError
+                LastFlushError = bufferSnapshot.LastFlushError,
+                LastPersistDurationMs = bufferSnapshot.LastPersistDurationMs,
+                LastEnqueuedAssignmentCount = bufferSnapshot.LastEnqueuedAssignmentCount,
+                LastAssignmentsEnqueuedAtUtc = bufferSnapshot.LastAssignmentsEnqueuedAtUtc,
+                AssignmentProcessingQueue = new AssignmentProcessingQueueRuntimeSnapshot
+                {
+                    QueueDepth = assignmentQueueSnapshot.QueueDepth,
+                    PendingAssignmentCount = assignmentQueueSnapshot.PendingAssignmentCount,
+                    TotalEnqueueCount = assignmentQueueSnapshot.TotalEnqueueCount,
+                    CoalescedDuplicateCount = assignmentQueueSnapshot.CoalescedDuplicateCount,
+                    DequeueCount = assignmentQueueSnapshot.DequeueCount,
+                    ProcessedCount = assignmentQueueSnapshot.ProcessedCount,
+                    FailedCount = assignmentQueueSnapshot.FailedCount,
+                    LastEnqueueAtUtc = assignmentQueueSnapshot.LastEnqueueAtUtc,
+                    LastDequeuedAtUtc = assignmentQueueSnapshot.LastDequeuedAtUtc,
+                    LastProcessedAtUtc = assignmentQueueSnapshot.LastProcessedAtUtc,
+                    LastFailureAtUtc = assignmentQueueSnapshot.LastFailureAtUtc,
+                    LastFailureError = assignmentQueueSnapshot.LastFailureError
+                }
             }
         };
     }
