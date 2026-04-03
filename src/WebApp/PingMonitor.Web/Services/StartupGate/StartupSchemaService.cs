@@ -13,7 +13,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
     [
         "AppSchemaInfo",
         "AspNetRoles",
+        "AspNetRoleClaims",
+        "AspNetUserClaims",
+        "AspNetUserLogins",
         "AspNetUserRoles",
+        "AspNetUserTokens",
         "AspNetUsers",
         "Agents",
         "AgentHeartbeatHistory",
