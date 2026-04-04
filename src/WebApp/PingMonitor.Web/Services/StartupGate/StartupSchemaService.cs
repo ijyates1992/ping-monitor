@@ -162,30 +162,6 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "LastSuccessfulCheckUtc",
         "UpdatedAtUtc"
     ];
-    private static readonly string[] RequiredAssignmentRttMinuteBucketColumns =
-    [
-        "AssignmentId",
-        "BucketStartUtc",
-        "SampleCount",
-        "SumRttMs",
-        "MinRttMs",
-        "MaxRttMs",
-        "FirstRttMs",
-        "LastRttMs",
-        "FirstSampleUtc",
-        "LastSampleUtc",
-        "IntraBucketDeltaSumMs",
-        "UpdatedAtUtc"
-    ];
-    private static readonly string[] RequiredAssignmentStateIntervalColumns =
-    [
-        "AssignmentStateIntervalId",
-        "AssignmentId",
-        "State",
-        "StartedAtUtc",
-        "EndedAtUtc",
-        "UpdatedAtUtc"
-    ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
@@ -283,20 +259,6 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"AssignmentMetrics24h table is missing required columns: {string.Join(", ", missingAssignmentMetrics24hColumns)}.");
-            return status;
-        }
-        var missingAssignmentRttMinuteBucketColumns = await GetMissingAssignmentRttMinuteBucketColumnsAsync(connection, cancellationToken);
-        if (missingAssignmentRttMinuteBucketColumns.Length > 0)
-        {
-            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
-            status.Diagnostics.Add($"AssignmentRttMinuteBuckets table is missing required columns: {string.Join(", ", missingAssignmentRttMinuteBucketColumns)}.");
-            return status;
-        }
-        var missingAssignmentStateIntervalColumns = await GetMissingAssignmentStateIntervalColumnsAsync(connection, cancellationToken);
-        if (missingAssignmentStateIntervalColumns.Length > 0)
-        {
-            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
-            status.Diagnostics.Add($"AssignmentStateIntervals table is missing required columns: {string.Join(", ", missingAssignmentStateIntervalColumns)}.");
             return status;
         }
 
@@ -729,8 +691,6 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
-        await EnsureAssignmentRttMinuteBucketColumnsAsync(dbContext, cancellationToken);
-        await EnsureAssignmentStateIntervalColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
@@ -906,50 +866,6 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
 
         return RequiredAssignmentMetrics24hColumns
-            .Where(column => !existingColumns.Contains(column))
-            .ToArray();
-    }
-    
-    private static async Task<string[]> GetMissingAssignmentRttMinuteBucketColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
-    {
-        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COLUMN_NAME
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'AssignmentRttMinuteBuckets';
-            """;
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            existingColumns.Add(reader.GetString(0));
-        }
-
-        return RequiredAssignmentRttMinuteBucketColumns
-            .Where(column => !existingColumns.Contains(column))
-            .ToArray();
-    }
-    
-    private static async Task<string[]> GetMissingAssignmentStateIntervalColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
-    {
-        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COLUMN_NAME
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'AssignmentStateIntervals';
-            """;
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            existingColumns.Add(reader.GetString(0));
-        }
-
-        return RequiredAssignmentStateIntervalColumns
             .Where(column => !existingColumns.Contains(column))
             .ToArray();
     }
@@ -1591,44 +1507,6 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 cancellationToken);
         }
     }
-    
-    private static async Task EnsureAssignmentRttMinuteBucketColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
-    {
-        await using var connection = dbContext.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync(cancellationToken);
-        }
-
-        if (!await HasAssignmentRttMinuteBucketColumnAsync(connection, "IntraBucketDeltaSumMs", cancellationToken))
-        {
-            await dbContext.Database.ExecuteSqlRawAsync(
-                """
-                ALTER TABLE `AssignmentRttMinuteBuckets`
-                ADD COLUMN `IntraBucketDeltaSumMs` double NOT NULL DEFAULT 0;
-                """,
-                cancellationToken);
-        }
-    }
-    
-    private static async Task EnsureAssignmentStateIntervalColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
-    {
-        await using var connection = dbContext.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync(cancellationToken);
-        }
-
-        if (!await HasAssignmentStateIntervalColumnAsync(connection, "UpdatedAtUtc", cancellationToken))
-        {
-            await dbContext.Database.ExecuteSqlRawAsync(
-                """
-                ALTER TABLE `AssignmentStateIntervals`
-                ADD COLUMN `UpdatedAtUtc` datetime(6) NOT NULL DEFAULT UTC_TIMESTAMP(6);
-                """,
-                cancellationToken);
-        }
-    }
 
     private static async Task<bool> HasEndpointColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
     {
@@ -1656,42 +1534,6 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
               AND table_name = 'AssignmentMetrics24h'
-              AND column_name = @columnName;
-            """;
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "@columnName";
-        parameter.Value = columnName;
-        command.Parameters.Add(parameter);
-
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
-    }
-    
-    private static async Task<bool> HasAssignmentRttMinuteBucketColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'AssignmentRttMinuteBuckets'
-              AND column_name = @columnName;
-            """;
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "@columnName";
-        parameter.Value = columnName;
-        command.Parameters.Add(parameter);
-
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
-    }
-    
-    private static async Task<bool> HasAssignmentStateIntervalColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'AssignmentStateIntervals'
               AND column_name = @columnName;
             """;
         var parameter = command.CreateParameter();
