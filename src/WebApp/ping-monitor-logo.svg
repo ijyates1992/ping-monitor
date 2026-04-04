@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="900" height="220" viewBox="0 0 900 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ring" x1="20" y1="20" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#4ADE80"/>
+    </linearGradient>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .brand { font: 700 46px 'Segoe UI', Inter, Arial, sans-serif; fill: #E5EEF8; letter-spacing: 0.2px; }
+      .sub { font: 500 22px 'Segoe UI', Inter, Arial, sans-serif; fill: #9FB3C8; letter-spacing: 0.2px; }
+      .markline { stroke: url(#ring); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+      .nodeline { stroke: #2A4A5A; stroke-width: 4; stroke-linecap: round; }
+      .node { fill: #0F172A; stroke: url(#ring); stroke-width: 5; }
+      .nodeSolid { fill: url(#accent); }
+    </style>
+  </defs>
+
+  <g transform="translate(20,20)">
+    <circle cx="80" cy="80" r="68" stroke="url(#ring)" stroke-width="6" opacity="0.25"/>
+    <circle cx="80" cy="80" r="48" stroke="url(#ring)" stroke-width="6" opacity="0.45"/>
+    <path class="nodeline" d="M80 80 L35 40 M80 80 L138 50 M80 80 L145 120 M80 80 L60 145 M80 80 L25 95"/>
+    <circle class="node" cx="80" cy="80" r="16"/>
+    <circle class="nodeSolid" cx="35" cy="40" r="8"/>
+    <circle class="nodeSolid" cx="138" cy="50" r="8"/>
+    <circle class="nodeSolid" cx="145" cy="120" r="8"/>
+    <circle class="nodeSolid" cx="60" cy="145" r="8"/>
+    <circle class="nodeSolid" cx="25" cy="95" r="8"/>
+    <path class="markline" filter="url(#softGlow)"
+          d="M28 88 H52 L64 66 L77 112 L96 53 L111 88 H135"/>
+  </g>
+
+  <g transform="translate(220,66)">
+    <text x="0" y="0" class="brand">Ping Monitor</text>
+    <text x="0" y="42" class="sub">by ijyates1992</text>
+  </g>
+</svg>
