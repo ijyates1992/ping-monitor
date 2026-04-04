@@ -1,27 +1,63 @@
 # Network Monitoring Web App
 
-A lightweight, agent-based network monitoring platform with a .NET 10 control plane and Python execution agents.
+## Why this exists
 
-This system focuses on **reliable uptime monitoring**, **clean alerting**, and **predictable behaviour**, without the complexity of a full NMS.
+I built this because I wanted a simple, reliable way to monitor connectivity between multiple systems without relying on third-party services or overcomplicated enterprise tooling.
+
+Most of the existing solutions I looked at were either:
+- too heavy and full of features I didn’t need
+- too basic and missing useful features
+- tied to cloud platforms or subscriptions
+- or just not very transparent about what they were actually doing
+
+So like most things, I ended up building my own.
+
+This project is designed to be:
+- self-hosted
+- easy to understand
+- predictable in how it behaves
+- and focused on doing one job well — monitoring endpoint connectivity and surfacing useful information about it
 
 ---
 
-## Overview
+## A quick note
 
-This project provides:
+I’m not a professional software developer — my background is more in systems, electronics, and practical engineering. This project is very much built from a “make it work properly in the real world” mindset rather than trying to be clever or academic.
 
-- Central web application (control plane)
-- Distributed agents (execution plane)
-- ICMP-based monitoring (initially)
-- Dependency-aware alerting (prevents alert storms)
-- Uptime tracking and historical data
-- Mobile-friendly dashboard
+Because of that:
+- the design is intentionally simple where possible
+- features are added based on real-world need rather than theory
+- clarity and reliability are prioritised over complexity
+- the code is written almost entirely with the help of AI tools
 
-The design prioritises:
+---
 
-- correctness over cleverness  
-- visibility over automation  
-- simplicity over feature bloat  
+## What to expect
+
+This is an early preview release.
+
+It appears stable in testing so far, but testing is far from complete and there may still be issues that haven’t been discovered yet. You can expect:
+- improvements to the UI
+- additional features over time
+- occasional rough edges
+
+If you’re happy running something that’s actively being developed and improving, it should already be usable.
+
+---
+
+## What this is (and isn’t)
+
+This is:
+- a lightweight, self-hosted network monitoring tool
+- designed for visibility and control
+- suitable for small to medium deployments
+
+This is not:
+- a full enterprise monitoring platform
+- a SaaS product
+- or something trying to do everything
+
+It’s intentionally focused.
 
 ---
 
@@ -110,18 +146,6 @@ States:
   - **replace mode** (destructive, section-scoped delete + restore; requires typing `REPLACE`)
 - Operational data restore is intentionally not implemented.
 - Logs are treated as first-class outputs
-
----
-
-## What This Is NOT
-
-- Not a full network management system (NMS)
-- Not an auto-remediation platform
-- Not SNMP-heavy or topology-driven (yet)
-- Not a replacement for enterprise tools like PRTG, Zabbix, etc.
-
-This is intentionally focused on:
-> **“Is it up, and if not, why?”**
 
 ---
 
