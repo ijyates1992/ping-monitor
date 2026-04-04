@@ -1,9 +1,10 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Release',
-    [switch]$SkipTests,
-    [switch]$SkipPythonChecks
+    [Parameter(Mandatory = $true)]
+    [string]$Version,
+
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9.-]*$')]
+    [string]$Runtime = 'win-x64'
 )
 
 Set-StrictMode -Version Latest
@@ -40,142 +41,244 @@ function Invoke-External {
     }
 }
 
-function Get-PythonCommand {
-    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
-    if ($pythonCommand) {
-        return @($pythonCommand.Source)
-    }
+function Remove-PathIfPresent {
+    param([string]$Path)
 
-    $pyCommand = Get-Command py -ErrorAction SilentlyContinue
-    if ($pyCommand) {
-        return @($pyCommand.Source, '-3')
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force
     }
-
-    return $null
 }
+
+function Copy-DirectoryContents {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceDirectory,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationDirectory
+    )
+
+    New-Item -ItemType Directory -Path $DestinationDirectory -Force | Out-Null
+
+    $entries = Get-ChildItem -LiteralPath $SourceDirectory -Force
+    foreach ($entry in $entries) {
+        $targetPath = Join-Path $DestinationDirectory $entry.Name
+        if ($entry.PSIsContainer) {
+            Copy-Item -LiteralPath $entry.FullName -Destination $targetPath -Recurse -Force
+            continue
+        }
+
+        Copy-Item -LiteralPath $entry.FullName -Destination $targetPath -Force
+    }
+}
+
+if ($Version -cnotmatch '^V\d+\.\d+\.\d+$') {
+    Fail-Build "Invalid version '$Version'. Required format: ^V\d+\.\d+\.\d+$"
+}
+
+$numericVersion = $Version.Substring(1)
+$buildTimestampUtc = [DateTimeOffset]::UtcNow.ToString('o')
 
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDirectory '..')).Path
 Set-Location $repoRoot
 
-$globalJsonPath = Join-Path $repoRoot 'global.json'
 $webProjectPath = Join-Path $repoRoot 'src/WebApp/PingMonitor.Web/PingMonitor.Web.csproj'
-$agentRoot = Join-Path $repoRoot 'src/Agent'
+$docsPath = Join-Path $repoRoot 'docs'
+$configSampleSpecs = @(
+    @{ Source = Join-Path $repoRoot 'src/WebApp/PingMonitor.Web/appsettings.json'; Target = 'webapp.appsettings.json' },
+    @{ Source = Join-Path $repoRoot 'src/Agent/.env.example'; Target = 'agent.env.example' }
+)
+
+$releaseRoot = Join-Path $repoRoot 'artifacts/releases'
+$publishRoot = Join-Path $releaseRoot 'publish'
+$packageBaseName = "PingMonitor-$Version-$Runtime"
+$stagingRoot = Join-Path $releaseRoot $packageBaseName
+$publishOutputPath = Join-Path $publishRoot $Runtime
+$zipPath = Join-Path $releaseRoot "$packageBaseName.zip"
+$checksumPath = Join-Path $releaseRoot 'SHA256.txt'
+$manifestPath = Join-Path $stagingRoot 'manifest.json'
 
 if (-not (Test-Path -LiteralPath $webProjectPath)) {
     Fail-Build "Expected web project was not found at '$webProjectPath'."
 }
 
-Write-Step 'Starting repository build'
-Write-Info "Repository root: $repoRoot"
-Write-Info "Configuration: $Configuration"
-Write-Info "Web project: $webProjectPath"
-
-Write-Step 'Checking .NET tooling'
 $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
 if (-not $dotnetCommand) {
     Fail-Build 'The dotnet CLI is required but was not found on PATH.'
 }
 
-Invoke-External -FilePath $dotnetCommand.Source -Arguments @('--info')
-
-if (Test-Path -LiteralPath $globalJsonPath) {
-    Write-Info "Using pinned SDK configuration from $globalJsonPath"
-    $globalJson = Get-Content -LiteralPath $globalJsonPath -Raw | ConvertFrom-Json
-    $requiredSdkVersion = $globalJson.sdk.version
-    if (-not $requiredSdkVersion) {
-        Fail-Build "global.json exists but does not define sdk.version."
+$gitCommand = Get-Command git -ErrorAction SilentlyContinue
+$commitHash = $null
+if ($gitCommand) {
+    $gitStatus = & $gitCommand.Source status --porcelain
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($gitStatus -join ''))) {
+        Write-Warning 'Git working tree is not clean. Release artifacts will include uncommitted changes.'
     }
 
-    $installedSdks = & $dotnetCommand.Source --list-sdks
-    if ($LASTEXITCODE -ne 0) {
-        Fail-Build 'Unable to list installed .NET SDKs.'
+    $resolvedCommitHash = & $gitCommand.Source rev-parse --short=12 HEAD
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($resolvedCommitHash)) {
+        $commitHash = $resolvedCommitHash.Trim()
     }
-
-    if (-not ($installedSdks | Where-Object { $_ -like "$requiredSdkVersion*" })) {
-        Fail-Build "Required .NET SDK version $requiredSdkVersion from global.json is not installed."
-    }
-
-    Write-Info "Verified required .NET SDK version $requiredSdkVersion is installed"
-} else {
-    Write-Info 'No global.json found; dotnet will use the default SDK selection'
 }
 
-Write-Step 'Restoring the web application'
+Write-Step 'Starting deterministic release packaging'
+Write-Info "Repository root: $repoRoot"
+Write-Info "Version: $Version"
+Write-Info "Runtime: $Runtime"
+Write-Info "Package: $packageBaseName"
+
+Write-Step 'Cleaning previous release output'
+Remove-PathIfPresent -Path $publishRoot
+Remove-PathIfPresent -Path $stagingRoot
+Remove-PathIfPresent -Path $zipPath
+Remove-PathIfPresent -Path $checksumPath
+New-Item -ItemType Directory -Path $publishRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
+
+Write-Step 'Restoring and publishing web app (self-contained)'
 Invoke-External -FilePath $dotnetCommand.Source -Arguments @('restore', $webProjectPath)
+Invoke-External -FilePath $dotnetCommand.Source -Arguments @(
+    'publish',
+    $webProjectPath,
+    '--configuration', 'Release',
+    '--runtime', $Runtime,
+    '--self-contained', 'true',
+    '--output', $publishOutputPath,
+    "/p:Version=$numericVersion",
+    "/p:AssemblyVersion=$numericVersion.0",
+    "/p:FileVersion=$numericVersion.0",
+    "/p:InformationalVersion=$numericVersion",
+    '/p:ContinuousIntegrationBuild=true'
+)
 
-Write-Step 'Building the web application'
-Invoke-External -FilePath $dotnetCommand.Source -Arguments @('build', $webProjectPath, '--configuration', $Configuration, '--no-restore')
+Write-Step 'Validating required source assets'
+if (-not (Test-Path -LiteralPath $docsPath -PathType Container)) {
+    Fail-Build "Required docs folder not found at '$docsPath'."
+}
 
-$testProjects = @(Get-ChildItem -Path $repoRoot -Recurse -Filter '*.csproj' -File |
-    Where-Object {
-        $_.FullName -ne $webProjectPath -and (
-            $_.BaseName -match '(^|\.)Tests?$' -or
-            $_.DirectoryName -match '([\\/])tests?([\\/]|$)'
-        )
-    } |
-    Sort-Object FullName)
-
-if ($SkipTests) {
-    Write-Step 'Skipping .NET tests'
-    Write-Info 'Tests were skipped because -SkipTests was specified'
-} elseif ($testProjects.Count -eq 0) {
-    Write-Step 'Checking for .NET test projects'
-    Write-Info 'No .NET test projects were found; continuing without running tests'
-} else {
-    Write-Step 'Running .NET tests'
-    foreach ($testProject in $testProjects) {
-        Write-Info "Testing $($testProject.FullName)"
-        Invoke-External -FilePath $dotnetCommand.Source -Arguments @('test', $testProject.FullName, '--configuration', $Configuration, '--no-build', '--verbosity', 'minimal')
+foreach ($sample in $configSampleSpecs) {
+    if (-not (Test-Path -LiteralPath $sample.Source -PathType Leaf)) {
+        Fail-Build "Required config sample file not found at '$($sample.Source)'."
     }
 }
 
-if ($SkipPythonChecks) {
-    Write-Step 'Skipping Python syntax checks'
-    Write-Info 'Python checks were skipped because -SkipPythonChecks was specified'
-} else {
-    Write-Step 'Running Python syntax checks'
-    if (-not (Test-Path -LiteralPath $agentRoot)) {
-        Fail-Build "Expected agent directory was not found at '$agentRoot'."
-    }
+Write-Step 'Validating publish output'
+if (-not (Test-Path -LiteralPath $publishOutputPath -PathType Container)) {
+    Fail-Build "Publish output directory was not created at '$publishOutputPath'."
+}
 
-    $pythonCommand = @(Get-PythonCommand)
-    if (-not $pythonCommand) {
-        Fail-Build 'Python was not found. Install Python or rerun with -SkipPythonChecks.'
-    }
+$publishedFiles = Get-ChildItem -LiteralPath $publishOutputPath -Recurse -File
+if ($publishedFiles.Count -eq 0) {
+    Fail-Build "Publish output directory '$publishOutputPath' is empty."
+}
 
-    $pythonFiles = @(Get-ChildItem -Path $agentRoot -Recurse -Filter '*.py' -File | Sort-Object FullName)
-    if ($pythonFiles.Count -eq 0) {
-        Write-Info 'No Python files were found under src/Agent; nothing to check'
-    } else {
-        Write-Info "Checking $($pythonFiles.Count) Python file(s) under $agentRoot"
-        $pythonExecutable = $pythonCommand[0]
-        $pythonArgs = @()
-        if ($pythonCommand.Count -gt 1) {
-            $pythonArgs += $pythonCommand[1..($pythonCommand.Count - 1)]
-        }
-
-        foreach ($pythonFile in $pythonFiles) {
-            Write-Info "Compiling $($pythonFile.FullName)"
-            Invoke-External -FilePath $pythonExecutable -Arguments ($pythonArgs + @('-m', 'py_compile', $pythonFile.FullName))
-        }
+if ($Runtime -like 'win-*') {
+    $expectedExecutablePath = Join-Path $publishOutputPath 'PingMonitor.Web.exe'
+    if (-not (Test-Path -LiteralPath $expectedExecutablePath -PathType Leaf)) {
+        Fail-Build "Expected self-contained executable not found at '$expectedExecutablePath'."
     }
 }
 
-Write-Step 'Build completed successfully'
-Write-Info "Built web project: $webProjectPath"
-if ($SkipTests) {
-    Write-Info 'Tests: skipped by parameter'
-} elseif ($testProjects.Count -eq 0) {
-    Write-Info 'Tests: no .NET test projects found'
-} else {
-    Write-Info "Tests: completed for $($testProjects.Count) project(s)"
+$requiredAgentAssets = @(
+    'Agent/README.md',
+    'Agent/requirements.txt',
+    'Agent/run-agent.cmd',
+    'Agent/app/main.py'
+)
+
+foreach ($relativeAssetPath in $requiredAgentAssets) {
+    $assetPath = Join-Path $publishOutputPath $relativeAssetPath
+    if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
+        Fail-Build "Required agent deployment asset missing from publish output: '$relativeAssetPath'."
+    }
 }
 
-if ($SkipPythonChecks) {
-    Write-Info 'Python checks: skipped by parameter'
-} else {
-    Write-Info 'Python checks: completed'
+Write-Step 'Injecting release version into app metadata source'
+$appSettingsPath = Join-Path $publishOutputPath 'appsettings.json'
+if (-not (Test-Path -LiteralPath $appSettingsPath -PathType Leaf)) {
+    Fail-Build "Published appsettings.json was not found at '$appSettingsPath'."
 }
+
+$appSettings = Get-Content -LiteralPath $appSettingsPath -Raw | ConvertFrom-Json
+if (-not $appSettings.ApplicationMetadata) {
+    $appSettings | Add-Member -NotePropertyName 'ApplicationMetadata' -NotePropertyValue ([PSCustomObject]@{})
+}
+
+if (-not ($appSettings.ApplicationMetadata.PSObject.Properties.Name -contains 'Version')) {
+    $appSettings.ApplicationMetadata | Add-Member -NotePropertyName 'Version' -NotePropertyValue $Version
+} else {
+    $appSettings.ApplicationMetadata.Version = $Version
+}
+$appSettings | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $appSettingsPath -Encoding UTF8NoBOM
+
+$injectedSettings = Get-Content -LiteralPath $appSettingsPath -Raw | ConvertFrom-Json
+if (-not $injectedSettings.ApplicationMetadata -or $injectedSettings.ApplicationMetadata.Version -ne $Version) {
+    Fail-Build 'Version injection failed. ApplicationMetadata.Version was not updated as expected.'
+}
+
+if ((Get-Content -LiteralPath $appSettingsPath -Raw) -match 'Internal dev build') {
+    Fail-Build "Version injection verification failed. 'Internal dev build' label is still present in appsettings.json."
+}
+
+Write-Step 'Building release staging layout'
+$appStagingPath = Join-Path $stagingRoot 'app'
+$docsStagingPath = Join-Path $stagingRoot 'docs'
+$configSamplesStagingPath = Join-Path $stagingRoot 'config-samples'
+
+New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+Copy-DirectoryContents -SourceDirectory $publishOutputPath -DestinationDirectory $appStagingPath
+Copy-DirectoryContents -SourceDirectory $docsPath -DestinationDirectory $docsStagingPath
+New-Item -ItemType Directory -Path $configSamplesStagingPath -Force | Out-Null
+foreach ($sample in $configSampleSpecs) {
+    Copy-Item -LiteralPath $sample.Source -Destination (Join-Path $configSamplesStagingPath $sample.Target) -Force
+}
+
+$manifest = [ordered]@{
+    appName = 'Ping Monitor'
+    version = $Version
+    buildTimestampUtc = $buildTimestampUtc
+    packageFileName = "$packageBaseName.zip"
+    runtime = $Runtime
+    commitHash = $commitHash
+}
+
+$manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8NoBOM
+
+if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    Fail-Build "manifest.json was not created at '$manifestPath'."
+}
+
+if (-not (Test-Path -LiteralPath $appStagingPath -PathType Container)) {
+    Fail-Build "Staging app directory missing at '$appStagingPath'."
+}
+
+if (-not (Test-Path -LiteralPath $docsStagingPath -PathType Container)) {
+    Fail-Build "Staging docs directory missing at '$docsStagingPath'."
+}
+
+if (-not (Test-Path -LiteralPath $configSamplesStagingPath -PathType Container)) {
+    Fail-Build "Staging config-samples directory missing at '$configSamplesStagingPath'."
+}
+
+Write-Step 'Creating release archive'
+Compress-Archive -Path $stagingRoot -DestinationPath $zipPath -CompressionLevel Optimal
+if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
+    Fail-Build "Release archive was not created at '$zipPath'."
+}
+
+Write-Step 'Generating checksum metadata'
+$hashInfo = Get-FileHash -LiteralPath $zipPath -Algorithm SHA256
+"$($hashInfo.Hash)  $($packageBaseName).zip" | Set-Content -LiteralPath $checksumPath -Encoding UTF8NoBOM
+
+if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) {
+    Fail-Build "Checksum file was not created at '$checksumPath'."
+}
+
+Write-Step 'Release package completed successfully'
+Write-Info "Staging root: $stagingRoot"
+Write-Info "Release zip: $zipPath"
+Write-Info "Manifest: $manifestPath"
+Write-Info "Checksum: $checksumPath"
+Write-Info "Commit hash: $($commitHash ?? 'unavailable')"
 
 exit 0
