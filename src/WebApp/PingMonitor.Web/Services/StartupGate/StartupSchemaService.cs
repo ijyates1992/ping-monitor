@@ -685,31 +685,29 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
     private static async Task<string[]> GetMissingRequiredTablesAsync(MySqlConnection connection, CancellationToken cancellationToken)
     {
-        var missingTables = new List<string>();
-        foreach (var requiredTable in RequiredTables)
+        var existingTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        var parameterNames = new List<string>(RequiredTables.Length);
+        for (var index = 0; index < RequiredTables.Length; index++)
         {
-            if (!await TableExistsAsync(connection, requiredTable, cancellationToken))
-            {
-                missingTables.Add(requiredTable);
-            }
+            var parameterName = $"@tableName{index}";
+            parameterNames.Add(parameterName);
+            command.Parameters.AddWithValue(parameterName, RequiredTables[index]);
         }
 
-        return [.. missingTables];
-    }
-
-    private static async Task<bool> TableExistsAsync(MySqlConnection connection, string tableName, CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT 1
+        command.CommandText = $"""
+            SELECT table_name
             FROM information_schema.tables
             WHERE table_schema = DATABASE()
-              AND LOWER(table_name) = LOWER(@tableName)
-            LIMIT 1;
+              AND LOWER(table_name) IN ({string.Join(", ", parameterNames.Select(static parameterName => $"LOWER({parameterName})"))});
             """;
-        command.Parameters.AddWithValue("@tableName", tableName);
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        return result is not null;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingTables.Add(reader.GetString(0));
+        }
+
+        return [.. RequiredTables.Where(table => !existingTables.Contains(table))];
     }
 
     private static async Task EnsureMetricsIndexesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
