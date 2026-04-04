@@ -1,0 +1,128 @@
+@model PingMonitor.Web.ViewModels.About.AboutPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 760px; margin: 0 auto; padding: 1rem; }
+
+        .about-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: 0 1px 2px rgba(16,24,40,.08);
+            padding: 1rem;
+            display: grid;
+            gap: 1rem;
+        }
+
+        .about-head {
+            display: flex;
+            align-items: center;
+            gap: .85rem;
+            min-width: 0;
+        }
+
+        .about-logo {
+            width: 48px;
+            height: 48px;
+            flex: 0 0 48px;
+        }
+
+        .about-head h1 {
+            margin: 0;
+            font-size: 1.35rem;
+        }
+
+        .about-subtitle {
+            margin: .15rem 0 0 0;
+            color: var(--muted);
+        }
+
+        .about-note {
+            margin: 0;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface-2);
+            padding: .65rem .8rem;
+        }
+
+        .about-meta {
+            display: grid;
+            gap: .75rem;
+            margin: 0;
+        }
+
+        .about-meta > div {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface-1);
+            padding: .65rem .8rem;
+        }
+
+        .about-meta dt {
+            font-weight: 700;
+            margin: 0 0 .2rem 0;
+        }
+
+        .about-meta dd {
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+
+        @@media (min-width: 720px) {
+            .about-card {
+                padding: 1.15rem;
+            }
+
+            .about-meta {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main>
+    <section class="about-card" aria-labelledby="about-title">
+        <div class="about-head">
+            <img class="about-logo" src="/assets/branding/ping-monitor-logo-icon.svg" alt="@Model.ApplicationName logo" />
+            <div>
+                <h1 id="about-title">@Model.ApplicationName</h1>
+                <p class="about-subtitle">@Model.Attribution</p>
+            </div>
+        </div>
+
+        <p>@Model.Description</p>
+
+        @if (!string.IsNullOrWhiteSpace(Model.PreviewNote))
+        {
+            <p class="about-note">@Model.PreviewNote</p>
+        }
+
+        <dl class="about-meta">
+            <div>
+                <dt>Version</dt>
+                <dd>@Model.Version</dd>
+            </div>
+            <div>
+                <dt>Licence</dt>
+                <dd>@Model.Licence</dd>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.RepositoryUrl))
+            {
+                <div>
+                    <dt>Project</dt>
+                    <dd><a href="@Model.RepositoryUrl" target="_blank" rel="noopener noreferrer">@Model.RepositoryUrl</a></dd>
+                </div>
+            }
+        </dl>
+    </section>
+</main>
+</body>
+</html>
