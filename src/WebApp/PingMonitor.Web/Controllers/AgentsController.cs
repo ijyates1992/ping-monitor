@@ -19,15 +19,18 @@ public sealed class AgentsController : Controller
     private readonly IAgentProvisioningService _agentProvisioningService;
     private readonly IAgentManagementQueryService _agentManagementQueryService;
     private readonly IEventLogQueryService _eventLogQueryService;
+    private readonly IApplicationSettingsService _applicationSettingsService;
 
     public AgentsController(
         IAgentProvisioningService agentProvisioningService,
         IAgentManagementQueryService agentManagementQueryService,
-        IEventLogQueryService eventLogQueryService)
+        IEventLogQueryService eventLogQueryService,
+        IApplicationSettingsService applicationSettingsService)
     {
         _agentProvisioningService = agentProvisioningService;
         _agentManagementQueryService = agentManagementQueryService;
         _eventLogQueryService = eventLogQueryService;
+        _applicationSettingsService = applicationSettingsService;
     }
 
     [HttpGet("")]
@@ -60,9 +63,43 @@ public sealed class AgentsController : Controller
     }
 
     [HttpGet("deploy")]
-    public IActionResult Deploy()
+    public async Task<IActionResult> Deploy(CancellationToken cancellationToken)
     {
-        return View("Deploy", new DeployAgentPageViewModel());
+        return View("Deploy", await BuildDeployViewModelAsync(cancellationToken));
+    }
+
+    [HttpPost("deploy/site-url")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveSiteUrl([FromForm] DeployAgentPageViewModel model, CancellationToken cancellationToken)
+    {
+        ValidateDeploySiteUrl(model.SiteUrl);
+
+        if (ModelState.ContainsKey(nameof(DeployAgentPageViewModel.AgentName)))
+        {
+            ModelState[nameof(DeployAgentPageViewModel.AgentName)]!.ValidationState = Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Valid;
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View("Deploy", await BuildDeployViewModelAsync(cancellationToken, model));
+        }
+
+        var current = await _applicationSettingsService.GetCurrentAsync(cancellationToken);
+        await _applicationSettingsService.UpdateAsync(
+            new UpdateApplicationSettingsCommand
+            {
+                SiteUrl = model.SiteUrl,
+                DefaultPingIntervalSeconds = current.DefaultPingIntervalSeconds,
+                DefaultRetryIntervalSeconds = current.DefaultRetryIntervalSeconds,
+                DefaultTimeoutMs = current.DefaultTimeoutMs,
+                DefaultFailureThreshold = current.DefaultFailureThreshold,
+                DefaultRecoveryThreshold = current.DefaultRecoveryThreshold
+            },
+            cancellationToken);
+
+        var updatedModel = await BuildDeployViewModelAsync(cancellationToken, model);
+        updatedModel.SiteUrlSaved = true;
+        return View("Deploy", updatedModel);
     }
 
     [HttpGet("{id}/history")]
@@ -89,9 +126,16 @@ public sealed class AgentsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Deploy([FromForm] DeployAgentPageViewModel model, CancellationToken cancellationToken)
     {
+        var settings = await _applicationSettingsService.GetCurrentAsync(cancellationToken);
+        var validatedUrl = ValidateDeploySiteUrl(settings.SiteUrl);
+        if (!validatedUrl.isValid)
+        {
+            ModelState.AddModelError(nameof(DeployAgentPageViewModel.SiteUrl), validatedUrl.warningMessage!);
+        }
+
         if (!ModelState.IsValid)
         {
-            return View("Deploy", model);
+            return View("Deploy", await BuildDeployViewModelAsync(cancellationToken, model));
         }
 
         try
@@ -101,8 +145,9 @@ public sealed class AgentsController : Controller
         }
         catch (InvalidOperationException ex)
         {
-            model.ErrorMessage = ex.Message;
-            return View("Deploy", model);
+            var reloadModel = await BuildDeployViewModelAsync(cancellationToken, model);
+            reloadModel.ErrorMessage = ex.Message;
+            return View("Deploy", reloadModel);
         }
     }
 
@@ -178,6 +223,46 @@ public sealed class AgentsController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<DeployAgentPageViewModel> BuildDeployViewModelAsync(
+        CancellationToken cancellationToken,
+        DeployAgentPageViewModel? postedModel = null)
+    {
+        var settings = await _applicationSettingsService.GetCurrentAsync(cancellationToken);
+        var siteUrlValue = postedModel?.SiteUrl ?? settings.SiteUrl;
+        var validation = ValidateDeploySiteUrl(siteUrlValue);
+
+        return new DeployAgentPageViewModel
+        {
+            AgentName = postedModel?.AgentName ?? string.Empty,
+            SiteUrl = siteUrlValue,
+            SiteUrlSaved = postedModel?.SiteUrlSaved ?? false,
+            SiteUrlIsValid = validation.isValid,
+            SiteUrlWarningMessage = validation.warningMessage,
+            ErrorMessage = postedModel?.ErrorMessage
+        };
+    }
+
+    private static (bool isValid, string? warningMessage) ValidateDeploySiteUrl(string? siteUrl)
+    {
+        if (string.IsNullOrWhiteSpace(siteUrl))
+        {
+            return (false, "Agent provisioning site URL is required before you can deploy an agent package.");
+        }
+
+        var value = siteUrl.Trim();
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            return (false, "Agent provisioning site URL must be a valid absolute URL.");
+        }
+
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, "Agent provisioning site URL must use HTTPS so agents can connect securely.");
+        }
+
+        return (true, null);
     }
 
     private async Task<IActionResult> SetEnabledAsync(string agentId, bool enabled, CancellationToken cancellationToken)
