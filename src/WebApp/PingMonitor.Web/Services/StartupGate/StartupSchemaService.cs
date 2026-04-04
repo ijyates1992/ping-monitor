@@ -221,8 +221,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        var tableNameComparer = await GetTableNameComparerAsync(connection, cancellationToken);
-        var existingTables = new HashSet<string>(tableNameComparer);
+        var existingTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = "SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = @schema;";
@@ -328,23 +327,6 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             CurrentSchemaVersion = schemaInfo.CurrentSchemaVersion,
             Diagnostics = { "Schema is present and compatible." }
         };
-    }
-
-    private static async Task<StringComparer> GetTableNameComparerAsync(MySqlConnection connection, CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT @@lower_case_table_names;";
-
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        if (result is null || result is DBNull)
-        {
-            return StringComparer.Ordinal;
-        }
-
-        var setting = Convert.ToInt32(result, System.Globalization.CultureInfo.InvariantCulture);
-        return setting == 0
-            ? StringComparer.Ordinal
-            : StringComparer.OrdinalIgnoreCase;
     }
 
     public async Task<StartupSchemaStatus> ApplySchemaAsync(CancellationToken cancellationToken)
