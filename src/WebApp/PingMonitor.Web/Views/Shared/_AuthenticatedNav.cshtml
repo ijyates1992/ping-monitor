@@ -21,6 +21,7 @@
     var eventsOpen = IsCurrent(path, "/admin/security");
     var adminOpen = IsCurrent(path, "/admin", "/users", "/settings/notifications");
     var profileOpen = IsCurrent(path, "/profile");
+    var infoOpen = IsCurrent(path, "/about");
 }
 <style>
     .site-nav-shell {
@@ -233,6 +234,14 @@
                 </div>
             </details>
         }
+
+
+        <details data-active="@infoOpen">
+            <summary aria-controls="nav-menu-info" aria-expanded="false">Info <span aria-hidden="true">▾</span></summary>
+            <div class="site-nav-dropdown" id="nav-menu-info">
+                <a class="site-nav-link" data-current="@IsCurrent(path, "/about")" href="/about">About</a>
+            </div>
+        </details>
 
         <details data-active="@profileOpen">
             <summary aria-controls="nav-menu-profile" aria-expanded="false">Profile <span aria-hidden="true">▾</span></summary>
