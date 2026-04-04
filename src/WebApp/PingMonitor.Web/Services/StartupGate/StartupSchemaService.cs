@@ -197,20 +197,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        var existingTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using (var command = connection.CreateCommand())
-        {
-            command.CommandText = "SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = @schema;";
-            command.Parameters.AddWithValue("@schema", configuration.DatabaseName);
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                existingTables.Add(reader.GetString(0));
-            }
-        }
-
-        var missingTables = RequiredTables.Where(table => !existingTables.Contains(table)).ToArray();
+        var missingTables = await GetMissingRequiredTablesAsync(connection, cancellationToken);
         if (missingTables.Length > 0)
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Missing };
@@ -694,6 +681,35 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
+    }
+
+    private static async Task<string[]> GetMissingRequiredTablesAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var missingTables = new List<string>();
+        foreach (var requiredTable in RequiredTables)
+        {
+            if (!await TableExistsAsync(connection, requiredTable, cancellationToken))
+            {
+                missingTables.Add(requiredTable);
+            }
+        }
+
+        return [.. missingTables];
+    }
+
+    private static async Task<bool> TableExistsAsync(MySqlConnection connection, string tableName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+              AND LOWER(table_name) = LOWER(@tableName)
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("@tableName", tableName);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is not null;
     }
 
     private static async Task EnsureMetricsIndexesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
