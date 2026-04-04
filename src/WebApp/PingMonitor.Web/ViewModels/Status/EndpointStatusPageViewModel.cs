@@ -6,6 +6,8 @@ namespace PingMonitor.Web.ViewModels.Status;
 public sealed class EndpointStatusPageViewModel
 {
     public EndpointStatusSummaryViewModel Summary { get; init; } = new();
+    public int IngestPerMinute { get; init; }
+    public int DropPerMinute { get; init; }
     public EndpointStatusFiltersViewModel Filters { get; init; } = new();
     public IReadOnlyList<EndpointStatusRowViewModel> Rows { get; init; } = [];
     public IReadOnlyList<RecentEventViewModel> RecentEvents { get; init; } = [];

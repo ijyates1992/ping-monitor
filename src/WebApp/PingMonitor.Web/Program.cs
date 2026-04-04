@@ -159,6 +159,7 @@ builder.Services.AddScoped<IAgentAuthenticationService, AgentAuthenticationServi
 builder.Services.AddScoped<IAgentHelloService, AgentHelloService>();
 builder.Services.AddScoped<IAgentConfigurationService, AgentConfigurationService>();
 builder.Services.AddScoped<IResultIngestionService, ResultIngestionService>();
+builder.Services.AddSingleton<IngestRateTracker>();
 builder.Services.AddSingleton<IBufferedResultIngestionService, BufferedResultIngestionService>();
 builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
 builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();

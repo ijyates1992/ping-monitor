@@ -66,6 +66,8 @@
         .state-unknown { color: var(--unknown); background: #eaecf0; }
         .state-degraded { color: var(--degraded); background: #fff7e6; }
         .muted { color: var(--muted); }
+        .activity-list { margin: 0; padding-left: 1.1rem; display: grid; gap: .45rem; }
+        .activity-warning { color: var(--down); font-weight: 700; }
         .row-list { display: grid; gap: .9rem; }
         .status-row {
             border: 1px solid var(--border);
@@ -150,6 +152,14 @@
 
         @await Html.PartialAsync("_RecentEventsSection", Model)
         @await Html.PartialAsync("_SummarySection", Model)
+        
+        <section class="card">
+            <h2>System Activity</h2>
+            <ul class="activity-list">
+                <li>Ingest rate: <strong>@Model.IngestPerMinute</strong> results/min</li>
+                <li class="@(Model.DropPerMinute > 0 ? "activity-warning" : string.Empty)">Drop rate: <strong>@Model.DropPerMinute</strong> results/min</li>
+            </ul>
+        </section>
 
         <section class="card">
             <h2>Filters</h2>
