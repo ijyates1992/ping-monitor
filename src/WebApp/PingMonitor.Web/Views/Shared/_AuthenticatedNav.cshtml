@@ -112,6 +112,30 @@
         font-weight: 700;
     }
 
+    .site-nav-brand {
+        min-width: 44px;
+        width: 44px;
+        padding: .35rem;
+    }
+
+    .site-nav-brand-logo {
+        width: 26px;
+        height: 26px;
+        display: block;
+    }
+
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
     .site-nav-shortcut[data-current="true"] {
         border-color: var(--accent);
         box-shadow: inset 0 0 0 1px var(--accent);
@@ -151,7 +175,13 @@
 </style>
 <nav class="site-nav-shell" aria-label="Primary">
     <div class="site-nav" data-site-nav>
-        <a class="site-nav-shortcut" data-current="@(path.Equals("/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/status", StringComparison.OrdinalIgnoreCase))" href="/status">Home</a>
+        <a class="site-nav-shortcut site-nav-brand"
+           data-current="@(path.Equals("/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/status", StringComparison.OrdinalIgnoreCase))"
+           href="/status"
+           aria-label="Ping Monitor home">
+            <img class="site-nav-brand-logo" src="/assets/branding/ping-monitor-logo-icon.svg" alt="" />
+            <span class="sr-only">Home</span>
+        </a>
 
         <details data-active="@monitoringOpen">
             <summary aria-controls="nav-menu-monitoring" aria-expanded="false">Monitoring <span aria-hidden="true">▾</span></summary>
