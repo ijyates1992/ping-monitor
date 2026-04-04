@@ -287,6 +287,7 @@ Supported parameters:
 
 ## Additional documentation
 
+- Build and release packaging guide: `docs/build-and-release.md`
 - Notification setup guide (browser, SMTP, Telegram): `docs/notifications-setup.md`
 
 The script restores and builds the main .NET 10 web project, runs .NET tests when test projects exist, and performs a lightweight Python syntax check for the agent. It does **not** publish or deploy the application.
