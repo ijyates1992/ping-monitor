@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.Backups;
+using PingMonitor.Web.Services.State;
 using EndpointModel = PingMonitor.Web.Models.Endpoint;
 
 namespace PingMonitor.Web.Services.Endpoints;
@@ -10,11 +11,16 @@ internal sealed class EndpointManagementService : IEndpointManagementService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly IConfigurationChangeBackupSignal _configurationChangeBackupSignal;
+    private readonly IAssignmentTopologyCache _assignmentTopologyCache;
 
-    public EndpointManagementService(PingMonitorDbContext dbContext, IConfigurationChangeBackupSignal configurationChangeBackupSignal)
+    public EndpointManagementService(
+        PingMonitorDbContext dbContext,
+        IConfigurationChangeBackupSignal configurationChangeBackupSignal,
+        IAssignmentTopologyCache assignmentTopologyCache)
     {
         _dbContext = dbContext;
         _configurationChangeBackupSignal = configurationChangeBackupSignal;
+        _assignmentTopologyCache = assignmentTopologyCache;
     }
 
     public async Task<CreateEndpointResult> CreateEndpointWithAssignmentAsync(CreateEndpointCommand command, CancellationToken cancellationToken)
@@ -81,6 +87,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _assignmentTopologyCache.InvalidateAllAsync(cancellationToken);
         _configurationChangeBackupSignal.NotifyConfigurationChanged("endpoint-create-with-assignment");
 
         return CreateEndpointResult.Succeeded(endpointId, assignmentId);
@@ -234,6 +241,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _assignmentTopologyCache.InvalidateAllAsync(cancellationToken);
         _configurationChangeBackupSignal.NotifyConfigurationChanged("endpoint-update-with-assignment");
 
         return UpdateEndpointResult.Succeeded();
@@ -285,6 +293,7 @@ internal sealed class EndpointManagementService : IEndpointManagementService
         if (changed)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await _assignmentTopologyCache.InvalidateAllAsync(cancellationToken);
             _configurationChangeBackupSignal.NotifyConfigurationChanged("endpoint-remove-disable");
         }
 

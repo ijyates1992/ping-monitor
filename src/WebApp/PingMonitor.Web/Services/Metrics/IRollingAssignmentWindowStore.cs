@@ -5,6 +5,7 @@ namespace PingMonitor.Web.Services.Metrics;
 public interface IRollingAssignmentWindowStore
 {
     Task ApplyCheckResultsBatchAsync(IReadOnlyCollection<CheckResult> checkResults, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+    Task<LatestAssignmentResultContext?> GetLatestResultAsync(string assignmentId, CancellationToken cancellationToken);
 
     Task ApplyStateEvaluationAsync(
         string assignmentId,
@@ -23,6 +24,18 @@ public interface IRollingAssignmentWindowStore
         CancellationToken cancellationToken);
 
     Task WarmAssignmentsAsync(IReadOnlyCollection<string> assignmentIds, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+}
+
+public sealed class LatestAssignmentResultContext
+{
+    public required string AssignmentId { get; init; }
+    public required string CheckResultId { get; init; }
+    public required DateTimeOffset CheckedAtUtc { get; init; }
+    public required DateTimeOffset ReceivedAtUtc { get; init; }
+    public required bool Success { get; init; }
+    public int? RoundTripMs { get; init; }
+    public string? ErrorCode { get; init; }
+    public string? ErrorMessage { get; init; }
 }
 
 public sealed class AssignmentWindowSnapshot
