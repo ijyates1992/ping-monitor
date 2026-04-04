@@ -52,8 +52,14 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         var normalizedSearch = Normalize(search);
         var parsedState = TryParseState(normalizedState);
 
+        var assignments = _dbContext.MonitorAssignments.AsNoTracking();
+        if (visibleEndpointIds is not null)
+        {
+            assignments = assignments.Where(assignment => visibleEndpointIds.Contains(assignment.EndpointId));
+        }
+
         var baseQuery =
-            from assignment in _dbContext.MonitorAssignments.AsNoTracking()
+            from assignment in assignments
             join endpoint in _dbContext.Endpoints.AsNoTracking() on assignment.EndpointId equals endpoint.EndpointId
             join assignmentAgent in _dbContext.Agents.AsNoTracking() on assignment.AgentId equals assignmentAgent.AgentId
             join endpointState in _dbContext.EndpointStates.AsNoTracking() on assignment.AssignmentId equals endpointState.AssignmentId into endpointStateJoin
@@ -84,11 +90,6 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 SuppressedByEndpointId = endpointState != null ? endpointState.SuppressedByEndpointId : null,
                 SuppressedByEndpointName = suppressedByEndpoint != null ? suppressedByEndpoint.Name : null
             };
-
-        if (visibleEndpointIds is not null)
-        {
-            baseQuery = baseQuery.Where(row => visibleEndpointIds.Contains(row.EndpointId));
-        }
 
         if (parsedState.HasValue)
         {
