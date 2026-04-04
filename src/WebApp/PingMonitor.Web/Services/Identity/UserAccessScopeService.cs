@@ -42,17 +42,12 @@ internal sealed class UserAccessScopeService : IUserAccessScopeService
             .Select(x => x.EndpointId)
             .ToArrayAsync(cancellationToken);
 
-        var groupIds = await _dbContext.UserGroupAccesses.AsNoTracking()
-            .Where(x => x.UserId == user.Id)
-            .Select(x => x.GroupId)
+        var grouped = await (
+                from membership in _dbContext.EndpointGroupMemberships.AsNoTracking()
+                join access in _dbContext.UserGroupAccesses.AsNoTracking() on membership.GroupId equals access.GroupId
+                where access.UserId == user.Id
+                select membership.EndpointId)
             .ToArrayAsync(cancellationToken);
-
-        var grouped = groupIds.Length == 0
-            ? Array.Empty<string>()
-            : await _dbContext.EndpointGroupMemberships.AsNoTracking()
-                .Where(x => groupIds.Contains(x.GroupId))
-                .Select(x => x.EndpointId)
-                .ToArrayAsync(cancellationToken);
 
         return direct.Concat(grouped).ToHashSet(StringComparer.Ordinal);
     }
