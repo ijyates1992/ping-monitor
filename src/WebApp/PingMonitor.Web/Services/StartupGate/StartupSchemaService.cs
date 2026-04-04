@@ -33,8 +33,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "EndpointStates",
         "StateTransitions",
         "AssignmentMetrics24h",
-        "AssignmentRttMinuteBuckets",
-        "AssignmentStateIntervals",
+        DatabaseTableNames.AssignmentRttMinuteBuckets,
+        DatabaseTableNames.AssignmentStateIntervals,
         "EventLogs",
         "SecurityAuthLogs",
         "ApplicationSettings",
@@ -209,6 +209,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 existingTables.Add(reader.GetString(0));
             }
         }
+
+        await EnsureAdditiveUpgradeTablesAsync(connection, configuration.DatabaseName, existingTables, cancellationToken);
 
         var missingTables = RequiredTables.Where(table => !existingTables.Contains(table)).ToArray();
         if (missingTables.Length > 0)
@@ -694,6 +696,62 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
+    }
+
+    private async Task EnsureAdditiveUpgradeTablesAsync(
+        MySqlConnection connection,
+        string databaseName,
+        HashSet<string> existingTables,
+        CancellationToken cancellationToken)
+    {
+        var requiresAssignmentRttMinuteBuckets = !existingTables.Contains(DatabaseTableNames.AssignmentRttMinuteBuckets);
+        if (requiresAssignmentRttMinuteBuckets)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE IF NOT EXISTS `AssignmentRttMinuteBuckets` (
+                    `AssignmentId` varchar(64) NOT NULL,
+                    `BucketStartUtc` datetime(6) NOT NULL,
+                    `SampleCount` int NOT NULL,
+                    `SumRttMs` bigint NOT NULL,
+                    `MinRttMs` int NOT NULL,
+                    `MaxRttMs` int NOT NULL,
+                    `FirstRttMs` int NOT NULL,
+                    `LastRttMs` int NOT NULL,
+                    `FirstSampleUtc` datetime(6) NOT NULL,
+                    `LastSampleUtc` datetime(6) NOT NULL,
+                    `IntraBucketDeltaSumMs` double NOT NULL,
+                    `UpdatedAtUtc` datetime(6) NOT NULL,
+                    PRIMARY KEY (`AssignmentId`, `BucketStartUtc`),
+                    KEY `IX_AssignmentRttMinuteBuckets_AssignmentId_LastSampleUtc` (`AssignmentId`, `LastSampleUtc`)
+                );
+                """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            existingTables.Add(DatabaseTableNames.AssignmentRttMinuteBuckets);
+            _logger.LogInformation("Startup gate additive upgrade created missing table {TableName} in database {DatabaseName}.", DatabaseTableNames.AssignmentRttMinuteBuckets, databaseName);
+        }
+
+        var requiresAssignmentStateIntervals = !existingTables.Contains(DatabaseTableNames.AssignmentStateIntervals);
+        if (requiresAssignmentStateIntervals)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE IF NOT EXISTS `AssignmentStateIntervals` (
+                    `AssignmentStateIntervalId` varchar(64) NOT NULL,
+                    `AssignmentId` varchar(64) NOT NULL,
+                    `State` varchar(16) NOT NULL,
+                    `StartedAtUtc` datetime(6) NOT NULL,
+                    `EndedAtUtc` datetime(6) NULL,
+                    `UpdatedAtUtc` datetime(6) NOT NULL,
+                    PRIMARY KEY (`AssignmentStateIntervalId`),
+                    KEY `IX_AssignmentStateIntervals_AssignmentId_StartedAtUtc` (`AssignmentId`, `StartedAtUtc`),
+                    KEY `IX_AssignmentStateIntervals_AssignmentId_EndedAtUtc` (`AssignmentId`, `EndedAtUtc`)
+                );
+                """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            existingTables.Add(DatabaseTableNames.AssignmentStateIntervals);
+            _logger.LogInformation("Startup gate additive upgrade created missing table {TableName} in database {DatabaseName}.", DatabaseTableNames.AssignmentStateIntervals, databaseName);
+        }
     }
 
     private static async Task EnsureMetricsIndexesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)

@@ -16,6 +16,7 @@ public sealed class DatabaseStatusPageViewModel
     public long TotalDataBytes { get; init; }
     public long TotalIndexBytes { get; init; }
     public IReadOnlyList<DatabaseStatusTableViewModel> Tables { get; init; } = Array.Empty<DatabaseStatusTableViewModel>();
+    public IReadOnlyList<string> SchemaDiagnostics { get; init; } = Array.Empty<string>();
     public DatabaseStatusRuntimeBufferViewModel RuntimeBuffer { get; init; } = new();
 }
 
