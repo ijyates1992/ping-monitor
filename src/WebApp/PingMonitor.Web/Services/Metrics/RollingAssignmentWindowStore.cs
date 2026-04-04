@@ -9,6 +9,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
 {
     private static readonly TimeSpan Window = TimeSpan.FromHours(24);
     private readonly ConcurrentDictionary<string, AssignmentWindow> _windows = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, LatestAssignmentResultContext> _latestResults = new(StringComparer.Ordinal);
     private readonly IServiceScopeFactory _scopeFactory;
 
     public RollingAssignmentWindowStore(IServiceScopeFactory scopeFactory)
@@ -18,6 +19,11 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
 
     public async Task ApplyCheckResultsBatchAsync(IReadOnlyCollection<CheckResult> checkResults, DateTimeOffset nowUtc, CancellationToken cancellationToken)
     {
+        foreach (var checkResult in checkResults)
+        {
+            TryUpdateLatestResult(checkResult);
+        }
+
         var successfulByAssignment = checkResults
             .Where(x => x.Success && x.RoundTripMs.HasValue && !string.IsNullOrWhiteSpace(x.AssignmentId))
             .GroupBy(x => x.AssignmentId.Trim(), StringComparer.Ordinal);
@@ -38,6 +44,47 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
                 }
             }, cancellationToken);
         }
+    }
+
+    public async Task<LatestAssignmentResultContext?> GetLatestResultAsync(string assignmentId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(assignmentId))
+        {
+            return null;
+        }
+
+        var normalizedAssignmentId = assignmentId.Trim();
+        if (_latestResults.TryGetValue(normalizedAssignmentId, out var cached))
+        {
+            return cached;
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PingMonitorDbContext>();
+        var latest = await dbContext.CheckResults.AsNoTracking()
+            .Where(x => x.AssignmentId == normalizedAssignmentId)
+            .OrderByDescending(x => x.CheckedAtUtc)
+            .ThenByDescending(x => x.ReceivedAtUtc)
+            .ThenByDescending(x => x.CheckResultId)
+            .Select(x => new LatestAssignmentResultContext
+            {
+                AssignmentId = x.AssignmentId,
+                CheckResultId = x.CheckResultId,
+                CheckedAtUtc = x.CheckedAtUtc,
+                ReceivedAtUtc = x.ReceivedAtUtc,
+                Success = x.Success,
+                RoundTripMs = x.RoundTripMs,
+                ErrorCode = x.ErrorCode,
+                ErrorMessage = x.ErrorMessage
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (latest is not null)
+        {
+            _latestResults[normalizedAssignmentId] = latest;
+        }
+
+        return latest;
     }
 
     public async Task ApplyStateEvaluationAsync(
@@ -208,6 +255,47 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
 
     private readonly record struct RttSamplePoint(DateTimeOffset CheckedAtUtc, int RttMs);
     private readonly record struct StateTransitionPoint(DateTimeOffset TransitionAtUtc, EndpointStateKind State);
+
+    private void TryUpdateLatestResult(CheckResult checkResult)
+    {
+        if (string.IsNullOrWhiteSpace(checkResult.AssignmentId))
+        {
+            return;
+        }
+
+        var normalizedAssignmentId = checkResult.AssignmentId.Trim();
+        var candidate = new LatestAssignmentResultContext
+        {
+            AssignmentId = normalizedAssignmentId,
+            CheckResultId = checkResult.CheckResultId,
+            CheckedAtUtc = checkResult.CheckedAtUtc,
+            ReceivedAtUtc = checkResult.ReceivedAtUtc,
+            Success = checkResult.Success,
+            RoundTripMs = checkResult.RoundTripMs,
+            ErrorCode = checkResult.ErrorCode,
+            ErrorMessage = checkResult.ErrorMessage
+        };
+
+        _latestResults.AddOrUpdate(
+            normalizedAssignmentId,
+            candidate,
+            (_, existing) => IsNewer(candidate, existing) ? candidate : existing);
+    }
+
+    private static bool IsNewer(LatestAssignmentResultContext candidate, LatestAssignmentResultContext existing)
+    {
+        if (candidate.CheckedAtUtc != existing.CheckedAtUtc)
+        {
+            return candidate.CheckedAtUtc > existing.CheckedAtUtc;
+        }
+
+        if (candidate.ReceivedAtUtc != existing.ReceivedAtUtc)
+        {
+            return candidate.ReceivedAtUtc > existing.ReceivedAtUtc;
+        }
+
+        return string.CompareOrdinal(candidate.CheckResultId, existing.CheckResultId) > 0;
+    }
 
     private sealed class AssignmentWindow
     {

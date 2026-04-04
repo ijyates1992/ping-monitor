@@ -158,6 +158,8 @@ builder.Services.AddScoped<IResultIngestionService, ResultIngestionService>();
 builder.Services.AddSingleton<IBufferedResultIngestionService, BufferedResultIngestionService>();
 builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
 builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();
+builder.Services.AddSingleton<IAssignmentTopologyCache, AssignmentTopologyCache>();
+builder.Services.AddSingleton<IAssignmentCurrentStateCache, AssignmentCurrentStateCache>();
 builder.Services.AddSingleton<IAssignmentProcessingQueue, AssignmentProcessingQueue>();
 builder.Services.AddScoped<IEventLogService, EventLogService>();
 builder.Services.AddScoped<IEventLogQueryService, EventLogQueryService>();
