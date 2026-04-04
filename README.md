@@ -85,6 +85,29 @@ Agents collect facts. The server decides meaning.
 
 ---
 
+## 📊 Overview
+
+<img src="docs/images/status.jpeg" width="900">
+<p><em>Real-time operational status across all monitored endpoints.</em></p>
+
+<details>
+<summary>View more screenshots</summary>
+
+### 📈 Endpoint Performance
+<img src="docs/images/performance.jpeg" width="900">
+<p><em>Detailed endpoint performance trends for latency and reliability analysis.</em></p>
+
+### 🔔 Notifications
+<img src="docs/images/notifications.jpeg" width="900">
+<p><em>Centralized alert and notification history for rapid operational response.</em></p>
+
+### 🔐 Security & Protection
+<img src="docs/images/security.jpeg" width="900">
+<p><em>Security controls and safeguards to protect monitoring access and data.</em></p>
+</details>
+
+---
+
 ## Key Features
 
 ### Endpoint Monitoring
