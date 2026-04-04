@@ -16,6 +16,10 @@
             --accent: #0f62fe;
             --error-bg: #fee4e2;
             --error-text: #b42318;
+            --success-bg: #ecfdf3;
+            --success-text: #027a48;
+            --warning-bg: #fff4e5;
+            --warning-text: #8a4600;
         }
 
         * { box-sizing: border-box; }
@@ -28,10 +32,15 @@
         .button-row { display: flex; flex-wrap: wrap; gap: .75rem; }
         .button, .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .8rem 1rem; border-radius: 10px; font-weight: 600; text-decoration: none; }
         .button { border: 0; background: var(--accent); color: #fff; }
+        .button:disabled { opacity: .55; cursor: not-allowed; }
         .button-secondary { border: 1px solid var(--border); color: var(--text); background: #fff; }
         .validation { color: var(--error-text); font-size: .95rem; margin-top: .35rem; }
         .error-box { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: .8rem; }
+        .saved-box { border: 1px solid #abefc6; background: var(--success-bg); color: var(--success-text); border-radius: 10px; padding: .8rem; }
+        .warning-box { border: 1px solid #fdc589; background: var(--warning-bg); color: var(--warning-text); border-radius: 10px; padding: .8rem; }
         .muted { color: var(--muted); }
+        .site-url-section { border: 1px solid var(--border); border-radius: 10px; padding: .9rem; }
+        .site-url-status { font-size: .92rem; }
     </style>
 </head>
 <body>
@@ -46,15 +55,45 @@
             <div class="error-box" role="alert">@Model.ErrorMessage</div>
         }
 
+        @if (Model.SiteUrlSaved)
+        {
+            <div class="saved-box" role="status">Agent provisioning site URL saved.</div>
+        }
+
+        <section class="site-url-section stack" aria-labelledby="provisioning-url-heading">
+            <h2 id="provisioning-url-heading">Agent provisioning site URL</h2>
+            <p class="muted">This URL is the base address written into generated agent configuration as <strong>SERVER_URL</strong>. Set it to the address the agent can actually reach: public agents usually need your public HTTPS site URL, while internal-only agents should use the internal URL they can reach. If this is wrong or blank, deployed agents may fail to connect back.</p>
+            <p class="site-url-status"><strong>Current value:</strong> @(string.IsNullOrWhiteSpace(Model.SiteUrl) ? "Not configured" : Model.SiteUrl)</p>
+
+            @if (!Model.SiteUrlIsValid && !string.IsNullOrWhiteSpace(Model.SiteUrlWarningMessage))
+            {
+                <div class="warning-box" role="alert">@Model.SiteUrlWarningMessage</div>
+            }
+
+            <form method="post" action="/agents/deploy/site-url" class="stack">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="AgentName" value="@Model.AgentName" />
+                <div>
+                    <label asp-for="SiteUrl"></label>
+                    <input asp-for="SiteUrl" placeholder="https://monitor.example.com" />
+                    @Html.ValidationMessageFor(x => x.SiteUrl, null, new { @class = "validation" })
+                </div>
+                <div class="button-row">
+                    <button class="button" type="submit">Save provisioning URL</button>
+                </div>
+            </form>
+        </section>
+
         <form method="post" action="/agents/deploy" class="stack">
             @Html.AntiForgeryToken()
+            <input type="hidden" name="SiteUrl" value="@Model.SiteUrl" />
             <div>
                 <label for="agentName">Agent name</label>
                 <input id="agentName" name="AgentName" value="@Model.AgentName" maxlength="255" required />
                 @Html.ValidationMessageFor(x => x.AgentName, null, new { @class = "validation" })
             </div>
             <div class="button-row">
-                <button class="button" type="submit">Create and download package</button>
+                <button class="button" type="submit" disabled="@(!Model.SiteUrlIsValid)">Create and download package</button>
                 <a class="button-secondary" href="/status">Back to status</a>
             </div>
         </form>

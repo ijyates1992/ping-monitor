@@ -222,18 +222,18 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
     {
         if (string.IsNullOrWhiteSpace(configuredServerUrl))
         {
-            throw new InvalidOperationException("Agent provisioning Site URL is not configured. Set it on /admin.");
+            throw new InvalidOperationException("Agent provisioning site URL is not configured. Set it on /agents/deploy.");
         }
 
         var value = configuredServerUrl.Trim();
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
         {
-            throw new InvalidOperationException("Admin Site URL must be an absolute URL.");
+            throw new InvalidOperationException("Agent provisioning site URL must be an absolute URL.");
         }
 
         if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Admin Site URL must use HTTPS.");
+            throw new InvalidOperationException("Agent provisioning site URL must use HTTPS.");
         }
 
         return uri.ToString().TrimEnd('/');

@@ -8,5 +8,14 @@ public sealed class DeployAgentPageViewModel
     [StringLength(255, ErrorMessage = "Agent name cannot exceed 255 characters.")]
     public string AgentName { get; set; } = string.Empty;
 
+    [Display(Name = "Agent provisioning site URL")]
+    public string SiteUrl { get; set; } = string.Empty;
+
+    public bool SiteUrlSaved { get; set; }
+
+    public bool SiteUrlIsValid { get; set; }
+
+    public string? SiteUrlWarningMessage { get; set; }
+
     public string? ErrorMessage { get; set; }
 }
