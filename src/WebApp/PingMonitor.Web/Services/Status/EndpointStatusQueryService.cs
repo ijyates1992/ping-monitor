@@ -18,8 +18,9 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IEventLogQueryService _eventLogQueryService;
     private readonly IDbActivityScope _dbActivityScope;
+    private readonly IngestRateTracker _ingestRateTracker;
 
-    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IAssignmentMetrics24hService assignmentMetrics24hService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService, IEventLogQueryService eventLogQueryService, IDbActivityScope dbActivityScope)
+    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IAssignmentMetrics24hService assignmentMetrics24hService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService, IEventLogQueryService eventLogQueryService, IDbActivityScope dbActivityScope, IngestRateTracker ingestRateTracker)
     {
         _dbContext = dbContext;
         _assignmentMetrics24hService = assignmentMetrics24hService;
@@ -27,6 +28,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         _userAccessScopeService = userAccessScopeService;
         _eventLogQueryService = eventLogQueryService;
         _dbActivityScope = dbActivityScope;
+        _ingestRateTracker = ingestRateTracker;
     }
 
     public async Task<EndpointStatusPageViewModel> GetStatusPageAsync(
@@ -256,6 +258,8 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
                 AvailableAgents = availableAgents,
                 AvailableGroups = availableGroups
             },
+            IngestPerMinute = _ingestRateTracker.GetIngestPerMinute(),
+            DropPerMinute = _ingestRateTracker.GetDropPerMinute(),
             Rows = rowsWithMetrics,
             RecentEvents = await _eventLogQueryService.GetRecentEventsAsync(50, cancellationToken)
         };

@@ -5,6 +5,7 @@ using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.EventLogs;
+using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Support;
 using Microsoft.Extensions.Options;
 
@@ -16,6 +17,7 @@ internal sealed class ResultIngestionService : IResultIngestionService
     private readonly IStateEvaluationService _stateEvaluationService;
     private readonly IBufferedResultIngestionService _bufferedResultIngestionService;
     private readonly IEventLogService _eventLogService;
+    private readonly IngestRateTracker _ingestRateTracker;
     private readonly ILogger<ResultIngestionService> _logger;
     private readonly ResultBufferOptions _resultBufferOptions;
 
@@ -24,6 +26,7 @@ internal sealed class ResultIngestionService : IResultIngestionService
         IStateEvaluationService stateEvaluationService,
         IBufferedResultIngestionService bufferedResultIngestionService,
         IEventLogService eventLogService,
+        IngestRateTracker ingestRateTracker,
         IOptions<ResultBufferOptions> resultBufferOptions,
         ILogger<ResultIngestionService> logger)
     {
@@ -31,6 +34,7 @@ internal sealed class ResultIngestionService : IResultIngestionService
         _stateEvaluationService = stateEvaluationService;
         _bufferedResultIngestionService = bufferedResultIngestionService;
         _eventLogService = eventLogService;
+        _ingestRateTracker = ingestRateTracker;
         _resultBufferOptions = resultBufferOptions.Value;
         _logger = logger;
     }
@@ -162,6 +166,8 @@ internal sealed class ResultIngestionService : IResultIngestionService
                 ReceivedAtUtc = x.ReceivedAtUtc,
                 BatchId = x.BatchId
             }).ToArray();
+
+            _ingestRateTracker.RecordIngest(storedResults.Length);
 
             // Buffering boundary: only raw agent-ingested CheckResults use in-memory buffering.
             // Critical writes (event logs, auth/security/admin/config changes) remain direct DB writes.

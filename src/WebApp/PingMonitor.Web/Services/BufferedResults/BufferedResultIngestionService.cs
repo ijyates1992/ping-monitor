@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Services.Metrics;
 
 namespace PingMonitor.Web.Services.BufferedResults;
 
@@ -9,6 +10,7 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
     private readonly Queue<BufferedCheckResult> _queue = new();
     private readonly SemaphoreSlim _signal = new(0);
     private readonly ILogger<BufferedResultIngestionService> _logger;
+    private readonly IngestRateTracker _ingestRateTracker;
     private readonly ResultBufferOptions _options;
     private long _droppedCount;
     private long _totalEnqueueCount;
@@ -25,9 +27,11 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
 
     public BufferedResultIngestionService(
         IOptions<ResultBufferOptions> options,
+        IngestRateTracker ingestRateTracker,
         ILogger<BufferedResultIngestionService> logger)
     {
         _logger = logger;
+        _ingestRateTracker = ingestRateTracker;
         _options = options.Value;
     }
 
@@ -58,6 +62,7 @@ internal sealed class BufferedResultIngestionService : IBufferedResultIngestionS
 
         if (droppedInWrite > 0)
         {
+            _ingestRateTracker.RecordDrop(droppedInWrite);
             _logger.LogWarning(
                 "Result buffer overflowed. Dropped {DroppedCount} oldest raw check results to preserve newer telemetry. Queue limit: {MaxQueueSize}.",
                 droppedInWrite,
