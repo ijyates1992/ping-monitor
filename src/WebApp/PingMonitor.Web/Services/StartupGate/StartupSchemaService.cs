@@ -687,19 +687,10 @@ internal sealed class StartupSchemaService : IStartupSchemaService
     {
         var existingTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
-        var parameterNames = new List<string>(RequiredTables.Length);
-        for (var index = 0; index < RequiredTables.Length; index++)
-        {
-            var parameterName = $"@tableName{index}";
-            parameterNames.Add(parameterName);
-            command.Parameters.AddWithValue(parameterName, RequiredTables[index]);
-        }
-
-        command.CommandText = $"""
+        command.CommandText = """
             SELECT table_name
             FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-              AND LOWER(table_name) IN ({string.Join(", ", parameterNames.Select(static parameterName => $"LOWER({parameterName})"))});
+            WHERE table_schema = DATABASE();
             """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
