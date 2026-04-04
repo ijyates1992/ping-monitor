@@ -284,15 +284,15 @@ For the supported Windows/IIS deployment flow, including publish output and star
 
 Startup gate and agent API endpoints are in place, with MySQL used in all environments. The core control-plane and execution-plane foundation exists, while the server-side state engine and alert lifecycle remain to be completed.
 
----
-
-## License
-
-TBD
-
-
 ## Access roles (v1)
 
 - `Admin`: full read/write access to control-plane pages and actions.
 - `User`: read-only access; visible endpoints are the union of explicit endpoint grants and endpoints in explicitly granted groups.
 - Visibility enforcement is server-side in query/service logic (not UI-only hiding).
+
+---
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3 (AGPLv3).
+You are free to use, modify, and self-host this software. If you modify the software and make it available over a network (e.g. as a hosted service), you must also make your source code available under the same license.
