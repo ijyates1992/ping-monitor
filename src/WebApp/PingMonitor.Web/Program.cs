@@ -26,6 +26,7 @@ using PingMonitor.Web.Services.Security;
 using PingMonitor.Web.Services.SmtpNotifications;
 using PingMonitor.Web.Services.BrowserNotifications;
 using PingMonitor.Web.Services.DatabaseStatus;
+using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.Telegram;
 using PingMonitor.Web.Support;
 using Microsoft.Extensions.Options;
@@ -47,6 +48,9 @@ builder.Services.Configure<DatabaseMaintenanceOptions>(builder.Configuration.Get
 
 builder.Services.AddSingleton<IDbContextFactory<PingMonitorDbContext>, DynamicPingMonitorDbContextFactory>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<PingMonitorDbContext>>().CreateDbContext());
+builder.Services.AddSingleton<IDbActivityTracker, DbActivityTracker>();
+builder.Services.AddSingleton<IDbActivityScope, DbActivityScope>();
+builder.Services.AddSingleton<DbActivityCommandInterceptor>();
 
 builder.Services
     .AddIdentityCore<ApplicationUser>(options =>

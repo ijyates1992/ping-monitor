@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Services;
+using PingMonitor.Web.Services.Diagnostics;
 
 namespace PingMonitor.Web.Services.SmtpNotifications;
 
@@ -14,18 +15,21 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
     private readonly IUserNotificationSettingsService _userNotificationSettingsService;
     private readonly INotificationSuppressionService _notificationSuppressionService;
     private readonly ILogger<SmtpNotificationSender> _logger;
+    private readonly IDbActivityScope _dbActivityScope;
 
     public SmtpNotificationSender(
         PingMonitorDbContext dbContext,
         INotificationSettingsService notificationSettingsService,
         IUserNotificationSettingsService userNotificationSettingsService,
         INotificationSuppressionService notificationSuppressionService,
+        IDbActivityScope dbActivityScope,
         ILogger<SmtpNotificationSender> logger)
     {
         _dbContext = dbContext;
         _notificationSettingsService = notificationSettingsService;
         _userNotificationSettingsService = userNotificationSettingsService;
         _notificationSuppressionService = notificationSuppressionService;
+        _dbActivityScope = dbActivityScope;
         _logger = logger;
     }
 
@@ -64,6 +68,7 @@ internal sealed class SmtpNotificationSender : ISmtpNotificationSender
 
     public async Task<SmtpNotificationSendResult> SendForEventAsync(EventLog eventLog, CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("Notifications.Smtp");
         var mapped = MapEvent(eventLog);
         if (mapped is null)
         {

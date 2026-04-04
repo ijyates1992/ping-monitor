@@ -1,4 +1,5 @@
 using PingMonitor.Web.Services.State;
+using PingMonitor.Web.Services.Diagnostics;
 
 namespace PingMonitor.Web.Services.Background;
 
@@ -58,6 +59,8 @@ internal sealed class AssignmentProcessingBackgroundService : BackgroundService
 
             using var scope = _scopeFactory.CreateScope();
             var stateEvaluationService = scope.ServiceProvider.GetRequiredService<IStateEvaluationService>();
+            var dbActivityScope = scope.ServiceProvider.GetRequiredService<IDbActivityScope>();
+            using var dbScope = dbActivityScope.BeginScope("AssignmentProcessing");
 
             var failedAssignments = new List<string>();
             foreach (var assignmentId in assignmentIds)

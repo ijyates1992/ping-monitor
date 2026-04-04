@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Diagnostics;
 
 namespace PingMonitor.Web.Services.Metrics;
 
@@ -9,17 +10,20 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly IRollingAssignmentWindowStore _rollingStore;
+    private readonly IDbActivityScope _dbActivityScope;
 
-    public AssignmentMetrics24hService(PingMonitorDbContext dbContext, IRollingAssignmentWindowStore rollingStore)
+    public AssignmentMetrics24hService(PingMonitorDbContext dbContext, IRollingAssignmentWindowStore rollingStore, IDbActivityScope dbActivityScope)
     {
         _dbContext = dbContext;
         _rollingStore = rollingStore;
+        _dbActivityScope = dbActivityScope;
     }
 
     public async Task<IReadOnlyDictionary<string, AssignmentMetrics24hSummary>> GetSummariesAsync(
         IReadOnlyCollection<string> assignmentIds,
         CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("AssignmentMetrics24h");
         var normalizedAssignmentIds = NormalizeAssignmentIds(assignmentIds);
         if (normalizedAssignmentIds.Length == 0)
         {
@@ -54,6 +58,7 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
 
     public async Task ApplyCheckResultsBatchAsync(IReadOnlyCollection<CheckResult> checkResults, CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("AssignmentMetrics24h");
         var assignmentIds = checkResults
             .Select(x => x.AssignmentId)
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -80,6 +85,7 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
         DateTimeOffset evaluatedAtUtc,
         CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("AssignmentMetrics24h");
         await _rollingStore.ApplyStateEvaluationAsync(
             assignmentId,
             previousState,
@@ -99,6 +105,7 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
 
     public async Task RefreshAssignmentsAsync(IReadOnlyCollection<string> assignmentIds, CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("AssignmentMetrics24h");
         var normalizedAssignmentIds = NormalizeAssignmentIds(assignmentIds);
         if (normalizedAssignmentIds.Length == 0)
         {
@@ -112,6 +119,7 @@ internal sealed class AssignmentMetrics24hService : IAssignmentMetrics24hService
 
     public async Task RebuildAllAsync(CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("AssignmentMetrics24h");
         var assignmentIds = await _dbContext.MonitorAssignments.AsNoTracking()
             .Select(x => x.AssignmentId)
             .ToArrayAsync(cancellationToken);

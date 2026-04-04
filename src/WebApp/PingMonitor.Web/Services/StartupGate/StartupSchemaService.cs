@@ -4,6 +4,7 @@ using MySqlConnector;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Services.Diagnostics;
 
 namespace PingMonitor.Web.Services.StartupGate;
 
@@ -167,21 +168,25 @@ internal sealed class StartupSchemaService : IStartupSchemaService
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
     private readonly StartupGateOptions _options;
     private readonly ILogger<StartupSchemaService> _logger;
+    private readonly IDbActivityScope _dbActivityScope;
 
     public StartupSchemaService(
         IDbContextFactory<PingMonitorDbContext> dbContextFactory,
         IStartupDatabaseConfigurationStore configurationStore,
         IOptions<StartupGateOptions> options,
+        IDbActivityScope dbActivityScope,
         ILogger<StartupSchemaService> logger)
     {
         _dbContextFactory = dbContextFactory;
         _configurationStore = configurationStore;
         _options = options.Value;
+        _dbActivityScope = dbActivityScope;
         _logger = logger;
     }
 
     public async Task<StartupSchemaStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("StartupSchema");
         var configuration = await _configurationStore.LoadAsync(cancellationToken);
         var password = await _configurationStore.LoadPasswordAsync(cancellationToken);
         if (configuration is null || !configuration.IsComplete || string.IsNullOrWhiteSpace(password))
@@ -293,6 +298,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
     public async Task<StartupSchemaStatus> ApplySchemaAsync(CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("StartupSchema");
         _logger.LogInformation("Startup gate schema apply requested.");
 
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);

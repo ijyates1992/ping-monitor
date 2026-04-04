@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Diagnostics;
 
 namespace PingMonitor.Web.Services.Metrics;
 
@@ -60,6 +61,8 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
         }
 
         using var scope = _scopeFactory.CreateScope();
+        var dbActivityScope = scope.ServiceProvider.GetRequiredService<IDbActivityScope>();
+        using var dbScope = dbActivityScope.BeginScope("RollingWindowHydration");
         var dbContext = scope.ServiceProvider.GetRequiredService<PingMonitorDbContext>();
         var latest = await dbContext.CheckResults.AsNoTracking()
             .Where(x => x.AssignmentId == normalizedAssignmentId)
@@ -186,6 +189,8 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
         var windowStartUtc = nowUtc - Window;
 
         using var scope = _scopeFactory.CreateScope();
+        var dbActivityScope = scope.ServiceProvider.GetRequiredService<IDbActivityScope>();
+        using var dbScope = dbActivityScope.BeginScope("RollingWindowHydration");
         var dbContext = scope.ServiceProvider.GetRequiredService<PingMonitorDbContext>();
 
         var samples = await dbContext.CheckResults.AsNoTracking()

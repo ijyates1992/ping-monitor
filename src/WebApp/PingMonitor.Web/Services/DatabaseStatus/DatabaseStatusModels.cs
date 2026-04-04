@@ -14,6 +14,7 @@ public sealed class DatabaseStatusSnapshot
     public long TotalIndexBytes { get; init; }
     public IReadOnlyList<DatabaseTableStatusSnapshot> Tables { get; init; } = Array.Empty<DatabaseTableStatusSnapshot>();
     public ResultBufferRuntimeSnapshot ResultBuffer { get; init; } = new();
+    public IReadOnlyList<DatabaseSubsystemActivityStatusSnapshot> DbActivityBySubsystem { get; init; } = Array.Empty<DatabaseSubsystemActivityStatusSnapshot>();
 }
 
 public sealed class DatabaseTableStatusSnapshot
@@ -60,4 +61,28 @@ public sealed class AssignmentProcessingQueueRuntimeSnapshot
     public DateTimeOffset? LastProcessedAtUtc { get; init; }
     public DateTimeOffset? LastFailureAtUtc { get; init; }
     public string? LastFailureError { get; init; }
+}
+
+public sealed class DatabaseSubsystemActivityStatusSnapshot
+{
+    public string Subsystem { get; init; } = string.Empty;
+    public DatabaseSubsystemActivityWindowSnapshot Lifetime { get; init; } = new();
+    public DatabaseSubsystemActivityWindowSnapshot Recent { get; init; } = new();
+    public DateTimeOffset? LastActivityAtUtc { get; init; }
+    public DateTimeOffset? LastErrorAtUtc { get; init; }
+    public string? LastCommandType { get; init; }
+}
+
+public sealed class DatabaseSubsystemActivityWindowSnapshot
+{
+    public long ReadCount { get; init; }
+    public long WriteCount { get; init; }
+    public long ReadErrorCount { get; init; }
+    public long WriteErrorCount { get; init; }
+    public long ReadDurationMs { get; init; }
+    public long WriteDurationMs { get; init; }
+    public long WriteRows { get; init; }
+    public double AverageReadDurationMs { get; init; }
+    public double AverageWriteDurationMs { get; init; }
+    public long TotalDurationMs { get; init; }
 }

@@ -16,6 +16,7 @@ public sealed class DatabaseStatusPageViewModel
     public long TotalDataBytes { get; init; }
     public long TotalIndexBytes { get; init; }
     public IReadOnlyList<DatabaseStatusTableViewModel> Tables { get; init; } = Array.Empty<DatabaseStatusTableViewModel>();
+    public IReadOnlyList<DatabaseSubsystemActivityViewModel> DbActivityBySubsystem { get; init; } = Array.Empty<DatabaseSubsystemActivityViewModel>();
     public DatabaseStatusRuntimeBufferViewModel RuntimeBuffer { get; init; } = new();
 }
 
@@ -62,6 +63,25 @@ public sealed class DatabaseStatusRuntimeBufferViewModel
     public double BufferDropRatePercent { get; init; }
     public double FlushSuccessRatePercent { get; init; }
     public string CacheHitRateNote { get; init; } = "No request/result cache hit-rate metric is currently instrumented.";
+}
+
+public sealed class DatabaseSubsystemActivityViewModel
+{
+    public string Subsystem { get; init; } = string.Empty;
+    public long RecentReadCount { get; init; }
+    public long LifetimeReadCount { get; init; }
+    public long RecentWriteCount { get; init; }
+    public long LifetimeWriteCount { get; init; }
+    public long RecentTotalDurationMs { get; init; }
+    public long LifetimeTotalDurationMs { get; init; }
+    public double LifetimeAverageReadDurationMs { get; init; }
+    public double LifetimeAverageWriteDurationMs { get; init; }
+    public long RecentErrorCount { get; init; }
+    public long LifetimeErrorCount { get; init; }
+    public DateTimeOffset? LastActivityAtUtc { get; init; }
+    public DateTimeOffset? LastErrorAtUtc { get; init; }
+    public long LifetimeWriteRows { get; init; }
+    public string? LastCommandType { get; init; }
 }
 
 public sealed class AssignmentProcessingQueueViewModel

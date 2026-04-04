@@ -171,6 +171,26 @@ public sealed class AdminDatabaseController : Controller
             .ToArray();
 
         var runtimeBuffer = snapshot.ResultBuffer;
+        var dbActivityBySubsystem = snapshot.DbActivityBySubsystem
+            .Select(x => new DatabaseSubsystemActivityViewModel
+            {
+                Subsystem = x.Subsystem,
+                RecentReadCount = x.Recent.ReadCount,
+                LifetimeReadCount = x.Lifetime.ReadCount,
+                RecentWriteCount = x.Recent.WriteCount,
+                LifetimeWriteCount = x.Lifetime.WriteCount,
+                RecentTotalDurationMs = x.Recent.TotalDurationMs,
+                LifetimeTotalDurationMs = x.Lifetime.TotalDurationMs,
+                LifetimeAverageReadDurationMs = x.Lifetime.AverageReadDurationMs,
+                LifetimeAverageWriteDurationMs = x.Lifetime.AverageWriteDurationMs,
+                RecentErrorCount = x.Recent.ReadErrorCount + x.Recent.WriteErrorCount,
+                LifetimeErrorCount = x.Lifetime.ReadErrorCount + x.Lifetime.WriteErrorCount,
+                LastActivityAtUtc = x.LastActivityAtUtc,
+                LastErrorAtUtc = x.LastErrorAtUtc,
+                LifetimeWriteRows = x.Lifetime.WriteRows,
+                LastCommandType = x.LastCommandType
+            })
+            .ToArray();
         var queueUtilizationPercent = runtimeBuffer.ConfiguredMaxQueueSize <= 0
             ? 0
             : (runtimeBuffer.CurrentQueueDepth / (double)runtimeBuffer.ConfiguredMaxQueueSize) * 100;
@@ -194,6 +214,7 @@ public sealed class AdminDatabaseController : Controller
             TotalDataBytes = snapshot.TotalDataBytes,
             TotalIndexBytes = snapshot.TotalIndexBytes,
             Tables = tables,
+            DbActivityBySubsystem = dbActivityBySubsystem,
             RuntimeBuffer = new DatabaseStatusRuntimeBufferViewModel
             {
                 BufferingEnabled = runtimeBuffer.BufferingEnabled,

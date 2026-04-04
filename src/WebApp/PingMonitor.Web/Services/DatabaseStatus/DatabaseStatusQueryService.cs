@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.BufferedResults;
+using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.State;
 using PingMonitor.Web.Services.StartupGate;
 using System.Data;
@@ -16,23 +17,30 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
     private readonly IAssignmentProcessingQueue _assignmentProcessingQueue;
     private readonly IOptions<ResultBufferOptions> _resultBufferOptions;
     private readonly IOptions<StartupGateOptions> _startupGateOptions;
+    private readonly IDbActivityTracker _dbActivityTracker;
+    private readonly IDbActivityScope _dbActivityScope;
 
     public DatabaseStatusQueryService(
         PingMonitorDbContext dbContext,
         IBufferedResultIngestionService bufferedResultIngestionService,
         IAssignmentProcessingQueue assignmentProcessingQueue,
         IOptions<ResultBufferOptions> resultBufferOptions,
-        IOptions<StartupGateOptions> startupGateOptions)
+        IOptions<StartupGateOptions> startupGateOptions,
+        IDbActivityTracker dbActivityTracker,
+        IDbActivityScope dbActivityScope)
     {
         _dbContext = dbContext;
         _bufferedResultIngestionService = bufferedResultIngestionService;
         _assignmentProcessingQueue = assignmentProcessingQueue;
         _resultBufferOptions = resultBufferOptions;
         _startupGateOptions = startupGateOptions;
+        _dbActivityTracker = dbActivityTracker;
+        _dbActivityScope = dbActivityScope;
     }
 
     public async Task<DatabaseStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
+        using var dbScope = _dbActivityScope.BeginScope("Admin.DatabaseStatus");
         var connection = _dbContext.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
@@ -51,6 +59,41 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
         var bufferSnapshot = _bufferedResultIngestionService.GetSnapshot();
         var bufferOptions = _resultBufferOptions.Value;
         var assignmentQueueSnapshot = _assignmentProcessingQueue.GetSnapshot();
+        var dbActivity = _dbActivityTracker.GetSnapshot(DateTimeOffset.UtcNow)
+            .Select(x => new DatabaseSubsystemActivityStatusSnapshot
+            {
+                Subsystem = x.Subsystem,
+                Lifetime = new DatabaseSubsystemActivityWindowSnapshot
+                {
+                    ReadCount = x.Lifetime.ReadCount,
+                    WriteCount = x.Lifetime.WriteCount,
+                    ReadErrorCount = x.Lifetime.ReadErrorCount,
+                    WriteErrorCount = x.Lifetime.WriteErrorCount,
+                    ReadDurationMs = x.Lifetime.ReadDurationMs,
+                    WriteDurationMs = x.Lifetime.WriteDurationMs,
+                    WriteRows = x.Lifetime.WriteRows,
+                    AverageReadDurationMs = x.Lifetime.AverageReadDurationMs,
+                    AverageWriteDurationMs = x.Lifetime.AverageWriteDurationMs,
+                    TotalDurationMs = x.Lifetime.TotalDurationMs
+                },
+                Recent = new DatabaseSubsystemActivityWindowSnapshot
+                {
+                    ReadCount = x.Recent.ReadCount,
+                    WriteCount = x.Recent.WriteCount,
+                    ReadErrorCount = x.Recent.ReadErrorCount,
+                    WriteErrorCount = x.Recent.WriteErrorCount,
+                    ReadDurationMs = x.Recent.ReadDurationMs,
+                    WriteDurationMs = x.Recent.WriteDurationMs,
+                    WriteRows = x.Recent.WriteRows,
+                    AverageReadDurationMs = x.Recent.AverageReadDurationMs,
+                    AverageWriteDurationMs = x.Recent.AverageWriteDurationMs,
+                    TotalDurationMs = x.Recent.TotalDurationMs
+                },
+                LastActivityAtUtc = x.LastActivityAtUtc,
+                LastErrorAtUtc = x.LastErrorAtUtc,
+                LastCommandType = x.LastCommandType
+            })
+            .ToArray();
 
         return new DatabaseStatusSnapshot
         {
@@ -65,6 +108,7 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
             TotalDataBytes = dataBytes,
             TotalIndexBytes = indexBytes,
             Tables = tables,
+            DbActivityBySubsystem = dbActivity,
             ResultBuffer = new ResultBufferRuntimeSnapshot
             {
                 BufferingEnabled = bufferOptions.ResultBufferEnabled,

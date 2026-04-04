@@ -2,6 +2,7 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Metrics;
+using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.State;
 using System.Text.Json;
 
@@ -16,6 +17,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
     private readonly IAssignmentTopologyCache _topologyCache;
     private readonly IAssignmentCurrentStateCache _currentStateCache;
     private readonly IRollingAssignmentWindowStore _rollingAssignmentWindowStore;
+    private readonly IDbActivityScope _dbActivityScope;
 
     public StateEvaluationService(
         PingMonitorDbContext dbContext,
@@ -24,7 +26,8 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         IAssignmentMetrics24hService assignmentMetrics24hService,
         IAssignmentTopologyCache topologyCache,
         IAssignmentCurrentStateCache currentStateCache,
-        IRollingAssignmentWindowStore rollingAssignmentWindowStore)
+        IRollingAssignmentWindowStore rollingAssignmentWindowStore,
+        IDbActivityScope dbActivityScope)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -33,6 +36,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         _topologyCache = topologyCache;
         _currentStateCache = currentStateCache;
         _rollingAssignmentWindowStore = rollingAssignmentWindowStore;
+        _dbActivityScope = dbActivityScope;
     }
 
     public async Task EvaluateAssignmentsAsync(IEnumerable<string> assignmentIds, CancellationToken cancellationToken)
@@ -74,6 +78,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 
     private async Task<IReadOnlyCollection<string>> EvaluateInternalAsync(string assignmentId, CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("StateEvaluation");
         var assignmentContext = await _topologyCache.GetAssignmentContextAsync(assignmentId, cancellationToken);
         if (assignmentContext is null)
         {

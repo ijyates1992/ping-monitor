@@ -3,6 +3,7 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.Metrics;
+using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.State;
 
 namespace PingMonitor.Web.Services.BufferedResults;
@@ -116,6 +117,8 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PingMonitorDbContext>();
         var assignmentMetrics24hService = scope.ServiceProvider.GetRequiredService<IAssignmentMetrics24hService>();
+        var dbActivityScope = scope.ServiceProvider.GetRequiredService<IDbActivityScope>();
+        using var dbScope = dbActivityScope.BeginScope("RawResultFlush");
 
         var checkResults = batch.Select(item => new CheckResult
         {
