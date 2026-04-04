@@ -46,7 +46,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         var isAdmin = principal is not null && await _userAccessScopeService.IsAdminAsync(principal);
         var visibleEndpointIds = isAdmin || principal is null
             ? null
-            : await _userAccessScopeService.GetVisibleEndpointIdsAsync(principal, cancellationToken);
+            : (await _userAccessScopeService.GetVisibleEndpointIdsAsync(principal, cancellationToken)).ToArray();
         var normalizedAgent = Normalize(agent);
         var normalizedGroupId = Normalize(groupId);
         var normalizedSearch = Normalize(search);
