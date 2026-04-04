@@ -232,7 +232,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         assignmentMetrics24h.HasIndex(x => x.AssignmentId).IsUnique();
 
         var assignmentRttMinuteBucket = modelBuilder.Entity<AssignmentRttMinuteBucket>();
-        assignmentRttMinuteBucket.ToTable("AssignmentRttMinuteBuckets");
+        assignmentRttMinuteBucket.ToTable(DatabaseTableNames.AssignmentRttMinuteBuckets);
         assignmentRttMinuteBucket.HasKey(x => new { x.AssignmentId, x.BucketStartUtc });
         assignmentRttMinuteBucket.Property(x => x.AssignmentId).HasMaxLength(64);
         assignmentRttMinuteBucket.Property(x => x.BucketStartUtc).IsRequired();
@@ -249,7 +249,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         assignmentRttMinuteBucket.HasIndex(x => new { x.AssignmentId, x.LastSampleUtc });
 
         var assignmentStateInterval = modelBuilder.Entity<AssignmentStateInterval>();
-        assignmentStateInterval.ToTable("AssignmentStateIntervals");
+        assignmentStateInterval.ToTable(DatabaseTableNames.AssignmentStateIntervals);
         assignmentStateInterval.HasKey(x => x.AssignmentStateIntervalId);
         assignmentStateInterval.Property(x => x.AssignmentStateIntervalId).HasMaxLength(64);
         assignmentStateInterval.Property(x => x.AssignmentId).HasMaxLength(64).IsRequired();

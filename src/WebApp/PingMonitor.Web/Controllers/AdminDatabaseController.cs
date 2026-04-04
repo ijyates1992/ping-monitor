@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PingMonitor.Web.Data;
 using PingMonitor.Web.Services.DatabaseStatus;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Admin;
@@ -169,6 +170,19 @@ public sealed class AdminDatabaseController : Controller
                 TotalBytes = x.DataBytes + x.IndexBytes
             })
             .ToArray();
+        var tableNameSet = tables
+            .Select(x => x.TableName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var schemaDiagnostics = new List<string>();
+        if (!tableNameSet.Contains(DatabaseTableNames.AssignmentRttMinuteBuckets))
+        {
+            schemaDiagnostics.Add($"Required table '{DatabaseTableNames.AssignmentRttMinuteBuckets}' is missing.");
+        }
+
+        if (!tableNameSet.Contains(DatabaseTableNames.AssignmentStateIntervals))
+        {
+            schemaDiagnostics.Add($"Required table '{DatabaseTableNames.AssignmentStateIntervals}' is missing.");
+        }
 
         var runtimeBuffer = snapshot.ResultBuffer;
         var queueUtilizationPercent = runtimeBuffer.ConfiguredMaxQueueSize <= 0
@@ -194,6 +208,7 @@ public sealed class AdminDatabaseController : Controller
             TotalDataBytes = snapshot.TotalDataBytes,
             TotalIndexBytes = snapshot.TotalIndexBytes,
             Tables = tables,
+            SchemaDiagnostics = schemaDiagnostics,
             RuntimeBuffer = new DatabaseStatusRuntimeBufferViewModel
             {
                 BufferingEnabled = runtimeBuffer.BufferingEnabled,

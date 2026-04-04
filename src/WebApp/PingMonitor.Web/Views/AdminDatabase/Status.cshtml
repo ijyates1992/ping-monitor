@@ -26,6 +26,8 @@
         table { width: 100%; border-collapse: collapse; min-width: 680px; }
         th, td { text-align: left; border-bottom: 1px solid var(--border); padding: .55rem; }
         .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .55rem .8rem; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); text-decoration: none; }
+        .warn-card { border: 1px solid #f59e0b; background: #fff7ed; border-radius: 10px; padding: .8rem; }
+        .warn-card ul { margin: .5rem 0 0 1.2rem; padding: 0; }
     </style>
 </head>
 <body>
@@ -40,6 +42,18 @@
 
         <section class="card">
             <h2>Database overview</h2>
+            @if (Model.SchemaDiagnostics.Count > 0)
+            {
+                <div class="warn-card">
+                    <strong>Schema issues detected</strong>
+                    <ul>
+                        @foreach (var diagnostic in Model.SchemaDiagnostics)
+                        {
+                            <li>@diagnostic</li>
+                        }
+                    </ul>
+                </div>
+            }
             <div class="overview-grid">
                 <div class="metric"><div class="label">Provider</div><div class="value">@Model.ProviderName</div></div>
                 <div class="metric"><div class="label">Database</div><div class="value">@Model.DatabaseName</div></div>
