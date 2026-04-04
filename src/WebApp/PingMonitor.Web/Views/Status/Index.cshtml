@@ -43,12 +43,6 @@
         .page-header-main h1 {
             margin-top: 0;
         }
-        .page-header-theme {
-            flex: 1 1 280px;
-            min-width: 0;
-            display: flex;
-            justify-content: flex-start;
-        }
         .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .summary-item { border: 1px solid var(--border); border-radius: 12px; padding: .85rem; }
         .summary-item strong { display: block; font-size: 1.4rem; margin-top: .25rem; }
@@ -119,10 +113,6 @@
             .page-header {
                 flex-wrap: nowrap;
             }
-            .page-header-theme {
-                flex: 0 1 auto;
-                justify-content: flex-end;
-            }
             .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
             .filter-grid { grid-template-columns: 1fr 220px 220px 220px; align-items: end; }
             .status-details > summary { padding: .95rem 1rem; }
@@ -143,9 +133,6 @@
                 <div class="page-header-main">
                     <h1>Operational endpoint status</h1>
                     <p class="muted">Current assignment-scoped status derived by the server state engine. Missing state rows are shown as <strong>UNKNOWN</strong> until trusted server-side state exists.</p>
-                </div>
-                <div class="page-header-theme">
-                    @await Html.PartialAsync("_ThemeSelector")
                 </div>
             </div>
         </section>

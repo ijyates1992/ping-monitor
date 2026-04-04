@@ -1,57 +1,39 @@
-<div class="theme-selector" aria-label="Dark mode selector">
-    <label for="theme-mode-select" title="On = always dark; Off = always light; System = follows your OS/browser preference.">Dark mode</label>
-    <select id="theme-mode-select" name="theme-mode" aria-describedby="theme-mode-help" title="On = always dark; Off = always light; System = follows your OS/browser preference.">
+<div class="theme-selector" aria-label="Theme mode selector">
+    <label for="theme-mode-select">Theme</label>
+    <select id="theme-mode-select" name="theme-mode" aria-label="Theme mode" title="Change theme mode">
         <option value="on">On</option>
         <option value="off">Off</option>
         <option value="system">System</option>
     </select>
-    <span id="theme-mode-help" class="theme-selector-muted">On = always dark · Off = always light · System = follows OS/browser</span>
-    <span id="theme-mode-effective" class="theme-selector-muted"></span>
 </div>
 <style>
     .theme-selector {
         display: flex;
-        align-items: flex-start;
-        gap: .5rem .6rem;
-        flex-wrap: wrap;
-        justify-content: flex-start;
-        width: fit-content;
-        max-width: 100%;
-        padding: .6rem .75rem;
+        align-items: center;
+        gap: .4rem;
+        padding: .35rem .45rem;
         border: 1px solid var(--border);
-        border-radius: 10px;
-        background: var(--card);
+        border-radius: 8px;
+        background: var(--surface-1);
         color: var(--text);
-        box-shadow: 0 1px 3px rgba(16, 24, 40, .2);
-        font-family: Arial, sans-serif;
-        font-size: .9rem;
+        font-size: .85rem;
     }
 
-    .theme-selector label { font-weight: 600; margin: 0; }
+    .theme-selector label {
+        font-weight: 700;
+        margin: 0;
+        line-height: 1;
+    }
 
     .theme-selector select {
         border: 1px solid var(--border);
-        border-radius: 8px;
-        background: var(--card);
+        border-radius: 6px;
+        background: var(--surface-1);
         color: var(--text);
-        min-height: 34px;
-        padding: .25rem .4rem;
-        font-size: .9rem;
+        min-height: 30px;
+        padding: .2rem .3rem;
+        font-size: .85rem;
         width: auto;
-    }
-
-    .theme-selector-muted {
-        color: var(--muted);
-        font-size: .8rem;
-        white-space: normal;
-        overflow-wrap: anywhere;
-        flex-basis: 100%;
-    }
-
-    @@media (min-width: 720px) {
-        .theme-selector {
-            justify-content: flex-end;
-        }
     }
 </style>
 <script>
@@ -121,10 +103,12 @@
         document.documentElement.setAttribute('data-theme-mode', mode);
         document.documentElement.setAttribute('data-theme', effectiveTheme);
 
-        if (mode === 'system') {
-            effective.textContent = 'Using ' + effectiveTheme;
-        } else {
-            effective.textContent = '';
+        if (effective) {
+            if (mode === 'system') {
+                effective.textContent = 'Using ' + effectiveTheme;
+            } else {
+                effective.textContent = '';
+            }
         }
     }
 

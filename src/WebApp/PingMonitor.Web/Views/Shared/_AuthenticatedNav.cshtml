@@ -38,6 +38,12 @@
         align-items: stretch;
     }
 
+    .site-nav-theme {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+    }
+
     .site-nav details {
         position: relative;
         min-width: 160px;
@@ -210,6 +216,10 @@
                 </form>
             </div>
         </details>
+
+        <div class="site-nav-theme" aria-label="Theme selector">
+            @await Html.PartialAsync("_ThemeSelector")
+        </div>
     </div>
 </nav>
 <script>
