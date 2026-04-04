@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using MySql.EntityFrameworkCore.Extensions;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.StartupGate;
 
 namespace PingMonitor.Web.Services;
@@ -10,13 +11,16 @@ internal sealed class DynamicPingMonitorDbContextFactory : IDbContextFactory<Pin
 {
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
     private readonly StartupGateOptions _startupGateOptions;
+    private readonly DbActivityCommandInterceptor _dbActivityCommandInterceptor;
 
     public DynamicPingMonitorDbContextFactory(
         IStartupDatabaseConfigurationStore configurationStore,
-        Microsoft.Extensions.Options.IOptions<StartupGateOptions> startupGateOptions)
+        Microsoft.Extensions.Options.IOptions<StartupGateOptions> startupGateOptions,
+        DbActivityCommandInterceptor dbActivityCommandInterceptor)
     {
         _configurationStore = configurationStore;
         _startupGateOptions = startupGateOptions.Value;
+        _dbActivityCommandInterceptor = dbActivityCommandInterceptor;
     }
 
     public PingMonitorDbContext CreateDbContext()
@@ -31,6 +35,7 @@ internal sealed class DynamicPingMonitorDbContextFactory : IDbContextFactory<Pin
 
         var optionsBuilder = new DbContextOptionsBuilder<PingMonitorDbContext>();
         optionsBuilder.UseMySQL(connectionString);
+        optionsBuilder.AddInterceptors(_dbActivityCommandInterceptor);
         return new PingMonitorDbContext(optionsBuilder.Options);
     }
 

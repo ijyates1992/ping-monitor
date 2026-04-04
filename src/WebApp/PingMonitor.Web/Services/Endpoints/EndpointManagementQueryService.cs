@@ -3,6 +3,7 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.ViewModels.Endpoints;
 
 namespace PingMonitor.Web.Services.Endpoints;
@@ -13,17 +14,20 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
     private readonly IAssignmentMetrics24hService _assignmentMetrics24hService;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IDbActivityScope _dbActivityScope;
 
-    public EndpointManagementQueryService(PingMonitorDbContext dbContext, IAssignmentMetrics24hService assignmentMetrics24hService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService)
+    public EndpointManagementQueryService(PingMonitorDbContext dbContext, IAssignmentMetrics24hService assignmentMetrics24hService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService, IDbActivityScope dbActivityScope)
     {
         _dbContext = dbContext;
         _assignmentMetrics24hService = assignmentMetrics24hService;
         _httpContextAccessor = httpContextAccessor;
         _userAccessScopeService = userAccessScopeService;
+        _dbActivityScope = dbActivityScope;
     }
 
     public async Task<ManageEndpointsPageViewModel> GetManagePageAsync(string? groupId, CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("EndpointsPage");
         var normalizedGroupId = string.IsNullOrWhiteSpace(groupId) ? null : groupId.Trim();
         var principal = _httpContextAccessor.HttpContext?.User;
         var isAdmin = principal is not null && await _userAccessScopeService.IsAdminAsync(principal);
@@ -149,6 +153,7 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
 
     public async Task<EditEndpointOptionsViewModel> GetEditOptionsAsync(string assignmentId, CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("EndpointsPage");
         var normalizedAssignmentId = assignmentId.Trim();
 
         var endpointId = await _dbContext.MonitorAssignments.AsNoTracking()
@@ -202,6 +207,7 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
 
     public async Task<RemoveEndpointDetails?> GetRemoveDetailsAsync(string assignmentId, CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("EndpointsPage");
         var normalizedAssignmentId = assignmentId.Trim();
         if (string.IsNullOrWhiteSpace(normalizedAssignmentId))
         {

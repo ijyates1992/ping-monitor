@@ -5,6 +5,7 @@ using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.EventLogs;
+using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.ViewModels.Status;
 
 namespace PingMonitor.Web.Services.Status;
@@ -16,14 +17,16 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IEventLogQueryService _eventLogQueryService;
+    private readonly IDbActivityScope _dbActivityScope;
 
-    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IAssignmentMetrics24hService assignmentMetrics24hService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService, IEventLogQueryService eventLogQueryService)
+    public EndpointStatusQueryService(PingMonitorDbContext dbContext, IAssignmentMetrics24hService assignmentMetrics24hService, IHttpContextAccessor httpContextAccessor, IUserAccessScopeService userAccessScopeService, IEventLogQueryService eventLogQueryService, IDbActivityScope dbActivityScope)
     {
         _dbContext = dbContext;
         _assignmentMetrics24hService = assignmentMetrics24hService;
         _httpContextAccessor = httpContextAccessor;
         _userAccessScopeService = userAccessScopeService;
         _eventLogQueryService = eventLogQueryService;
+        _dbActivityScope = dbActivityScope;
     }
 
     public async Task<EndpointStatusPageViewModel> GetStatusPageAsync(
@@ -33,6 +36,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         string? search,
         CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("StatusPage");
         var nowUtc = DateTimeOffset.UtcNow;
         var normalizedState = Normalize(state);
 

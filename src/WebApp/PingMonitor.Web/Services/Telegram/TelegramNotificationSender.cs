@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Diagnostics;
 
 namespace PingMonitor.Web.Services.Telegram;
 
@@ -12,6 +13,7 @@ internal sealed class TelegramNotificationSender : ITelegramNotificationSender
     private readonly IUserNotificationSettingsService _userNotificationSettingsService;
     private readonly INotificationSuppressionService _notificationSuppressionService;
     private readonly ILogger<TelegramNotificationSender> _logger;
+    private readonly IDbActivityScope _dbActivityScope;
     private readonly HttpClient _httpClient = new();
 
     public TelegramNotificationSender(
@@ -19,17 +21,20 @@ internal sealed class TelegramNotificationSender : ITelegramNotificationSender
         INotificationSettingsService notificationSettingsService,
         IUserNotificationSettingsService userNotificationSettingsService,
         INotificationSuppressionService notificationSuppressionService,
+        IDbActivityScope dbActivityScope,
         ILogger<TelegramNotificationSender> logger)
     {
         _dbContext = dbContext;
         _notificationSettingsService = notificationSettingsService;
         _userNotificationSettingsService = userNotificationSettingsService;
         _notificationSuppressionService = notificationSuppressionService;
+        _dbActivityScope = dbActivityScope;
         _logger = logger;
     }
 
     public async Task<TelegramNotificationSendResult> SendForEventAsync(EventLog eventLog, CancellationToken cancellationToken)
     {
+        using var scope = _dbActivityScope.BeginScope("Notifications.Telegram");
         var mapped = MapEvent(eventLog);
         if (mapped is null)
         {

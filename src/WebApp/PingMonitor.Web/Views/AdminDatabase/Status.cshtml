@@ -53,6 +53,44 @@
         </section>
 
         <section class="card">
+            <h2>DB activity by subsystem</h2>
+            <p class="muted">In-memory application-level read/write pressure, with recent 5-minute and lifetime totals.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Subsystem</th>
+                        <th>Reads (recent / lifetime)</th>
+                        <th>Writes (recent / lifetime)</th>
+                        <th>Total DB time ms (recent / lifetime)</th>
+                        <th>Avg read ms</th>
+                        <th>Avg write ms</th>
+                        <th>Errors (recent / lifetime)</th>
+                        <th>Write rows</th>
+                        <th>Last activity (UTC)</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in Model.DbActivityBySubsystem)
+                    {
+                        <tr>
+                            <td>@row.Subsystem</td>
+                            <td>@row.RecentReadCount / @row.LifetimeReadCount</td>
+                            <td>@row.RecentWriteCount / @row.LifetimeWriteCount</td>
+                            <td>@row.RecentTotalDurationMs / @row.LifetimeTotalDurationMs</td>
+                            <td>@row.LifetimeAverageReadDurationMs.ToString("0.##")</td>
+                            <td>@row.LifetimeAverageWriteDurationMs.ToString("0.##")</td>
+                            <td>@row.RecentErrorCount / @row.LifetimeErrorCount</td>
+                            <td>@row.LifetimeWriteRows</td>
+                            <td>@(row.LastActivityAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(row.LastActivityAtUtc.Value))</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
             <h2>DB buffer status</h2>
             <p class="muted">Runtime metrics for in-memory buffering of agent-ingested raw check results.</p>
             <div class="overview-grid">
