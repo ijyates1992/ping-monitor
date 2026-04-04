@@ -559,6 +559,49 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 KEY `IX_AssignmentStateIntervals_AssignmentId_EndedAtUtc` (`AssignmentId`, `EndedAtUtc`)
             );
             """;
+        const string createAspNetRoleClaimsSql = """
+            CREATE TABLE IF NOT EXISTS `AspNetRoleClaims` (
+                `Id` int NOT NULL AUTO_INCREMENT,
+                `RoleId` varchar(255) NOT NULL,
+                `ClaimType` longtext NULL,
+                `ClaimValue` longtext NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_AspNetRoleClaims_RoleId` (`RoleId`),
+                CONSTRAINT `FK_AspNetRoleClaims_AspNetRoles_RoleId` FOREIGN KEY (`RoleId`) REFERENCES `AspNetRoles` (`Id`) ON DELETE CASCADE
+            );
+            """;
+        const string createAspNetUserClaimsSql = """
+            CREATE TABLE IF NOT EXISTS `AspNetUserClaims` (
+                `Id` int NOT NULL AUTO_INCREMENT,
+                `UserId` varchar(255) NOT NULL,
+                `ClaimType` longtext NULL,
+                `ClaimValue` longtext NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_AspNetUserClaims_UserId` (`UserId`),
+                CONSTRAINT `FK_AspNetUserClaims_AspNetUsers_UserId` FOREIGN KEY (`UserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE CASCADE
+            );
+            """;
+        const string createAspNetUserLoginsSql = """
+            CREATE TABLE IF NOT EXISTS `AspNetUserLogins` (
+                `LoginProvider` varchar(255) NOT NULL,
+                `ProviderKey` varchar(255) NOT NULL,
+                `ProviderDisplayName` longtext NULL,
+                `UserId` varchar(255) NOT NULL,
+                PRIMARY KEY (`LoginProvider`, `ProviderKey`),
+                KEY `IX_AspNetUserLogins_UserId` (`UserId`),
+                CONSTRAINT `FK_AspNetUserLogins_AspNetUsers_UserId` FOREIGN KEY (`UserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE CASCADE
+            );
+            """;
+        const string createAspNetUserTokensSql = """
+            CREATE TABLE IF NOT EXISTS `AspNetUserTokens` (
+                `UserId` varchar(255) NOT NULL,
+                `LoginProvider` varchar(255) NOT NULL,
+                `Name` varchar(255) NOT NULL,
+                `Value` longtext NULL,
+                PRIMARY KEY (`UserId`, `LoginProvider`, `Name`),
+                CONSTRAINT `FK_AspNetUserTokens_AspNetUsers_UserId` FOREIGN KEY (`UserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE CASCADE
+            );
+            """;
 
         const string createEventLogsSql = """
             CREATE TABLE IF NOT EXISTS `EventLogs` (
@@ -670,6 +713,10 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createAssignmentMetrics24hSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAssignmentRttMinuteBucketsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAssignmentStateIntervalsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAspNetRoleClaimsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAspNetUserClaimsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAspNetUserLoginsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAspNetUserTokensSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createEventLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityAuthLogsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createApplicationSettingsSql, cancellationToken);
