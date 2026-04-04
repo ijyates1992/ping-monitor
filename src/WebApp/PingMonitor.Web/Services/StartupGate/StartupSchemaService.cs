@@ -197,20 +197,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        var existingTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using (var command = connection.CreateCommand())
-        {
-            command.CommandText = "SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = @schema;";
-            command.Parameters.AddWithValue("@schema", configuration.DatabaseName);
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                existingTables.Add(reader.GetString(0));
-            }
-        }
-
-        var missingTables = RequiredTables.Where(table => !existingTables.Contains(table)).ToArray();
+        var missingTables = await GetMissingRequiredTablesAsync(connection, cancellationToken);
         if (missingTables.Length > 0)
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Missing };
@@ -694,6 +681,33 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
+    }
+
+    private static async Task<string[]> GetMissingRequiredTablesAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        var parameterNames = new List<string>(RequiredTables.Length);
+        for (var index = 0; index < RequiredTables.Length; index++)
+        {
+            var parameterName = $"@tableName{index}";
+            parameterNames.Add(parameterName);
+            command.Parameters.AddWithValue(parameterName, RequiredTables[index]);
+        }
+
+        command.CommandText = $"""
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+              AND LOWER(table_name) IN ({string.Join(", ", parameterNames.Select(static parameterName => $"LOWER({parameterName})"))});
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingTables.Add(reader.GetString(0));
+        }
+
+        return [.. RequiredTables.Where(table => !existingTables.Contains(table))];
     }
 
     private static async Task EnsureMetricsIndexesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
