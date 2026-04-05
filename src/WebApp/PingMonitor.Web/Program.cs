@@ -196,6 +196,7 @@ builder.Services.AddScoped<INotificationSuppressionService, NotificationSuppress
 builder.Services.AddScoped<ISmtpNotificationSender, SmtpNotificationSender>();
 builder.Services.AddScoped<IBrowserNotificationQueryService, BrowserNotificationQueryService>();
 builder.Services.AddScoped<ITelegramLinkService, TelegramLinkService>();
+builder.Services.AddScoped<ITelegramBotIdentityResolver, TelegramBotIdentityResolver>();
 builder.Services.AddScoped<ITelegramMessageProcessor, TelegramMessageProcessor>();
 builder.Services.AddScoped<ITelegramPollingService, TelegramPollingService>();
 builder.Services.AddScoped<ITelegramNotificationSender, TelegramNotificationSender>();

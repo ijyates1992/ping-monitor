@@ -83,7 +83,21 @@
 
 <section class="card stack">
     <h2>Telegram account linking</h2>
-    <p class="muted">Generate a verification code, send it to the bot in a private chat, and wait for confirmation.</p>
+    @if (Model.TelegramLinkingAvailable)
+    {
+        if (!string.IsNullOrWhiteSpace(Model.TelegramBotIdentifier))
+        {
+            <p class="muted">Generate a verification code, send it to <strong>@Model.TelegramBotIdentifier</strong> in a private chat, and wait for confirmation.</p>
+        }
+        else
+        {
+            <p class="muted">Generate a verification code, send it to the configured Telegram bot in a private chat, and wait for confirmation.</p>
+        }
+    }
+    else
+    {
+        <p class="muted">Telegram account linking is unavailable because Telegram bot settings have not been configured yet.</p>
+    }
     @if (Model.TelegramCodeGenerated) { <div class="saved">A new Telegram link code was generated.</div> }
     @if (Model.TelegramAccountRemoved) { <div class="saved">Telegram account removed.</div> }
     @if (!string.IsNullOrWhiteSpace(Model.ActiveTelegramCode))

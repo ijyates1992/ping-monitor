@@ -22,7 +22,9 @@ public sealed class ProfileController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IUserNotificationSettingsService _userNotificationSettingsService;
+    private readonly INotificationSettingsService _notificationSettingsService;
     private readonly ITelegramLinkService _telegramLinkService;
+    private readonly ITelegramBotIdentityResolver _telegramBotIdentityResolver;
     private readonly ISmtpNotificationSender _smtpNotificationSender;
     private readonly IEventLogService _eventLogService;
     private readonly ILogger<ProfileController> _logger;
@@ -30,14 +32,18 @@ public sealed class ProfileController : Controller
     public ProfileController(
         UserManager<ApplicationUser> userManager,
         IUserNotificationSettingsService userNotificationSettingsService,
+        INotificationSettingsService notificationSettingsService,
         ITelegramLinkService telegramLinkService,
+        ITelegramBotIdentityResolver telegramBotIdentityResolver,
         ISmtpNotificationSender smtpNotificationSender,
         IEventLogService eventLogService,
         ILogger<ProfileController> logger)
     {
         _userManager = userManager;
         _userNotificationSettingsService = userNotificationSettingsService;
+        _notificationSettingsService = notificationSettingsService;
         _telegramLinkService = telegramLinkService;
+        _telegramBotIdentityResolver = telegramBotIdentityResolver;
         _smtpNotificationSender = smtpNotificationSender;
         _eventLogService = eventLogService;
         _logger = logger;
@@ -297,8 +303,14 @@ public sealed class ProfileController : Controller
         }
 
         var settings = await _userNotificationSettingsService.GetCurrentAsync(user.Id, cancellationToken);
+        var telegramChannelSettings = await _notificationSettingsService.GetTelegramChannelAsync(cancellationToken);
         var pendingCode = await _telegramLinkService.GetActiveCodeAsync(user.Id, cancellationToken);
         var telegramAccount = await _telegramLinkService.GetAccountStatusAsync(user.Id, cancellationToken);
+        var telegramLinkingAvailable = telegramChannelSettings.TelegramEnabled && !string.IsNullOrWhiteSpace(telegramChannelSettings.TelegramBotToken);
+        var telegramBotIdentifier = telegramLinkingAvailable
+            ? await _telegramBotIdentityResolver.ResolveBotIdentifierAsync(telegramChannelSettings.TelegramBotToken!, cancellationToken)
+            : null;
+
         return new ProfilePageViewModel
         {
             UserName = user.UserName ?? string.Empty,
@@ -334,7 +346,9 @@ public sealed class ProfileController : Controller
             TelegramLinkedChatId = telegramAccount?.ChatId,
             TelegramLinkedUsername = telegramAccount?.Username,
             TelegramLinkedDisplayName = telegramAccount?.DisplayName,
-            TelegramLinkedAtUtc = telegramAccount?.LinkedAtUtc
+            TelegramLinkedAtUtc = telegramAccount?.LinkedAtUtc,
+            TelegramLinkingAvailable = telegramLinkingAvailable,
+            TelegramBotIdentifier = telegramBotIdentifier
         };
     }
 
