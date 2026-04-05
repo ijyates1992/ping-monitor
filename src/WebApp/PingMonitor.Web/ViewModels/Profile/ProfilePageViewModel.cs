@@ -55,6 +55,8 @@ public sealed class ProfilePageViewModel
     public DateTimeOffset? TelegramLinkedAtUtc { get; set; }
     public bool TelegramCodeGenerated { get; set; }
     public bool TelegramAccountRemoved { get; set; }
+    public bool TelegramLinkingAvailable { get; set; }
+    public string? TelegramBotIdentifier { get; set; }
     public bool EmailVerificationResendSucceeded { get; set; }
     public string? EmailVerificationMessage { get; set; }
 }
