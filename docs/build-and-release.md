@@ -1,12 +1,15 @@
 # Build and Release
 
-This project includes a PowerShell script to produce a clean, self-contained release package.
+This project includes PowerShell scripts to produce clean, self-contained packages.
 
-The script:
-- injects version information into the application
-- builds and publishes the app as self-contained
-- packages the app, agent, docs, and sample configs
-- generates a release archive and checksum
+- `scripts/build.ps1` is for **strict release builds**
+- `scripts/build-dev.ps1` is for **internal development/test builds only**
+
+Both scripts:
+- inject version information into the application
+- build and publish the app as self-contained
+- package the app, agent, docs, and sample configs
+- generate an archive and checksum
 
 ---
 
@@ -18,9 +21,11 @@ The script:
 
 ---
 
-## Version Format
+## Release builds (`build.ps1`)
 
-Releases must use the following strict version format:
+### Version format
+
+Release builds require a strict version format:
 
 `Vx.x.x`
 
@@ -35,13 +40,9 @@ Invalid examples:
 - `V1.2`
 - `V1.2.3-beta`
 
-The script will fail if the version format is invalid.
+The release script fails if the format is invalid.
 
----
-
-## Running the build script
-
-From the repository root, run:
+### Run release build
 
 ```powershell
 pwsh ./scripts/build.ps1 -Version V0.1.0
@@ -53,42 +54,86 @@ Optional runtime override:
 pwsh ./scripts/build.ps1 -Version V0.1.0 -Runtime win-x64
 ```
 
----
+### Release output
 
-## Output
-
-The script produces versioned output under:
+The release script produces versioned output under:
 
 `artifacts/releases/`
 
-Primary release archive:
+Primary release archive example:
 
 `PingMonitor-V0.1.0-win-x64.zip`
 
-Release staging folder contents:
+---
+
+## Internal development builds (`build-dev.ps1`)
+
+> This script is for internal dev/test packaging only. Do not use it for production releases.
+
+### Dev version behavior
+
+- Does **not** accept `-Version`
+- Automatically generates a timestamped dev version for in-app display:
+  - `DEV-DD.MM.YY-HH:MM`
+  - Example: `DEV-05.04.26-18:42`
+- Uses filename-safe variant for folder/archive names:
+  - `DEV-DD.MM.YY-HH.MM`
+  - Example: `DEV-05.04.26-18.42`
+
+### Run dev build
+
+```powershell
+pwsh ./scripts/build-dev.ps1
+```
+
+Optional runtime override:
+
+```powershell
+pwsh ./scripts/build-dev.ps1 -Runtime win-x64
+```
+
+### Dev output
+
+The dev script produces versioned output under:
+
+`artifacts/dev-releases/`
+
+Primary dev archive example:
+
+`PingMonitor-DEV-05.04.26-18.42-win-x64.zip`
+
+---
+
+## Package contents (release and dev)
+
+Generated staging folder contents:
 
 - `app/`                → self-contained web application (includes agent runtime assets)
 - `docs/`               → repository documentation
 - `config-samples/`     → sample configuration files
-- `manifest.json`       → release metadata
+- `manifest.json`       → package metadata
 
-Additional generated file in `artifacts/releases/`:
+Additional generated file in artifact root:
 
 - `SHA256.txt`          → checksum for the generated zip
+
+For dev builds, `manifest.json` includes:
+
+- `buildType: "dev"`
 
 ---
 
 ## Notes
 
-- The release is self-contained and does not require a separate .NET runtime.
+- Packages are self-contained and do not require a separate .NET runtime.
 - Version information is injected during the build process.
 - If version injection is missing, the app will display `Internal dev build`.
-- The script validates required files before packaging and will fail if anything is missing.
+- Scripts validate required files before packaging and will fail if anything is missing.
 
 ---
 
 ## Tips
 
-- Always verify the generated zip before publishing.
-- Do not include private configuration files in releases.
-- Keep version numbers consistent with your release history.
+- Always verify the generated zip before publishing or sharing.
+- Do not include private configuration files in packages.
+- Keep release version numbers consistent with your release history.
