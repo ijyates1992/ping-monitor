@@ -23,7 +23,6 @@ public sealed class ProfileController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IUserNotificationSettingsService _userNotificationSettingsService;
     private readonly ITelegramLinkService _telegramLinkService;
-    private readonly INotificationSettingsService _notificationSettingsService;
     private readonly ISmtpNotificationSender _smtpNotificationSender;
     private readonly IEventLogService _eventLogService;
     private readonly ILogger<ProfileController> _logger;
@@ -32,7 +31,6 @@ public sealed class ProfileController : Controller
         UserManager<ApplicationUser> userManager,
         IUserNotificationSettingsService userNotificationSettingsService,
         ITelegramLinkService telegramLinkService,
-        INotificationSettingsService notificationSettingsService,
         ISmtpNotificationSender smtpNotificationSender,
         IEventLogService eventLogService,
         ILogger<ProfileController> logger)
@@ -40,7 +38,6 @@ public sealed class ProfileController : Controller
         _userManager = userManager;
         _userNotificationSettingsService = userNotificationSettingsService;
         _telegramLinkService = telegramLinkService;
-        _notificationSettingsService = notificationSettingsService;
         _smtpNotificationSender = smtpNotificationSender;
         _eventLogService = eventLogService;
         _logger = logger;
@@ -300,11 +297,8 @@ public sealed class ProfileController : Controller
         }
 
         var settings = await _userNotificationSettingsService.GetCurrentAsync(user.Id, cancellationToken);
-        var telegramChannel = await _notificationSettingsService.GetTelegramChannelAsync(cancellationToken);
         var pendingCode = await _telegramLinkService.GetActiveCodeAsync(user.Id, cancellationToken);
         var telegramAccount = await _telegramLinkService.GetAccountStatusAsync(user.Id, cancellationToken);
-        var telegramLinkingAvailable = telegramChannel.TelegramEnabled && !string.IsNullOrWhiteSpace(telegramChannel.TelegramBotToken);
-        var telegramBotIdentifier = ResolveTelegramBotIdentifier(telegramChannel.TelegramBotToken);
         return new ProfilePageViewModel
         {
             UserName = user.UserName ?? string.Empty,
@@ -340,31 +334,8 @@ public sealed class ProfileController : Controller
             TelegramLinkedChatId = telegramAccount?.ChatId,
             TelegramLinkedUsername = telegramAccount?.Username,
             TelegramLinkedDisplayName = telegramAccount?.DisplayName,
-            TelegramLinkedAtUtc = telegramAccount?.LinkedAtUtc,
-            TelegramLinkingAvailable = telegramLinkingAvailable,
-            TelegramBotIdentifier = telegramBotIdentifier
+            TelegramLinkedAtUtc = telegramAccount?.LinkedAtUtc
         };
-    }
-
-    private static string? ResolveTelegramBotIdentifier(string? telegramBotToken)
-    {
-        if (string.IsNullOrWhiteSpace(telegramBotToken))
-        {
-            return null;
-        }
-
-        var trimmedToken = telegramBotToken.Trim();
-        var delimiterIndex = trimmedToken.IndexOf(':');
-        if (delimiterIndex > 0)
-        {
-            var possibleBotId = trimmedToken[..delimiterIndex];
-            if (possibleBotId.All(char.IsDigit))
-            {
-                return $"bot ID {possibleBotId}";
-            }
-        }
-
-        return "configured Telegram bot";
     }
 
     private async Task<SmtpNotificationSendResult> SendVerificationEmailAsync(ApplicationUser user, CancellationToken cancellationToken)
