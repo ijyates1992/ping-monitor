@@ -7,6 +7,7 @@ using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.ViewModels.Status;
+using System.Linq.Expressions;
 
 namespace PingMonitor.Web.Services.Status;
 
@@ -55,7 +56,7 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
         var assignments = _dbContext.MonitorAssignments.AsNoTracking();
         if (visibleEndpointIds is not null)
         {
-            assignments = assignments.Where(assignment => visibleEndpointIds.Contains(assignment.EndpointId));
+            assignments = ApplyVisibleEndpointFilter(assignments, visibleEndpointIds);
         }
 
         var baseQuery =
@@ -264,6 +265,29 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             Rows = rowsWithMetrics,
             RecentEvents = await _eventLogQueryService.GetRecentEventsAsync(50, cancellationToken)
         };
+    }
+
+    private static IQueryable<MonitorAssignment> ApplyVisibleEndpointFilter(
+        IQueryable<MonitorAssignment> assignments,
+        IReadOnlyCollection<string> visibleEndpointIds)
+    {
+        if (visibleEndpointIds.Count == 0)
+        {
+            return assignments.Where(static _ => false);
+        }
+
+        var parameter = Expression.Parameter(typeof(MonitorAssignment), "assignment");
+        var endpointId = Expression.Property(parameter, nameof(MonitorAssignment.EndpointId));
+        Expression? combinedPredicate = null;
+
+        foreach (var visibleEndpointId in visibleEndpointIds)
+        {
+            var equals = Expression.Equal(endpointId, Expression.Constant(visibleEndpointId));
+            combinedPredicate = combinedPredicate is null ? equals : Expression.OrElse(combinedPredicate, equals);
+        }
+
+        var lambda = Expression.Lambda<Func<MonitorAssignment, bool>>(combinedPredicate!, parameter);
+        return assignments.Where(lambda);
     }
 
     private static string? Normalize(string? value)
