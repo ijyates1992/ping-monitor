@@ -9,7 +9,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DB maintenance</title>
     <style>
-        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; }
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
         main { max-width: 1100px; margin: 0 auto; padding: 1rem; }
@@ -22,10 +21,17 @@
         .form-grid { display: grid; gap: .8rem; }
         input, select, button { min-height: 44px; padding: .55rem .65rem; font: inherit; }
         button { cursor: pointer; }
-        .success { background: #ecfdf3; border: 1px solid #12b76a; color: #027a48; padding: .6rem; border-radius: 10px; }
-        .danger-box { background: #fef3f2; border: 1px solid #f04438; color: #912018; padding: .75rem; border-radius: 10px; }
-        .warning-box { background: #fffaeb; border: 1px solid #f79009; color: #7a2e0e; padding: .75rem; border-radius: 10px; }
+        .success { background: var(--success-soft); border: 1px solid #12b76a; color: var(--text); padding: .6rem; border-radius: 10px; }
+        .risk-panel { padding: .75rem; border-radius: 10px; border: 1px solid transparent; }
+        .risk-panel p,
+        .risk-panel h3 { margin-top: 0; }
+        .risk-panel--high { background: var(--error-soft); border-color: #f04438; }
+        .risk-panel--medium { background: var(--warning-soft); border-color: #f79009; }
+        .risk-emphasis { color: #912018; }
+        .warning-emphasis { color: #7a2e0e; }
         .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .55rem .8rem; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); text-decoration: none; }
+        html[data-theme='dark'] .risk-emphasis { color: #ffb4ae; }
+        html[data-theme='dark'] .warning-emphasis { color: #ffd29d; }
     </style>
 </head>
 <body>
@@ -130,9 +136,9 @@
                 </table>
             </div>
 
-            <div class="danger-box" style="margin-top:1rem;">
+            <div class="risk-panel risk-panel--high" style="margin-top:1rem;">
                 <h3>Restore DATABASE backup (High risk)</h3>
-                <p><strong>This will completely replace the current DATABASE.</strong></p>
+                <p><strong class="risk-emphasis">This will completely replace the current DATABASE.</strong></p>
                 <p class="muted">Select the backup file to restore. A pre-restore database backup will be created automatically before restore is applied.</p>
                 <p class="muted"><strong>Compact restore note:</strong> compact backups exclude runtime history (results, metrics, logs). Those excluded runtime tables are reset to empty during restore.</p>
                 <form method="post" action="/admin/database/backup/restore" class="form-grid">
@@ -154,8 +160,9 @@
                 </form>
             </div>
 
-            <div class="warning-box" style="margin-top:1rem;">
+            <div class="risk-panel risk-panel--medium" style="margin-top:1rem;">
                 <h3>Delete DATABASE backup (Medium risk)</h3>
+                <p class="warning-emphasis"><strong>Deleting a DATABASE backup is irreversible.</strong></p>
                 <form method="post" action="/admin/database/backup/delete" class="form-grid" onsubmit="return confirm('Delete selected DATABASE backup file? This cannot be undone.');">
                     @Html.AntiForgeryToken()
                     <label>Backup to delete
