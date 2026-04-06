@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Services.StartupGate;
 
 namespace PingMonitor.Web.Services.Backups;
 
@@ -12,6 +13,7 @@ public sealed class ConfigurationAutoBackupBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly BackupOptions _options;
+    private readonly IStartupGateRuntimeState _startupGateRuntimeState;
     private readonly ILogger<ConfigurationAutoBackupBackgroundService> _logger;
 
     private readonly object _sync = new();
@@ -19,10 +21,12 @@ public sealed class ConfigurationAutoBackupBackgroundService : BackgroundService
 
     public ConfigurationAutoBackupBackgroundService(
         IServiceScopeFactory scopeFactory,
+        IStartupGateRuntimeState startupGateRuntimeState,
         IOptions<BackupOptions> options,
         ILogger<ConfigurationAutoBackupBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
+        _startupGateRuntimeState = startupGateRuntimeState;
         _options = options.Value;
         _logger = logger;
     }
@@ -46,11 +50,30 @@ public sealed class ConfigurationAutoBackupBackgroundService : BackgroundService
     {
         _logger.LogInformation("Configuration auto-backup background service started.");
         var nextScheduledRunUtc = GetNextScheduledRunUtc(DateTimeOffset.Now);
+        var wasBlockedByStartupGate = false;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
+                if (!_startupGateRuntimeState.IsOperationalMode)
+                {
+                    if (!wasBlockedByStartupGate)
+                    {
+                        _logger.LogInformation("Configuration auto-backup is paused because Startup Gate is active.");
+                        wasBlockedByStartupGate = true;
+                    }
+
+                    await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+                    continue;
+                }
+
+                if (wasBlockedByStartupGate)
+                {
+                    _logger.LogInformation("Startup Gate is cleared. Configuration auto-backup is resuming normal operation.");
+                    wasBlockedByStartupGate = false;
+                }
+
                 if (_options.AutoBackup.Enabled && _options.AutoBackup.ScheduledEnabled && DateTimeOffset.Now >= nextScheduledRunUtc)
                 {
                     await CreateAutomaticBackupAsync(ConfigurationBackupSources.AutomaticScheduled, "Automatic scheduled configuration backup", stoppingToken);

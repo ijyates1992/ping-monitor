@@ -1,5 +1,6 @@
 using PingMonitor.Web.Services.State;
 using PingMonitor.Web.Services.Diagnostics;
+using PingMonitor.Web.Services.StartupGate;
 
 namespace PingMonitor.Web.Services.Background;
 
@@ -11,22 +12,45 @@ internal sealed class AssignmentProcessingBackgroundService : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IAssignmentProcessingQueue _queue;
+    private readonly IStartupGateRuntimeState _startupGateRuntimeState;
     private readonly ILogger<AssignmentProcessingBackgroundService> _logger;
 
     public AssignmentProcessingBackgroundService(
         IServiceScopeFactory scopeFactory,
         IAssignmentProcessingQueue queue,
+        IStartupGateRuntimeState startupGateRuntimeState,
         ILogger<AssignmentProcessingBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
         _queue = queue;
+        _startupGateRuntimeState = startupGateRuntimeState;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var wasBlockedByStartupGate = false;
+
         while (!stoppingToken.IsCancellationRequested)
         {
+            if (!_startupGateRuntimeState.IsOperationalMode)
+            {
+                if (!wasBlockedByStartupGate)
+                {
+                    _logger.LogInformation("Assignment processing is paused because Startup Gate is active.");
+                    wasBlockedByStartupGate = true;
+                }
+
+                await Task.Delay(IdleDelay, stoppingToken);
+                continue;
+            }
+
+            if (wasBlockedByStartupGate)
+            {
+                _logger.LogInformation("Startup Gate is cleared. Assignment processing is resuming normal operation.");
+                wasBlockedByStartupGate = false;
+            }
+
             await _queue.WaitForSignalAsync(IdleDelay, stoppingToken);
             await ProcessAvailableAssignmentsAsync(stoppingToken);
         }
@@ -34,6 +58,13 @@ internal sealed class AssignmentProcessingBackgroundService : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        if (!_startupGateRuntimeState.IsOperationalMode)
+        {
+            _logger.LogInformation("Startup Gate is active during shutdown. Skipping assignment processing queue drain.");
+            await base.StopAsync(cancellationToken);
+            return;
+        }
+
         _logger.LogInformation("Application shutdown requested. Attempting best-effort assignment processing queue drain.");
         try
         {

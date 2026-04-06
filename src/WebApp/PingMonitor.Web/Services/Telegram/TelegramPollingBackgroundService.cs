@@ -28,7 +28,7 @@ internal sealed class TelegramPollingBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (_startupGateRuntimeState.CurrentMode != StartupMode.Normal)
+            if (!_startupGateRuntimeState.IsOperationalMode)
             {
                 if (!wasBlockedByStartupGate)
                 {

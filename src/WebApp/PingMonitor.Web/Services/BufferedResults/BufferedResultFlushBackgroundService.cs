@@ -5,6 +5,7 @@ using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.State;
+using PingMonitor.Web.Services.StartupGate;
 
 namespace PingMonitor.Web.Services.BufferedResults;
 
@@ -14,18 +15,21 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
     private readonly IBufferedResultIngestionService _buffer;
     private readonly ResultBufferOptions _options;
     private readonly IAssignmentProcessingQueue _assignmentProcessingQueue;
+    private readonly IStartupGateRuntimeState _startupGateRuntimeState;
     private readonly ILogger<BufferedResultFlushBackgroundService> _logger;
 
     public BufferedResultFlushBackgroundService(
         IServiceScopeFactory scopeFactory,
         IBufferedResultIngestionService buffer,
         IAssignmentProcessingQueue assignmentProcessingQueue,
+        IStartupGateRuntimeState startupGateRuntimeState,
         IOptions<ResultBufferOptions> options,
         ILogger<BufferedResultFlushBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
         _buffer = buffer;
         _assignmentProcessingQueue = assignmentProcessingQueue;
+        _startupGateRuntimeState = startupGateRuntimeState;
         _options = options.Value;
         _logger = logger;
     }
@@ -34,9 +38,29 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
     {
         var flushInterval = TimeSpan.FromSeconds(_options.ResultBufferFlushIntervalSeconds);
         var nextFallbackFlushAtUtc = DateTimeOffset.UtcNow.Add(flushInterval);
+        var wasBlockedByStartupGate = false;
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            if (!_startupGateRuntimeState.IsOperationalMode)
+            {
+                if (!wasBlockedByStartupGate)
+                {
+                    _logger.LogInformation("Buffered result flush is paused because Startup Gate is active.");
+                    wasBlockedByStartupGate = true;
+                }
+
+                await Task.Delay(flushInterval, stoppingToken);
+                continue;
+            }
+
+            if (wasBlockedByStartupGate)
+            {
+                _logger.LogInformation("Startup Gate is cleared. Buffered result flush is resuming normal operation.");
+                wasBlockedByStartupGate = false;
+                nextFallbackFlushAtUtc = DateTimeOffset.UtcNow.Add(flushInterval);
+            }
+
             var nowUtc = DateTimeOffset.UtcNow;
             var waitTime = nowUtc >= nextFallbackFlushAtUtc
                 ? TimeSpan.Zero
@@ -57,6 +81,13 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        if (!_startupGateRuntimeState.IsOperationalMode)
+        {
+            _logger.LogInformation("Startup Gate is active during shutdown. Skipping buffered result flush drain.");
+            await base.StopAsync(cancellationToken);
+            return;
+        }
+
         _logger.LogInformation("Application shutdown requested. Attempting best-effort flush of buffered raw check results.");
         try
         {
