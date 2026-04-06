@@ -19,8 +19,23 @@ public sealed class CreateBackupPageForm
     [Display(Name = "Include endpoints")]
     public bool IncludeEndpoints { get; set; } = true;
 
+    [Display(Name = "Include groups")]
+    public bool IncludeGroups { get; set; } = true;
+
+    [Display(Name = "Include dependencies")]
+    public bool IncludeDependencies { get; set; } = true;
+
     [Display(Name = "Include assignments")]
     public bool IncludeAssignments { get; set; } = true;
+
+    [Display(Name = "Include security settings")]
+    public bool IncludeSecuritySettings { get; set; } = true;
+
+    [Display(Name = "Include notification infrastructure settings")]
+    public bool IncludeNotificationSettings { get; set; } = true;
+
+    [Display(Name = "Include user notification settings")]
+    public bool IncludeUserNotificationSettings { get; set; } = true;
 
     [Display(Name = "Include identity")]
     public bool IncludeIdentity { get; set; }
@@ -96,8 +111,23 @@ public sealed class RestoreApplyForm
     [Display(Name = "Restore endpoints")]
     public bool IncludeEndpoints { get; set; } = true;
 
+    [Display(Name = "Restore groups")]
+    public bool IncludeGroups { get; set; } = true;
+
+    [Display(Name = "Restore dependencies")]
+    public bool IncludeDependencies { get; set; } = true;
+
     [Display(Name = "Restore assignments")]
     public bool IncludeAssignments { get; set; } = true;
+
+    [Display(Name = "Restore security settings")]
+    public bool IncludeSecuritySettings { get; set; } = true;
+
+    [Display(Name = "Restore notification infrastructure settings")]
+    public bool IncludeNotificationSettings { get; set; } = true;
+
+    [Display(Name = "Restore user notification settings")]
+    public bool IncludeUserNotificationSettings { get; set; } = true;
 
     [Display(Name = "Restore identity")]
     public bool IncludeIdentity { get; set; }
@@ -125,7 +155,13 @@ public sealed class ConfigurationBackupSectionCountViewModel
 {
     public int Agents { get; init; }
     public int Endpoints { get; init; }
+    public int Groups { get; init; }
+    public int GroupEndpointMemberships { get; init; }
+    public int Dependencies { get; init; }
     public int Assignments { get; init; }
+    public int SecuritySettings { get; init; }
+    public int NotificationSettings { get; init; }
+    public int UserNotificationSettings { get; init; }
     public int IdentityUsers { get; init; }
     public int IdentityRoles { get; init; }
     public int IdentityUserRoles { get; init; }

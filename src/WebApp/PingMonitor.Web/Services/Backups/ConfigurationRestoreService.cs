@@ -88,9 +88,44 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             sectionResults.Add(section);
         }
 
+        if (selectedSections.Contains(ConfigurationBackupSections.Groups, StringComparer.Ordinal))
+        {
+            var section = await RestoreGroupsAsync(backup, endpointIdMapping, cancellationToken);
+            section.DeletedCount = GetDeletedCount(deletedCounts, section.Section);
+            sectionResults.Add(section);
+        }
+
+        if (selectedSections.Contains(ConfigurationBackupSections.Dependencies, StringComparer.Ordinal))
+        {
+            var section = await RestoreDependenciesAsync(backup, endpointIdMapping, cancellationToken);
+            section.DeletedCount = GetDeletedCount(deletedCounts, section.Section);
+            sectionResults.Add(section);
+        }
+
         if (selectedSections.Contains(ConfigurationBackupSections.Assignments, StringComparer.Ordinal))
         {
             var section = await RestoreAssignmentsAsync(backup, endpointIdMapping, agentIdMapping, cancellationToken);
+            section.DeletedCount = GetDeletedCount(deletedCounts, section.Section);
+            sectionResults.Add(section);
+        }
+
+        if (selectedSections.Contains(ConfigurationBackupSections.SecuritySettings, StringComparer.Ordinal))
+        {
+            var section = await RestoreSecuritySettingsAsync(backup, cancellationToken);
+            section.DeletedCount = GetDeletedCount(deletedCounts, section.Section);
+            sectionResults.Add(section);
+        }
+
+        if (selectedSections.Contains(ConfigurationBackupSections.NotificationSettings, StringComparer.Ordinal))
+        {
+            var section = await RestoreNotificationSettingsAsync(backup, cancellationToken);
+            section.DeletedCount = GetDeletedCount(deletedCounts, section.Section);
+            sectionResults.Add(section);
+        }
+
+        if (selectedSections.Contains(ConfigurationBackupSections.UserNotificationSettings, StringComparer.Ordinal))
+        {
+            var section = await RestoreUserNotificationSettingsAsync(backup, cancellationToken);
             section.DeletedCount = GetDeletedCount(deletedCounts, section.Section);
             sectionResults.Add(section);
         }
@@ -160,11 +195,12 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
 
         var includesAgents = selectedSections.Contains(ConfigurationBackupSections.Agents, StringComparer.Ordinal);
         var includesEndpoints = selectedSections.Contains(ConfigurationBackupSections.Endpoints, StringComparer.Ordinal);
+        var includesDependencies = selectedSections.Contains(ConfigurationBackupSections.Dependencies, StringComparer.Ordinal);
         var includesAssignments = selectedSections.Contains(ConfigurationBackupSections.Assignments, StringComparer.Ordinal);
 
-        if ((includesAgents || includesEndpoints) && !includesAssignments)
+        if ((includesAgents || includesEndpoints || includesDependencies) && !includesAssignments)
         {
-            throw new InvalidOperationException("Replace mode for agents/endpoints requires selecting assignments so relationship rows are replaced deterministically.");
+            throw new InvalidOperationException("Replace mode for agents/endpoints/dependencies requires selecting assignments so relationship rows are replaced deterministically.");
         }
     }
 
@@ -191,19 +227,43 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
 
         if (selectedSections.Contains(ConfigurationBackupSections.Endpoints, StringComparer.Ordinal))
         {
-            var deletedDependencies = await _dbContext.EndpointDependencies.ExecuteDeleteAsync(cancellationToken);
             var deletedEndpointMemberships = await _dbContext.EndpointGroupMemberships.ExecuteDeleteAsync(cancellationToken);
             var deletedEndpointAccess = await _dbContext.UserEndpointAccesses.ExecuteDeleteAsync(cancellationToken);
             var deletedEndpoints = await _dbContext.Endpoints.ExecuteDeleteAsync(cancellationToken);
 
-            deletedCounts[ConfigurationBackupSections.Endpoints] = deletedEndpoints + deletedDependencies + deletedEndpointMemberships + deletedEndpointAccess;
+            deletedCounts[ConfigurationBackupSections.Endpoints] = deletedEndpoints + deletedEndpointMemberships + deletedEndpointAccess;
             _logger.LogInformation(
-                "Replace delete completed for section {Section}. Deleted endpoints {EndpointCount}, dependencies {DependencyCount}, memberships {MembershipCount}, endpoint access {AccessCount}.",
+                "Replace delete completed for section {Section}. Deleted endpoints {EndpointCount}, memberships {MembershipCount}, endpoint access {AccessCount}.",
                 ConfigurationBackupSections.Endpoints,
                 deletedEndpoints,
-                deletedDependencies,
                 deletedEndpointMemberships,
                 deletedEndpointAccess);
+        }
+
+        if (selectedSections.Contains(ConfigurationBackupSections.Dependencies, StringComparer.Ordinal))
+        {
+            var deletedDependencies = await _dbContext.EndpointDependencies.ExecuteDeleteAsync(cancellationToken);
+            deletedCounts[ConfigurationBackupSections.Dependencies] = deletedDependencies;
+            _logger.LogInformation("Replace delete completed for section {Section}. Deleted {DeletedCount} records.", ConfigurationBackupSections.Dependencies, deletedDependencies);
+        }
+
+        if (selectedSections.Contains(ConfigurationBackupSections.Groups, StringComparer.Ordinal))
+        {
+            var deletedMemberships = await _dbContext.EndpointGroupMemberships.ExecuteDeleteAsync(cancellationToken);
+            var deletedGroups = await _dbContext.Groups.ExecuteDeleteAsync(cancellationToken);
+            deletedCounts[ConfigurationBackupSections.Groups] = deletedMemberships + deletedGroups;
+            _logger.LogInformation(
+                "Replace delete completed for section {Section}. Deleted groups {GroupCount}, memberships {MembershipCount}.",
+                ConfigurationBackupSections.Groups,
+                deletedGroups,
+                deletedMemberships);
+        }
+
+        if (selectedSections.Contains(ConfigurationBackupSections.UserNotificationSettings, StringComparer.Ordinal))
+        {
+            var deleted = await _dbContext.UserNotificationSettings.ExecuteDeleteAsync(cancellationToken);
+            deletedCounts[ConfigurationBackupSections.UserNotificationSettings] = deleted;
+            _logger.LogInformation("Replace delete completed for section {Section}. Deleted {DeletedCount} records.", ConfigurationBackupSections.UserNotificationSettings, deleted);
         }
 
         if (selectedSections.Contains(ConfigurationBackupSections.Agents, StringComparer.Ordinal))
@@ -227,7 +287,13 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             {
                 ConfigurationBackupSections.Agents => backup.Sections.Agents is not null,
                 ConfigurationBackupSections.Endpoints => backup.Sections.Endpoints is not null,
+                ConfigurationBackupSections.Groups => backup.Sections.Groups is not null,
+                ConfigurationBackupSections.Dependencies => backup.Sections.Dependencies is not null
+                    || backup.Sections.Endpoints?.Any(x => x.DependsOnEndpointIds is { Count: > 0 }) == true,
                 ConfigurationBackupSections.Assignments => backup.Sections.Assignments is not null,
+                ConfigurationBackupSections.SecuritySettings => backup.Sections.SecuritySettings is not null,
+                ConfigurationBackupSections.NotificationSettings => backup.Sections.NotificationSettings is not null,
+                ConfigurationBackupSections.UserNotificationSettings => backup.Sections.UserNotificationSettings is not null,
                 ConfigurationBackupSections.Identity => backup.Sections.Identity is not null,
                 _ => false
             };
@@ -311,7 +377,6 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
         var sourceEndpoints = backup.Sections.Endpoints ?? [];
 
         var existingEndpoints = await _dbContext.Endpoints.ToListAsync(cancellationToken);
-        var existingDependencies = await _dbContext.EndpointDependencies.ToListAsync(cancellationToken);
 
         foreach (var source in sourceEndpoints)
         {
@@ -350,48 +415,166 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             }
         }
 
-        foreach (var source in sourceEndpoints)
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Restored section {Section}. Inserted {InsertedCount}, updated {UpdatedCount}, skipped {SkippedCount}, errors {ErrorCount}.",
+            result.Section,
+            result.InsertedCount,
+            result.UpdatedCount,
+            result.SkippedCount,
+            result.ErrorCount);
+
+        return result;
+    }
+
+    private async Task<RestoreSectionResult> RestoreGroupsAsync(
+        ConfigurationBackupDocument backup,
+        IDictionary<string, string> endpointIdMapping,
+        CancellationToken cancellationToken)
+    {
+        var result = new RestoreSectionResult { Section = ConfigurationBackupSections.Groups };
+        var sourceGroups = backup.Sections.Groups;
+        if (sourceGroups is null)
         {
-            if (!endpointIdMapping.TryGetValue(source.EndpointId, out var endpointId))
+            throw new InvalidOperationException("Groups section is missing in selected backup.");
+        }
+
+        var existingGroups = await _dbContext.Groups.ToListAsync(cancellationToken);
+        var existingMemberships = await _dbContext.EndpointGroupMemberships.ToListAsync(cancellationToken);
+        var existingEndpointIds = await _dbContext.Endpoints.AsNoTracking().Select(x => x.EndpointId).ToListAsync(cancellationToken);
+        var existingEndpointIdSet = existingEndpointIds.ToHashSet(StringComparer.Ordinal);
+
+        var groupIdMapping = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var source in sourceGroups.Groups)
+        {
+            var target = existingGroups.FirstOrDefault(x => string.Equals(x.Name, source.Name, StringComparison.OrdinalIgnoreCase));
+            if (target is null)
+            {
+                target = new Group
+                {
+                    GroupId = string.IsNullOrWhiteSpace(source.GroupId) ? Guid.NewGuid().ToString() : source.GroupId,
+                    Name = source.Name,
+                    Description = source.Description,
+                    CreatedAtUtc = source.CreatedAtUtc == default ? DateTimeOffset.UtcNow : source.CreatedAtUtc
+                };
+
+                _dbContext.Groups.Add(target);
+                existingGroups.Add(target);
+                result.InsertedCount++;
+            }
+            else
+            {
+                target.Description = source.Description;
+                result.UpdatedCount++;
+            }
+
+            groupIdMapping[source.GroupId] = target.GroupId;
+        }
+
+        foreach (var sourceMembership in sourceGroups.EndpointMemberships)
+        {
+            if (!groupIdMapping.TryGetValue(sourceMembership.GroupId, out var resolvedGroupId))
+            {
+                result.SkippedCount++;
+                result.Warnings.Add($"Skipped group membership for group id '{sourceMembership.GroupId}' because the group was not restored.");
+                continue;
+            }
+
+            var resolvedEndpointId = ResolveMappedOrExistingId(sourceMembership.EndpointId, endpointIdMapping, existingEndpointIdSet);
+            if (resolvedEndpointId is null)
+            {
+                result.SkippedCount++;
+                result.Warnings.Add($"Skipped group membership for endpoint id '{sourceMembership.EndpointId}' because the endpoint was not available.");
+                continue;
+            }
+
+            var exists = existingMemberships.Any(x => string.Equals(x.GroupId, resolvedGroupId, StringComparison.Ordinal)
+                && string.Equals(x.EndpointId, resolvedEndpointId, StringComparison.Ordinal));
+            if (exists)
             {
                 continue;
             }
 
-            foreach (var sourceDependencyId in source.DependsOnEndpointIds)
+            var membership = new EndpointGroupMembership
             {
-                if (!endpointIdMapping.TryGetValue(sourceDependencyId, out var dependsOnEndpointId))
-                {
-                    result.SkippedCount++;
-                    result.Warnings.Add($"Skipped dependency mapping for endpoint '{source.Name}' because dependency endpoint id '{sourceDependencyId}' was not available in restore scope.");
-                    continue;
-                }
+                EndpointGroupMembershipId = Guid.NewGuid().ToString(),
+                GroupId = resolvedGroupId,
+                EndpointId = resolvedEndpointId,
+                CreatedAtUtc = sourceMembership.CreatedAtUtc == default ? DateTimeOffset.UtcNow : sourceMembership.CreatedAtUtc
+            };
 
-                if (string.Equals(endpointId, dependsOnEndpointId, StringComparison.Ordinal))
-                {
-                    result.SkippedCount++;
-                    result.Warnings.Add($"Skipped self-dependency for endpoint '{source.Name}'.");
-                    continue;
-                }
+            _dbContext.EndpointGroupMemberships.Add(membership);
+            existingMemberships.Add(membership);
+            result.InsertedCount++;
+        }
 
-                var exists = existingDependencies.Any(x => string.Equals(x.EndpointId, endpointId, StringComparison.Ordinal)
-                    && string.Equals(x.DependsOnEndpointId, dependsOnEndpointId, StringComparison.Ordinal));
-                if (exists)
-                {
-                    continue;
-                }
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
-                var dependency = new EndpointDependency
-                {
-                    EndpointDependencyId = Guid.NewGuid().ToString(),
-                    EndpointId = endpointId,
-                    DependsOnEndpointId = dependsOnEndpointId,
-                    CreatedAtUtc = DateTimeOffset.UtcNow
-                };
+        _logger.LogInformation(
+            "Restored section {Section}. Inserted {InsertedCount}, updated {UpdatedCount}, skipped {SkippedCount}, errors {ErrorCount}.",
+            result.Section,
+            result.InsertedCount,
+            result.UpdatedCount,
+            result.SkippedCount,
+            result.ErrorCount);
 
-                _dbContext.EndpointDependencies.Add(dependency);
-                existingDependencies.Add(dependency);
-                result.InsertedCount++;
+        return result;
+    }
+
+    private async Task<RestoreSectionResult> RestoreDependenciesAsync(
+        ConfigurationBackupDocument backup,
+        IDictionary<string, string> endpointIdMapping,
+        CancellationToken cancellationToken)
+    {
+        var result = new RestoreSectionResult { Section = ConfigurationBackupSections.Dependencies };
+        var sourceDependencies = backup.Sections.Dependencies?.ToList()
+            ?? BuildLegacyDependencyRecords(backup.Sections.Endpoints);
+        if (sourceDependencies.Count == 0)
+        {
+            return result;
+        }
+
+        var existingDependencies = await _dbContext.EndpointDependencies.ToListAsync(cancellationToken);
+        var existingEndpointIds = await _dbContext.Endpoints.AsNoTracking().Select(x => x.EndpointId).ToListAsync(cancellationToken);
+        var existingEndpointIdSet = existingEndpointIds.ToHashSet(StringComparer.Ordinal);
+
+        foreach (var source in sourceDependencies)
+        {
+            var resolvedEndpointId = ResolveMappedOrExistingId(source.EndpointId, endpointIdMapping, existingEndpointIdSet);
+            var resolvedDependsOnId = ResolveMappedOrExistingId(source.DependsOnEndpointId, endpointIdMapping, existingEndpointIdSet);
+            if (resolvedEndpointId is null || resolvedDependsOnId is null)
+            {
+                result.SkippedCount++;
+                result.Warnings.Add($"Skipped dependency '{source.EndpointId}' -> '{source.DependsOnEndpointId}' because one or both endpoints were not available.");
+                continue;
             }
+
+            if (string.Equals(resolvedEndpointId, resolvedDependsOnId, StringComparison.Ordinal))
+            {
+                result.SkippedCount++;
+                result.Warnings.Add($"Skipped self-dependency '{resolvedEndpointId}'.");
+                continue;
+            }
+
+            var exists = existingDependencies.Any(x => string.Equals(x.EndpointId, resolvedEndpointId, StringComparison.Ordinal)
+                && string.Equals(x.DependsOnEndpointId, resolvedDependsOnId, StringComparison.Ordinal));
+            if (exists)
+            {
+                continue;
+            }
+
+            var dependency = new EndpointDependency
+            {
+                EndpointDependencyId = Guid.NewGuid().ToString(),
+                EndpointId = resolvedEndpointId,
+                DependsOnEndpointId = resolvedDependsOnId,
+                CreatedAtUtc = source.CreatedAtUtc == default ? DateTimeOffset.UtcNow : source.CreatedAtUtc
+            };
+
+            _dbContext.EndpointDependencies.Add(dependency);
+            existingDependencies.Add(dependency);
+            result.InsertedCount++;
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -490,6 +673,189 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             result.SkippedCount,
             result.ErrorCount);
 
+        return result;
+    }
+
+    private async Task<RestoreSectionResult> RestoreSecuritySettingsAsync(ConfigurationBackupDocument backup, CancellationToken cancellationToken)
+    {
+        var result = new RestoreSectionResult { Section = ConfigurationBackupSections.SecuritySettings };
+        var source = backup.Sections.SecuritySettings;
+        if (source is null)
+        {
+            throw new InvalidOperationException("Security settings section is missing in selected backup.");
+        }
+
+        var target = await _dbContext.SecuritySettings
+            .SingleOrDefaultAsync(x => x.SecuritySettingsId == SecuritySettings.SingletonId, cancellationToken);
+        if (target is null)
+        {
+            target = new SecuritySettings { SecuritySettingsId = SecuritySettings.SingletonId };
+            _dbContext.SecuritySettings.Add(target);
+            result.InsertedCount++;
+        }
+        else
+        {
+            result.UpdatedCount++;
+        }
+
+        target.AgentFailedAttemptsBeforeTemporaryIpBlock = source.AgentFailedAttemptsBeforeTemporaryIpBlock;
+        target.AgentTemporaryIpBlockDurationMinutes = source.AgentTemporaryIpBlockDurationMinutes;
+        target.AgentFailedAttemptsBeforePermanentIpBlock = source.AgentFailedAttemptsBeforePermanentIpBlock;
+        target.UserFailedAttemptsBeforeTemporaryIpBlock = source.UserFailedAttemptsBeforeTemporaryIpBlock;
+        target.UserTemporaryIpBlockDurationMinutes = source.UserTemporaryIpBlockDurationMinutes;
+        target.UserFailedAttemptsBeforePermanentIpBlock = source.UserFailedAttemptsBeforePermanentIpBlock;
+        target.UserFailedAttemptsBeforeTemporaryAccountLockout = source.UserFailedAttemptsBeforeTemporaryAccountLockout;
+        target.UserTemporaryAccountLockoutDurationMinutes = source.UserTemporaryAccountLockoutDurationMinutes;
+        target.SecurityLogRetentionEnabled = source.SecurityLogRetentionEnabled;
+        target.SecurityLogRetentionDays = source.SecurityLogRetentionDays;
+        target.SecurityLogAutoPruneEnabled = source.SecurityLogAutoPruneEnabled;
+        target.UpdatedAtUtc = source.UpdatedAtUtc == default ? DateTimeOffset.UtcNow : source.UpdatedAtUtc;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Restored section {Section}. Inserted {InsertedCount}, updated {UpdatedCount}, skipped {SkippedCount}, errors {ErrorCount}.",
+            result.Section,
+            result.InsertedCount,
+            result.UpdatedCount,
+            result.SkippedCount,
+            result.ErrorCount);
+        return result;
+    }
+
+    private async Task<RestoreSectionResult> RestoreNotificationSettingsAsync(ConfigurationBackupDocument backup, CancellationToken cancellationToken)
+    {
+        var result = new RestoreSectionResult { Section = ConfigurationBackupSections.NotificationSettings };
+        var source = backup.Sections.NotificationSettings;
+        if (source is null)
+        {
+            throw new InvalidOperationException("Notification settings section is missing in selected backup.");
+        }
+
+        var target = await _dbContext.NotificationSettings
+            .SingleOrDefaultAsync(x => x.NotificationSettingsId == NotificationSettings.SingletonId, cancellationToken);
+        if (target is null)
+        {
+            target = new NotificationSettings { NotificationSettingsId = NotificationSettings.SingletonId };
+            _dbContext.NotificationSettings.Add(target);
+            result.InsertedCount++;
+        }
+        else
+        {
+            result.UpdatedCount++;
+        }
+
+        if (!TryParseTelegramInboundMode(source.TelegramInboundMode, out var telegramInboundMode))
+        {
+            result.SkippedCount++;
+            result.Warnings.Add($"Notification settings contained unsupported telegram inbound mode '{source.TelegramInboundMode}'. Defaulted to polling.");
+            telegramInboundMode = TelegramInboundMode.Polling;
+        }
+
+        target.BrowserNotificationsEnabled = source.BrowserNotificationsEnabled;
+        target.BrowserNotifyEndpointDown = source.BrowserNotifyEndpointDown;
+        target.BrowserNotifyEndpointRecovered = source.BrowserNotifyEndpointRecovered;
+        target.BrowserNotifyAgentOffline = source.BrowserNotifyAgentOffline;
+        target.BrowserNotifyAgentOnline = source.BrowserNotifyAgentOnline;
+        target.BrowserNotificationsPermissionState = source.BrowserNotificationsPermissionState;
+        target.TelegramEnabled = source.TelegramEnabled;
+        target.TelegramBotTokenProtected = source.TelegramBotTokenProtected;
+        target.TelegramInboundMode = telegramInboundMode;
+        target.TelegramPollIntervalSeconds = source.TelegramPollIntervalSeconds;
+        target.TelegramLastProcessedUpdateId = source.TelegramLastProcessedUpdateId;
+        target.TelegramWebhookUrl = source.TelegramWebhookUrl;
+        target.TelegramWebhookSecretToken = source.TelegramWebhookSecretToken;
+        target.QuietHoursEnabled = source.QuietHoursEnabled;
+        target.QuietHoursStartLocalTime = source.QuietHoursStartLocalTime;
+        target.QuietHoursEndLocalTime = source.QuietHoursEndLocalTime;
+        target.QuietHoursTimeZoneId = source.QuietHoursTimeZoneId;
+        target.QuietHoursSuppressBrowserNotifications = source.QuietHoursSuppressBrowserNotifications;
+        target.QuietHoursSuppressSmtpNotifications = source.QuietHoursSuppressSmtpNotifications;
+        target.SmtpNotificationsEnabled = source.SmtpNotificationsEnabled;
+        target.SmtpHost = source.SmtpHost;
+        target.SmtpPort = source.SmtpPort;
+        target.SmtpUseTls = source.SmtpUseTls;
+        target.SmtpUsername = source.SmtpUsername;
+        target.SmtpPasswordProtected = source.SmtpPasswordProtected;
+        target.SmtpFromAddress = source.SmtpFromAddress;
+        target.SmtpFromDisplayName = source.SmtpFromDisplayName;
+        target.SmtpRecipientAddresses = source.SmtpRecipientAddresses;
+        target.SmtpNotifyEndpointDown = source.SmtpNotifyEndpointDown;
+        target.SmtpNotifyEndpointRecovered = source.SmtpNotifyEndpointRecovered;
+        target.SmtpNotifyAgentOffline = source.SmtpNotifyAgentOffline;
+        target.SmtpNotifyAgentOnline = source.SmtpNotifyAgentOnline;
+        target.UpdatedAtUtc = source.UpdatedAtUtc == default ? DateTimeOffset.UtcNow : source.UpdatedAtUtc;
+        target.UpdatedByUserId = source.UpdatedByUserId;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Restored section {Section}. Inserted {InsertedCount}, updated {UpdatedCount}, skipped {SkippedCount}, errors {ErrorCount}.",
+            result.Section,
+            result.InsertedCount,
+            result.UpdatedCount,
+            result.SkippedCount,
+            result.ErrorCount);
+        return result;
+    }
+
+    private async Task<RestoreSectionResult> RestoreUserNotificationSettingsAsync(ConfigurationBackupDocument backup, CancellationToken cancellationToken)
+    {
+        var result = new RestoreSectionResult { Section = ConfigurationBackupSections.UserNotificationSettings };
+        var sourceRows = backup.Sections.UserNotificationSettings ?? [];
+        var existingRows = await _dbContext.UserNotificationSettings.ToListAsync(cancellationToken);
+
+        foreach (var source in sourceRows)
+        {
+            var target = existingRows.FirstOrDefault(x => string.Equals(x.UserId, source.UserId, StringComparison.Ordinal));
+            if (target is null)
+            {
+                target = new UserNotificationSettings
+                {
+                    UserId = source.UserId
+                };
+
+                _dbContext.UserNotificationSettings.Add(target);
+                existingRows.Add(target);
+                result.InsertedCount++;
+            }
+            else
+            {
+                result.UpdatedCount++;
+            }
+
+            target.BrowserNotificationsEnabled = source.BrowserNotificationsEnabled;
+            target.BrowserNotifyEndpointDown = source.BrowserNotifyEndpointDown;
+            target.BrowserNotifyEndpointRecovered = source.BrowserNotifyEndpointRecovered;
+            target.BrowserNotifyAgentOffline = source.BrowserNotifyAgentOffline;
+            target.BrowserNotifyAgentOnline = source.BrowserNotifyAgentOnline;
+            target.BrowserNotificationsPermissionState = source.BrowserNotificationsPermissionState;
+            target.SmtpNotificationsEnabled = source.SmtpNotificationsEnabled;
+            target.SmtpNotifyEndpointDown = source.SmtpNotifyEndpointDown;
+            target.SmtpNotifyEndpointRecovered = source.SmtpNotifyEndpointRecovered;
+            target.SmtpNotifyAgentOffline = source.SmtpNotifyAgentOffline;
+            target.SmtpNotifyAgentOnline = source.SmtpNotifyAgentOnline;
+            target.TelegramNotificationsEnabled = source.TelegramNotificationsEnabled;
+            target.TelegramNotifyEndpointDown = source.TelegramNotifyEndpointDown;
+            target.TelegramNotifyEndpointRecovered = source.TelegramNotifyEndpointRecovered;
+            target.TelegramNotifyAgentOffline = source.TelegramNotifyAgentOffline;
+            target.TelegramNotifyAgentOnline = source.TelegramNotifyAgentOnline;
+            target.QuietHoursSuppressTelegramNotifications = source.QuietHoursSuppressTelegramNotifications;
+            target.QuietHoursEnabled = source.QuietHoursEnabled;
+            target.QuietHoursStartLocalTime = source.QuietHoursStartLocalTime;
+            target.QuietHoursEndLocalTime = source.QuietHoursEndLocalTime;
+            target.QuietHoursTimeZoneId = source.QuietHoursTimeZoneId;
+            target.QuietHoursSuppressBrowserNotifications = source.QuietHoursSuppressBrowserNotifications;
+            target.QuietHoursSuppressSmtpNotifications = source.QuietHoursSuppressSmtpNotifications;
+            target.UpdatedAtUtc = source.UpdatedAtUtc == default ? DateTimeOffset.UtcNow : source.UpdatedAtUtc;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Restored section {Section}. Inserted {InsertedCount}, updated {UpdatedCount}, skipped {SkippedCount}, errors {ErrorCount}.",
+            result.Section,
+            result.InsertedCount,
+            result.UpdatedCount,
+            result.SkippedCount,
+            result.ErrorCount);
         return result;
     }
 
@@ -634,5 +1000,52 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
 
         checkType = default;
         return false;
+    }
+
+    private static bool TryParseTelegramInboundMode(string? rawValue, out TelegramInboundMode mode)
+    {
+        if (string.Equals(rawValue, "polling", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = TelegramInboundMode.Polling;
+            return true;
+        }
+
+        if (string.Equals(rawValue, "webhook", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = TelegramInboundMode.Webhook;
+            return true;
+        }
+
+        mode = default;
+        return false;
+    }
+
+    private static List<BackupEndpointDependencyRecord> BuildLegacyDependencyRecords(IReadOnlyList<BackupEndpointRecord>? endpoints)
+    {
+        if (endpoints is null)
+        {
+            return [];
+        }
+
+        var records = new List<BackupEndpointDependencyRecord>();
+        foreach (var endpoint in endpoints)
+        {
+            if (endpoint.DependsOnEndpointIds is null || endpoint.DependsOnEndpointIds.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var dependsOnEndpointId in endpoint.DependsOnEndpointIds)
+            {
+                records.Add(new BackupEndpointDependencyRecord
+                {
+                    EndpointId = endpoint.EndpointId,
+                    DependsOnEndpointId = dependsOnEndpointId,
+                    CreatedAtUtc = DateTimeOffset.UtcNow
+                });
+            }
+        }
+
+        return records;
     }
 }

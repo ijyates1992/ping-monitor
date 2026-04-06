@@ -165,6 +165,27 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
                         includedSections.Add(section);
                     }
                 }
+
+                if (!includedSections.Contains(ConfigurationBackupSections.Dependencies, StringComparer.Ordinal)
+                    && sectionsElement.TryGetProperty("endpoints", out var endpointsElement)
+                    && endpointsElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var endpointElement in endpointsElement.EnumerateArray())
+                    {
+                        if (endpointElement.ValueKind != JsonValueKind.Object)
+                        {
+                            continue;
+                        }
+
+                        if (endpointElement.TryGetProperty("dependsOnEndpointIds", out var dependsOnElement)
+                            && dependsOnElement.ValueKind == JsonValueKind.Array
+                            && dependsOnElement.GetArrayLength() > 0)
+                        {
+                            includedSections.Add(ConfigurationBackupSections.Dependencies);
+                            break;
+                        }
+                    }
+                }
             }
 
             string? notes = null;

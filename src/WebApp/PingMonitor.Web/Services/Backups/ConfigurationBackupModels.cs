@@ -8,10 +8,26 @@ public static class ConfigurationBackupSections
 {
     public const string Agents = "agents";
     public const string Endpoints = "endpoints";
+    public const string Groups = "groups";
+    public const string Dependencies = "dependencies";
     public const string Assignments = "assignments";
+    public const string SecuritySettings = "security_settings";
+    public const string NotificationSettings = "notification_settings";
+    public const string UserNotificationSettings = "user_notification_settings";
     public const string Identity = "identity";
 
-    public static readonly string[] All = [Agents, Endpoints, Assignments, Identity];
+    public static readonly string[] All =
+    [
+        Agents,
+        Endpoints,
+        Groups,
+        Dependencies,
+        Assignments,
+        SecuritySettings,
+        NotificationSettings,
+        UserNotificationSettings,
+        Identity
+    ];
 }
 
 public static class ConfigurationRestoreModes
@@ -49,7 +65,7 @@ public static class BackupDeleteModes
 
 public sealed class ConfigurationBackupMetadata
 {
-    public const int CurrentFormatVersion = 1;
+    public const int CurrentFormatVersion = 2;
 
     public int FormatVersion { get; init; } = CurrentFormatVersion;
     public string AppVersion { get; init; } = string.Empty;
@@ -124,8 +140,23 @@ public sealed class ConfigurationBackupSectionData
     [JsonPropertyName("endpoints")]
     public IReadOnlyList<BackupEndpointRecord>? Endpoints { get; init; }
 
+    [JsonPropertyName("groups")]
+    public BackupGroupSection? Groups { get; init; }
+
+    [JsonPropertyName("dependencies")]
+    public IReadOnlyList<BackupEndpointDependencyRecord>? Dependencies { get; init; }
+
     [JsonPropertyName("assignments")]
     public IReadOnlyList<BackupAssignmentRecord>? Assignments { get; init; }
+
+    [JsonPropertyName("security_settings")]
+    public BackupSecuritySettingsRecord? SecuritySettings { get; init; }
+
+    [JsonPropertyName("notification_settings")]
+    public BackupNotificationSettingsRecord? NotificationSettings { get; init; }
+
+    [JsonPropertyName("user_notification_settings")]
+    public IReadOnlyList<BackupUserNotificationSettingsRecord>? UserNotificationSettings { get; init; }
 
     [JsonPropertyName("identity")]
     public BackupIdentitySection? Identity { get; init; }
@@ -152,8 +183,37 @@ public sealed class BackupEndpointRecord
     public string IconKey { get; init; } = string.Empty;
     public bool Enabled { get; init; }
     public IReadOnlyList<string> Tags { get; init; } = [];
-    public IReadOnlyList<string> DependsOnEndpointIds { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? DependsOnEndpointIds { get; init; }
     public string? Notes { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+public sealed class BackupGroupSection
+{
+    public IReadOnlyList<BackupGroupRecord> Groups { get; init; } = [];
+    public IReadOnlyList<BackupEndpointGroupMembershipRecord> EndpointMemberships { get; init; } = [];
+}
+
+public sealed class BackupGroupRecord
+{
+    public string GroupId { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+public sealed class BackupEndpointGroupMembershipRecord
+{
+    public string EndpointId { get; init; } = string.Empty;
+    public string GroupId { get; init; } = string.Empty;
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+public sealed class BackupEndpointDependencyRecord
+{
+    public string EndpointId { get; init; } = string.Empty;
+    public string DependsOnEndpointId { get; init; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; init; }
 }
 
@@ -170,6 +230,89 @@ public sealed class BackupAssignmentRecord
     public int FailureThreshold { get; init; }
     public int RecoveryThreshold { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+}
+
+public sealed class BackupSecuritySettingsRecord
+{
+    public int AgentFailedAttemptsBeforeTemporaryIpBlock { get; init; }
+    public int AgentTemporaryIpBlockDurationMinutes { get; init; }
+    public int AgentFailedAttemptsBeforePermanentIpBlock { get; init; }
+    public int UserFailedAttemptsBeforeTemporaryIpBlock { get; init; }
+    public int UserTemporaryIpBlockDurationMinutes { get; init; }
+    public int UserFailedAttemptsBeforePermanentIpBlock { get; init; }
+    public int UserFailedAttemptsBeforeTemporaryAccountLockout { get; init; }
+    public int UserTemporaryAccountLockoutDurationMinutes { get; init; }
+    public bool SecurityLogRetentionEnabled { get; init; }
+    public int SecurityLogRetentionDays { get; init; }
+    public bool SecurityLogAutoPruneEnabled { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+}
+
+public sealed class BackupNotificationSettingsRecord
+{
+    public bool BrowserNotificationsEnabled { get; init; }
+    public bool BrowserNotifyEndpointDown { get; init; }
+    public bool BrowserNotifyEndpointRecovered { get; init; }
+    public bool BrowserNotifyAgentOffline { get; init; }
+    public bool BrowserNotifyAgentOnline { get; init; }
+    public string? BrowserNotificationsPermissionState { get; init; }
+    public bool TelegramEnabled { get; init; }
+    public string? TelegramBotTokenProtected { get; init; }
+    public string TelegramInboundMode { get; init; } = "polling";
+    public int TelegramPollIntervalSeconds { get; init; }
+    public long TelegramLastProcessedUpdateId { get; init; }
+    public string? TelegramWebhookUrl { get; init; }
+    public string? TelegramWebhookSecretToken { get; init; }
+    public bool QuietHoursEnabled { get; init; }
+    public string QuietHoursStartLocalTime { get; init; } = "22:00";
+    public string QuietHoursEndLocalTime { get; init; } = "07:00";
+    public string QuietHoursTimeZoneId { get; init; } = "UTC";
+    public bool QuietHoursSuppressBrowserNotifications { get; init; }
+    public bool QuietHoursSuppressSmtpNotifications { get; init; }
+    public bool SmtpNotificationsEnabled { get; init; }
+    public string? SmtpHost { get; init; }
+    public int SmtpPort { get; init; }
+    public bool SmtpUseTls { get; init; }
+    public string? SmtpUsername { get; init; }
+    public string? SmtpPasswordProtected { get; init; }
+    public string? SmtpFromAddress { get; init; }
+    public string? SmtpFromDisplayName { get; init; }
+    public string? SmtpRecipientAddresses { get; init; }
+    public bool SmtpNotifyEndpointDown { get; init; }
+    public bool SmtpNotifyEndpointRecovered { get; init; }
+    public bool SmtpNotifyAgentOffline { get; init; }
+    public bool SmtpNotifyAgentOnline { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+    public string? UpdatedByUserId { get; init; }
+}
+
+public sealed class BackupUserNotificationSettingsRecord
+{
+    public string UserId { get; init; } = string.Empty;
+    public bool BrowserNotificationsEnabled { get; init; }
+    public bool BrowserNotifyEndpointDown { get; init; }
+    public bool BrowserNotifyEndpointRecovered { get; init; }
+    public bool BrowserNotifyAgentOffline { get; init; }
+    public bool BrowserNotifyAgentOnline { get; init; }
+    public string? BrowserNotificationsPermissionState { get; init; }
+    public bool SmtpNotificationsEnabled { get; init; }
+    public bool SmtpNotifyEndpointDown { get; init; }
+    public bool SmtpNotifyEndpointRecovered { get; init; }
+    public bool SmtpNotifyAgentOffline { get; init; }
+    public bool SmtpNotifyAgentOnline { get; init; }
+    public bool TelegramNotificationsEnabled { get; init; }
+    public bool TelegramNotifyEndpointDown { get; init; }
+    public bool TelegramNotifyEndpointRecovered { get; init; }
+    public bool TelegramNotifyAgentOffline { get; init; }
+    public bool TelegramNotifyAgentOnline { get; init; }
+    public bool QuietHoursSuppressTelegramNotifications { get; init; }
+    public bool QuietHoursEnabled { get; init; }
+    public string QuietHoursStartLocalTime { get; init; } = "22:00";
+    public string QuietHoursEndLocalTime { get; init; } = "07:00";
+    public string QuietHoursTimeZoneId { get; init; } = "UTC";
+    public bool QuietHoursSuppressBrowserNotifications { get; init; }
+    public bool QuietHoursSuppressSmtpNotifications { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
 }
 
@@ -303,7 +446,13 @@ public sealed class ConfigurationBackupSectionCounts
 {
     public int Agents { get; init; }
     public int Endpoints { get; init; }
+    public int Groups { get; init; }
+    public int GroupEndpointMemberships { get; init; }
+    public int Dependencies { get; init; }
     public int Assignments { get; init; }
+    public int SecuritySettings { get; init; }
+    public int NotificationSettings { get; init; }
+    public int UserNotificationSettings { get; init; }
     public int IdentityUsers { get; init; }
     public int IdentityRoles { get; init; }
     public int IdentityUserRoles { get; init; }

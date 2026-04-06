@@ -11,7 +11,7 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
     {
         _ = fileIdForErrors;
 
-        if (document.FormatVersion != ConfigurationBackupMetadata.CurrentFormatVersion)
+        if (document.FormatVersion <= 0 || document.FormatVersion > ConfigurationBackupMetadata.CurrentFormatVersion)
         {
             throw new InvalidOperationException($"Backup formatVersion {document.FormatVersion} is not supported.");
         }
@@ -37,7 +37,12 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
         var hasAtLeastOneSection =
             document.Sections.Agents is not null
             || document.Sections.Endpoints is not null
+            || document.Sections.Groups is not null
+            || document.Sections.Dependencies is not null
             || document.Sections.Assignments is not null
+            || document.Sections.SecuritySettings is not null
+            || document.Sections.NotificationSettings is not null
+            || document.Sections.UserNotificationSettings is not null
             || document.Sections.Identity is not null;
 
         if (!hasAtLeastOneSection)
@@ -67,6 +72,29 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
             }
         }
 
+        if (document.Sections.Groups is not null)
+        {
+            foreach (var group in document.Sections.Groups.Groups)
+            {
+                if (string.IsNullOrWhiteSpace(group.Name))
+                {
+                    throw new InvalidOperationException("Groups section contains an invalid record (name missing).");
+                }
+            }
+        }
+
+        if (document.Sections.Dependencies is not null)
+        {
+            foreach (var dependency in document.Sections.Dependencies)
+            {
+                if (string.IsNullOrWhiteSpace(dependency.EndpointId)
+                    || string.IsNullOrWhiteSpace(dependency.DependsOnEndpointId))
+                {
+                    throw new InvalidOperationException("Dependencies section contains an invalid record.");
+                }
+            }
+        }
+
         if (document.Sections.Assignments is not null)
         {
             foreach (var assignment in document.Sections.Assignments)
@@ -87,6 +115,17 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
                 if (string.IsNullOrWhiteSpace(user.NormalizedUserName) && string.IsNullOrWhiteSpace(user.NormalizedEmail))
                 {
                     throw new InvalidOperationException("Identity section contains a user without normalized username/email.");
+                }
+            }
+        }
+
+        if (document.Sections.UserNotificationSettings is not null)
+        {
+            foreach (var userSettings in document.Sections.UserNotificationSettings)
+            {
+                if (string.IsNullOrWhiteSpace(userSettings.UserId))
+                {
+                    throw new InvalidOperationException("User notification settings section contains an invalid record (userId missing).");
                 }
             }
         }
