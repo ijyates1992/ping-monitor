@@ -1,13 +1,22 @@
+using PingMonitor.Web.Services.StartupGate;
+
 namespace PingMonitor.Web.Services.Telegram;
 
 internal sealed class TelegramPollingBackgroundService : BackgroundService
 {
+    private static readonly TimeSpan PollLoopDelay = TimeSpan.FromSeconds(10);
+
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IStartupGateRuntimeState _startupGateRuntimeState;
     private readonly ILogger<TelegramPollingBackgroundService> _logger;
 
-    public TelegramPollingBackgroundService(IServiceScopeFactory scopeFactory, ILogger<TelegramPollingBackgroundService> logger)
+    public TelegramPollingBackgroundService(
+        IServiceScopeFactory scopeFactory,
+        IStartupGateRuntimeState startupGateRuntimeState,
+        ILogger<TelegramPollingBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
+        _startupGateRuntimeState = startupGateRuntimeState;
         _logger = logger;
     }
 
@@ -15,8 +24,36 @@ internal sealed class TelegramPollingBackgroundService : BackgroundService
     {
         _logger.LogInformation("Telegram polling background service started.");
 
+        var wasBlockedByStartupGate = false;
+
         while (!stoppingToken.IsCancellationRequested)
         {
+            if (_startupGateRuntimeState.CurrentMode != StartupMode.Normal)
+            {
+                if (!wasBlockedByStartupGate)
+                {
+                    _logger.LogInformation("Telegram polling is paused because Startup Gate is active.");
+                    wasBlockedByStartupGate = true;
+                }
+
+                try
+                {
+                    await Task.Delay(PollLoopDelay, stoppingToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            if (wasBlockedByStartupGate)
+            {
+                _logger.LogInformation("Startup Gate is cleared. Telegram polling is resuming normal operation.");
+                wasBlockedByStartupGate = false;
+            }
+
             try
             {
                 using var scope = _scopeFactory.CreateScope();
@@ -30,7 +67,7 @@ internal sealed class TelegramPollingBackgroundService : BackgroundService
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                await Task.Delay(PollLoopDelay, stoppingToken);
             }
             catch (TaskCanceledException)
             {

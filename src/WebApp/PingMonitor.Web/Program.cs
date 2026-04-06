@@ -179,6 +179,7 @@ builder.Services.AddScoped<ISecurityOperatorActionService, SecurityOperatorActio
 builder.Services.AddScoped<ISecurityEnforcementService, SecurityEnforcementService>();
 builder.Services.AddScoped<IEndpointStatusQueryService, EndpointStatusQueryService>();
 builder.Services.AddScoped<IStartupGateService, StartupGateService>();
+builder.Services.AddSingleton<IStartupGateRuntimeState, StartupGateRuntimeState>();
 builder.Services.AddSingleton<IStartupDatabaseConfigurationStore, FileStartupDatabaseConfigurationStore>();
 builder.Services.AddSingleton<ILocalRequestEvaluator, LocalRequestEvaluator>();
 builder.Services.AddScoped<IStartupSchemaService, StartupSchemaService>();
@@ -244,6 +245,9 @@ app.Use(async (context, next) =>
     var startupGateService = context.RequestServices.GetRequiredService<IStartupGateService>();
     var status = await startupGateService.EvaluateAsync(context, context.RequestAborted);
     context.Items[typeof(StartupGateStatus).FullName!] = status;
+
+    var startupGateRuntimeState = context.RequestServices.GetRequiredService<IStartupGateRuntimeState>();
+    startupGateRuntimeState.Update(status);
 
     if (status.Mode == StartupMode.Normal)
     {
