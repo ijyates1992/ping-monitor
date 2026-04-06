@@ -136,24 +136,28 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var options = _options.Value;
         var backupDirectory = GetBackupDirectory(options.BackupStoragePath);
         Directory.CreateDirectory(backupDirectory);
+        var suppressEventLogWrites = request.SuppressEventLogWrites;
 
-        await _eventLogService.WriteAsync(new EventLogWriteRequest
-        {
-            Category = EventCategory.System,
-            EventType = EventType.DatabaseBackupStarted,
-            Severity = EventSeverity.Info,
-            Message = "Database backup export started.",
-            DetailsJson = JsonSerializer.Serialize(new
+        await WriteDatabaseBackupEventAsync(
+            new EventLogWriteRequest
             {
-                backupDirectory,
-                requestedBy = request.RequestedBy
-            })
-        }, cancellationToken);
+                Category = EventCategory.System,
+                EventType = EventType.DatabaseBackupStarted,
+                Severity = EventSeverity.Info,
+                Message = "Database backup export started.",
+                DetailsJson = JsonSerializer.Serialize(new
+                {
+                    backupDirectory,
+                    requestedBy = request.RequestedBy
+                })
+            },
+            suppressEventLogWrites,
+            cancellationToken);
 
         var dbConnectionString = _dbContext.Database.GetConnectionString();
         if (string.IsNullOrWhiteSpace(dbConnectionString))
         {
-            return await CreateBackupFailureAsync("Database connection string is unavailable.", request.RequestedBy, cancellationToken);
+            return await CreateBackupFailureAsync("Database connection string is unavailable.", request.RequestedBy, suppressEventLogWrites, cancellationToken);
         }
 
         var builder = new MySqlConnectionStringBuilder(dbConnectionString);
@@ -168,6 +172,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             return await CreateBackupFailureAsync(
                 "mysqldump executable was not found. Configure DatabaseMaintenance:MySqlDumpExecutablePath with the full executable path.",
                 request.RequestedBy,
+                suppressEventLogWrites,
                 cancellationToken);
         }
 
@@ -208,7 +213,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             using var process = Process.Start(processInfo);
             if (process is null)
             {
-                return await CreateBackupFailureAsync("Unable to start mysqldump process.", request.RequestedBy, cancellationToken);
+                return await CreateBackupFailureAsync("Unable to start mysqldump process.", request.RequestedBy, suppressEventLogWrites, cancellationToken);
             }
 
             await using (var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -230,26 +235,29 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 }
 
                 var message = $"mysqldump exited with code {process.ExitCode}. {TrimDiagnostic(stderr)}";
-                return await CreateBackupFailureAsync(message, request.RequestedBy, cancellationToken);
+                return await CreateBackupFailureAsync(message, request.RequestedBy, suppressEventLogWrites, cancellationToken);
             }
 
             var fileInfo = new FileInfo(fullPath);
-            await _eventLogService.WriteAsync(new EventLogWriteRequest
-            {
-                Category = EventCategory.System,
-                EventType = EventType.DatabaseBackupCompleted,
-                Severity = EventSeverity.Info,
-                Message = $"Database backup export completed. File: {fileName}.",
-                DetailsJson = JsonSerializer.Serialize(new
+            await WriteDatabaseBackupEventAsync(
+                new EventLogWriteRequest
                 {
-                    fileName,
-                    fullPath,
-                    backupMode = normalizedBackupMode.ToString(),
-                    fileSizeBytes = fileInfo.Length,
-                    createdAtUtc = backupTimestamp,
-                    requestedBy = request.RequestedBy
-                })
-            }, cancellationToken);
+                    Category = EventCategory.System,
+                    EventType = EventType.DatabaseBackupCompleted,
+                    Severity = EventSeverity.Info,
+                    Message = $"Database backup export completed. File: {fileName}.",
+                    DetailsJson = JsonSerializer.Serialize(new
+                    {
+                        fileName,
+                        fullPath,
+                        backupMode = normalizedBackupMode.ToString(),
+                        fileSizeBytes = fileInfo.Length,
+                        createdAtUtc = backupTimestamp,
+                        requestedBy = request.RequestedBy
+                    })
+                },
+                suppressEventLogWrites,
+                cancellationToken);
 
             return new DatabaseBackupCreateResult
             {
@@ -270,7 +278,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             }
 
             _logger.LogWarning(ex, "Database backup export failed.");
-            return await CreateBackupFailureAsync($"Database backup export failed: {ex.Message}", request.RequestedBy, cancellationToken);
+            return await CreateBackupFailureAsync($"Database backup export failed: {ex.Message}", request.RequestedBy, suppressEventLogWrites, cancellationToken);
         }
     }
 
@@ -389,7 +397,11 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             request.RequestedBy);
 
         var preRestoreBackup = await CreateBackupAsync(
-            new DatabaseBackupCreateRequest { RequestedBy = request.RequestedBy },
+            new DatabaseBackupCreateRequest
+            {
+                RequestedBy = request.RequestedBy,
+                SuppressEventLogWrites = IsStartupGateRestoreRequest(request)
+            },
             cancellationToken);
         if (!preRestoreBackup.Succeeded)
         {
@@ -730,19 +742,26 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         };
     }
 
-    private async Task<DatabaseBackupCreateResult> CreateBackupFailureAsync(string message, string? requestedBy, CancellationToken cancellationToken)
+    private async Task<DatabaseBackupCreateResult> CreateBackupFailureAsync(
+        string message,
+        string? requestedBy,
+        bool suppressEventLogWrites,
+        CancellationToken cancellationToken)
     {
-        await _eventLogService.WriteAsync(new EventLogWriteRequest
-        {
-            Category = EventCategory.System,
-            EventType = EventType.DatabaseBackupFailed,
-            Severity = EventSeverity.Error,
-            Message = message,
-            DetailsJson = JsonSerializer.Serialize(new
+        await WriteDatabaseBackupEventAsync(
+            new EventLogWriteRequest
             {
-                requestedBy
-            })
-        }, cancellationToken);
+                Category = EventCategory.System,
+                EventType = EventType.DatabaseBackupFailed,
+                Severity = EventSeverity.Error,
+                Message = message,
+                DetailsJson = JsonSerializer.Serialize(new
+                {
+                    requestedBy
+                })
+            },
+            suppressEventLogWrites,
+            cancellationToken);
 
         return new DatabaseBackupCreateResult
         {
@@ -975,5 +994,27 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
     private readonly record struct BackupDescriptor(DatabaseBackupMode Mode)
     {
         public static BackupDescriptor FullByDefault => new(DatabaseBackupMode.Full);
+    }
+
+    private static bool IsStartupGateRestoreRequest(DatabaseBackupRestoreRequest request)
+    {
+        return string.Equals(request.RequestedBy?.Trim(), "startup-gate", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task WriteDatabaseBackupEventAsync(
+        EventLogWriteRequest eventRequest,
+        bool suppressEventLogWrites,
+        CancellationToken cancellationToken)
+    {
+        if (suppressEventLogWrites)
+        {
+            _logger.LogInformation(
+                "Database backup event log suppressed because event-log tables may be unavailable. EventType: {EventType}, Message: {Message}",
+                eventRequest.EventType,
+                eventRequest.Message);
+            return;
+        }
+
+        await _eventLogService.WriteAsync(eventRequest, cancellationToken);
     }
 }
