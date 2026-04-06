@@ -17,6 +17,7 @@ public sealed class StartupGateController : Controller
     private readonly IStartupSchemaService _schemaService;
     private readonly IStartupAdminBootstrapService _adminBootstrapService;
     private readonly IDatabaseMaintenanceService _databaseMaintenanceService;
+    private readonly IStartupGateDiagnosticsLogger _startupGateDiagnosticsLogger;
     private readonly StartupGateOptions _options;
     private readonly ILogger<StartupGateController> _logger;
 
@@ -26,6 +27,7 @@ public sealed class StartupGateController : Controller
         IStartupSchemaService schemaService,
         IStartupAdminBootstrapService adminBootstrapService,
         IDatabaseMaintenanceService databaseMaintenanceService,
+        IStartupGateDiagnosticsLogger startupGateDiagnosticsLogger,
         IOptions<StartupGateOptions> options,
         ILogger<StartupGateController> logger)
     {
@@ -34,6 +36,7 @@ public sealed class StartupGateController : Controller
         _schemaService = schemaService;
         _adminBootstrapService = adminBootstrapService;
         _databaseMaintenanceService = databaseMaintenanceService;
+        _startupGateDiagnosticsLogger = startupGateDiagnosticsLogger;
         _options = options.Value;
         _logger = logger;
     }
@@ -186,9 +189,16 @@ public sealed class StartupGateController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RestoreDatabaseBackup([FromForm(Name = "DatabaseBackupRestoreForm")] StartupDatabaseBackupRestoreForm form, CancellationToken cancellationToken)
     {
+        _startupGateDiagnosticsLogger.Write(
+            "startup-gate.database-restore.request.entry",
+            $"Restore request entered for fileId='{form.FileId ?? "(null)"}'. ConfirmationProvided={(!string.IsNullOrWhiteSpace(form.ConfirmationText)).ToString().ToLowerInvariant()}.");
+
         var status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
         if (!status.CanPerformWriteActions)
         {
+            _startupGateDiagnosticsLogger.Write(
+                "startup-gate.database-restore.request.blocked",
+                $"Restore request denied because Startup Gate write actions are disabled. mode={status.Mode}, failingStage={status.FailingStage}.");
             return Forbid();
         }
 
@@ -217,11 +227,25 @@ public sealed class StartupGateController : Controller
         }
         catch (FileNotFoundException)
         {
+            _startupGateDiagnosticsLogger.Write(
+                "startup-gate.database-restore.file-not-found",
+                $"Restore file not found for fileId='{form.FileId ?? "(null)"}'.");
             status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
             return View("Index", await BuildViewModelAsync(status, null, null, null, form, errorMessage: "DATABASE restore failed: selected backup file was not found.", cancellationToken: cancellationToken));
         }
+        catch (Exception exception)
+        {
+            _startupGateDiagnosticsLogger.WriteException(
+                "startup-gate.database-restore.exception",
+                exception,
+                $"Unhandled controller exception while invoking restore for fileId='{form.FileId ?? "(null)"}'.");
+            throw;
+        }
 
         status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
+        _startupGateDiagnosticsLogger.Write(
+            "startup-gate.database-restore.readiness-recheck",
+            $"Post-restore Startup Gate re-check completed. mode={status.Mode}, failingStage={status.FailingStage}, canPerformWriteActions={status.CanPerformWriteActions.ToString().ToLowerInvariant()}.");
         return View("Index", await BuildViewModelAsync(
             status,
             null,
