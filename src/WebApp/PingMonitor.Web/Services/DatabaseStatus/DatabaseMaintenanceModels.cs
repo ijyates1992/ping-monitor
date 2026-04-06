@@ -44,6 +44,7 @@ public sealed class DatabaseBackupCreateRequest
 {
     public DatabaseBackupMode BackupMode { get; init; } = DatabaseBackupMode.Full;
     public string? RequestedBy { get; init; }
+    public bool SuppressEventLogWrites { get; init; }
 }
 
 public sealed class DatabaseBackupUploadRequest

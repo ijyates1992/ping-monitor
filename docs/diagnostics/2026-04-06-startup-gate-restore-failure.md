@@ -35,3 +35,15 @@ Startup-gate restore is a recovery path for missing schema, but the current rest
 2. `DROP DATABASE pingmonitor; CREATE DATABASE pingmonitor ...;`
 3. In `/startup-gate`, restore DATABASE backup with confirmation `RESTORE`.
 4. Observe HTTP 500 and stack trace in logs.
+
+## Regression checklist for fix validation
+Use this deterministic checklist for issue #370 validation:
+
+1. Create a DATABASE backup from `/admin/database/maintenance`.
+2. Drop and recreate the MySQL schema.
+3. Upload/select the DATABASE backup in startup-gate and run restore (`POST /startup-gate/database-backup/restore`).
+4. Confirm:
+   - response is not an unhandled HTTP 500;
+   - pre-restore backup is still created;
+   - no DB-backed `EventLogs` write is attempted before schema restore;
+   - restore success/failure is visible through runtime logs.
