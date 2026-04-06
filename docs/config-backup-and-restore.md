@@ -22,9 +22,13 @@ The following entities are included in configuration backups:
 
 - Agents
 - Endpoints
-- Endpoint metadata (tags, attributes if applicable)
+- Groups (including endpoint group memberships)
+- Endpoint dependencies
 - Agent ↔ Endpoint assignments
-- Other structural monitoring configuration (if added in future)
+- Security settings
+- Notification infrastructure settings (SMTP/Telegram/global notification config)
+- User notification settings
+- Endpoint metadata (tags, attributes if applicable)
 
 ---
 
@@ -71,7 +75,7 @@ Example:
 
 ```json
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "appVersion": "1.0.3",
   "backupName": "prod-before-vlan-work",
   "notes": "Taken before changing core switch and endpoint dependency layout. Known-good production config.",
@@ -81,7 +85,15 @@ Example:
   "sections": {
     "agents": [...],
     "endpoints": [...],
+    "groups": {
+      "groups": [...],
+      "endpointMemberships": [...]
+    },
+    "dependencies": [...],
     "assignments": [...],
+    "security_settings": {...},
+    "notification_settings": {...},
+    "user_notification_settings": [...],
     "identity": [...]
   }
 }
@@ -99,7 +111,12 @@ Example:
 - Restore supports these sections:
   - `agents`
   - `endpoints`
+  - `groups`
+  - `dependencies`
   - `assignments`
+  - `security_settings`
+  - `notification_settings`
+  - `user_notification_settings`
   - `identity` (optional and explicit, sensitive)
 - Restore supports two modes:
   - `merge`

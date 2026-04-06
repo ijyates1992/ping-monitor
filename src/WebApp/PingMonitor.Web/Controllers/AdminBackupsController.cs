@@ -128,7 +128,12 @@ public sealed class AdminBackupsController : Controller
                 SelectedFileId = preview.FileId,
                 IncludeAgents = preview.IncludedSections.Contains(ConfigurationBackupSections.Agents, StringComparer.Ordinal),
                 IncludeEndpoints = preview.IncludedSections.Contains(ConfigurationBackupSections.Endpoints, StringComparer.Ordinal),
+                IncludeGroups = preview.IncludedSections.Contains(ConfigurationBackupSections.Groups, StringComparer.Ordinal),
+                IncludeDependencies = preview.IncludedSections.Contains(ConfigurationBackupSections.Dependencies, StringComparer.Ordinal),
                 IncludeAssignments = preview.IncludedSections.Contains(ConfigurationBackupSections.Assignments, StringComparer.Ordinal),
+                IncludeSecuritySettings = preview.IncludedSections.Contains(ConfigurationBackupSections.SecuritySettings, StringComparer.Ordinal),
+                IncludeNotificationSettings = preview.IncludedSections.Contains(ConfigurationBackupSections.NotificationSettings, StringComparer.Ordinal),
+                IncludeUserNotificationSettings = preview.IncludedSections.Contains(ConfigurationBackupSections.UserNotificationSettings, StringComparer.Ordinal),
                 IncludeIdentity = false,
                 RestoreMode = ConfigurationRestoreModes.Merge
             };
@@ -347,6 +352,31 @@ public sealed class AdminBackupsController : Controller
             sections.Add(ConfigurationBackupSections.Assignments);
         }
 
+        if (form.IncludeGroups)
+        {
+            sections.Add(ConfigurationBackupSections.Groups);
+        }
+
+        if (form.IncludeDependencies)
+        {
+            sections.Add(ConfigurationBackupSections.Dependencies);
+        }
+
+        if (form.IncludeSecuritySettings)
+        {
+            sections.Add(ConfigurationBackupSections.SecuritySettings);
+        }
+
+        if (form.IncludeNotificationSettings)
+        {
+            sections.Add(ConfigurationBackupSections.NotificationSettings);
+        }
+
+        if (form.IncludeUserNotificationSettings)
+        {
+            sections.Add(ConfigurationBackupSections.UserNotificationSettings);
+        }
+
         if (form.IncludeIdentity)
         {
             sections.Add(ConfigurationBackupSections.Identity);
@@ -373,6 +403,31 @@ public sealed class AdminBackupsController : Controller
             sections.Add(ConfigurationBackupSections.Assignments);
         }
 
+        if (form.IncludeGroups)
+        {
+            sections.Add(ConfigurationBackupSections.Groups);
+        }
+
+        if (form.IncludeDependencies)
+        {
+            sections.Add(ConfigurationBackupSections.Dependencies);
+        }
+
+        if (form.IncludeSecuritySettings)
+        {
+            sections.Add(ConfigurationBackupSections.SecuritySettings);
+        }
+
+        if (form.IncludeNotificationSettings)
+        {
+            sections.Add(ConfigurationBackupSections.NotificationSettings);
+        }
+
+        if (form.IncludeUserNotificationSettings)
+        {
+            sections.Add(ConfigurationBackupSections.UserNotificationSettings);
+        }
+
         if (form.IncludeIdentity)
         {
             sections.Add(ConfigurationBackupSections.Identity);
@@ -396,7 +451,13 @@ public sealed class AdminBackupsController : Controller
             {
                 Agents = preview.Counts.Agents,
                 Endpoints = preview.Counts.Endpoints,
+                Groups = preview.Counts.Groups,
+                GroupEndpointMemberships = preview.Counts.GroupEndpointMemberships,
+                Dependencies = preview.Counts.Dependencies,
                 Assignments = preview.Counts.Assignments,
+                SecuritySettings = preview.Counts.SecuritySettings,
+                NotificationSettings = preview.Counts.NotificationSettings,
+                UserNotificationSettings = preview.Counts.UserNotificationSettings,
                 IdentityUsers = preview.Counts.IdentityUsers,
                 IdentityRoles = preview.Counts.IdentityRoles,
                 IdentityUserRoles = preview.Counts.IdentityUserRoles
@@ -431,7 +492,12 @@ public sealed class AdminBackupsController : Controller
         {
             ConfigurationBackupSections.Agents => "Agents",
             ConfigurationBackupSections.Endpoints => "Endpoints",
+            ConfigurationBackupSections.Groups => "Groups",
+            ConfigurationBackupSections.Dependencies => "Dependencies",
             ConfigurationBackupSections.Assignments => "Assignments",
+            ConfigurationBackupSections.SecuritySettings => "Security settings",
+            ConfigurationBackupSections.NotificationSettings => "Notification infrastructure settings",
+            ConfigurationBackupSections.UserNotificationSettings => "User notification settings",
             ConfigurationBackupSections.Identity => "Identity",
             _ => section
         };

@@ -60,7 +60,7 @@
     <div class="stack">
         <section class="card">
             <h1>Configuration backups</h1>
-            <p class="muted">Create/download configuration-only JSON backups and restore from server-side files with explicit preview. Restore supports <strong>MERGE</strong> (safe default) and <strong>REPLACE</strong> (destructive for selected sections only).</p>
+            <p class="muted">Create/download <strong>CONFIGURATION-only</strong> JSON backups and restore from server-side files with explicit preview. This page does not manage DATABASE backups. Restore supports <strong>MERGE</strong> (safe default) and <strong>REPLACE</strong> (destructive for selected sections only).</p>
             <div class="button-row">
                 <a class="button-secondary" href="/admin">Back to admin settings</a>
                 <a class="button-secondary" href="/status">Back to status</a>
@@ -96,7 +96,12 @@
                         <div class="check-list">
                             <label class="check-item"><input asp-for="Form.IncludeAgents" /> Agents</label>
                             <label class="check-item"><input asp-for="Form.IncludeEndpoints" /> Endpoints</label>
+                            <label class="check-item"><input asp-for="Form.IncludeGroups" /> Groups (with endpoint memberships)</label>
+                            <label class="check-item"><input asp-for="Form.IncludeDependencies" /> Endpoint dependencies</label>
                             <label class="check-item"><input asp-for="Form.IncludeAssignments" /> Assignments</label>
+                            <label class="check-item"><input asp-for="Form.IncludeSecuritySettings" /> Security settings</label>
+                            <label class="check-item"><input asp-for="Form.IncludeNotificationSettings" /> Notification infrastructure settings</label>
+                            <label class="check-item"><input asp-for="Form.IncludeUserNotificationSettings" /> User notification settings</label>
                             <label class="check-item"><input asp-for="Form.IncludeIdentity" /> Identity (optional; disabled by default)</label>
                         </div>
                     </div>
@@ -174,7 +179,13 @@
                                 <tbody>
                                     <tr><td>Agents</td><td>@Model.Preview.Counts.Agents</td></tr>
                                     <tr><td>Endpoints</td><td>@Model.Preview.Counts.Endpoints</td></tr>
+                                    <tr><td>Groups</td><td>@Model.Preview.Counts.Groups</td></tr>
+                                    <tr><td>Group memberships</td><td>@Model.Preview.Counts.GroupEndpointMemberships</td></tr>
+                                    <tr><td>Dependencies</td><td>@Model.Preview.Counts.Dependencies</td></tr>
                                     <tr><td>Assignments</td><td>@Model.Preview.Counts.Assignments</td></tr>
+                                    <tr><td>Security settings records</td><td>@Model.Preview.Counts.SecuritySettings</td></tr>
+                                    <tr><td>Notification settings records</td><td>@Model.Preview.Counts.NotificationSettings</td></tr>
+                                    <tr><td>User notification settings</td><td>@Model.Preview.Counts.UserNotificationSettings</td></tr>
                                     <tr><td>Identity users</td><td>@Model.Preview.Counts.IdentityUsers</td></tr>
                                     <tr><td>Identity roles</td><td>@Model.Preview.Counts.IdentityRoles</td></tr>
                                     <tr><td>Identity user-role links</td><td>@Model.Preview.Counts.IdentityUserRoles</td></tr>
@@ -190,8 +201,13 @@
                         <p class="muted">Select one or more sections. Only selected sections are restored. Non-selected sections remain untouched.</p>
                         <div class="check-list">
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeAgents" /> Agents</label>
-                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeEndpoints" /> Endpoints (includes endpoint dependency links)</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeEndpoints" /> Endpoints</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeGroups" /> Groups (with endpoint memberships)</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeDependencies" /> Endpoint dependencies</label>
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeAssignments" /> Assignments</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeSecuritySettings" /> Security settings</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeNotificationSettings" /> Notification infrastructure settings</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeUserNotificationSettings" /> User notification settings</label>
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeIdentity" /> Identity (sensitive and optional)</label>
                         </div>
                         <div>

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Data;
+using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
 
 namespace PingMonitor.Web.Services.Backups;
@@ -84,8 +85,23 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
             Endpoints = selectedSections.Contains(ConfigurationBackupSections.Endpoints, StringComparer.Ordinal)
                 ? await LoadEndpointsAsync(cancellationToken)
                 : null,
+            Groups = selectedSections.Contains(ConfigurationBackupSections.Groups, StringComparer.Ordinal)
+                ? await LoadGroupsAsync(cancellationToken)
+                : null,
+            Dependencies = selectedSections.Contains(ConfigurationBackupSections.Dependencies, StringComparer.Ordinal)
+                ? await LoadDependenciesAsync(cancellationToken)
+                : null,
             Assignments = selectedSections.Contains(ConfigurationBackupSections.Assignments, StringComparer.Ordinal)
                 ? await LoadAssignmentsAsync(cancellationToken)
+                : null,
+            SecuritySettings = selectedSections.Contains(ConfigurationBackupSections.SecuritySettings, StringComparer.Ordinal)
+                ? await LoadSecuritySettingsAsync(cancellationToken)
+                : null,
+            NotificationSettings = selectedSections.Contains(ConfigurationBackupSections.NotificationSettings, StringComparer.Ordinal)
+                ? await LoadNotificationSettingsAsync(cancellationToken)
+                : null,
+            UserNotificationSettings = selectedSections.Contains(ConfigurationBackupSections.UserNotificationSettings, StringComparer.Ordinal)
+                ? await LoadUserNotificationSettingsAsync(cancellationToken)
                 : null,
             Identity = selectedSections.Contains(ConfigurationBackupSections.Identity, StringComparer.Ordinal)
                 ? await LoadIdentityAsync(cancellationToken)
@@ -156,19 +172,6 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
 
     private async Task<IReadOnlyList<BackupEndpointRecord>> LoadEndpointsAsync(CancellationToken cancellationToken)
     {
-        var dependencies = await _dbContext.EndpointDependencies
-            .AsNoTracking()
-            .OrderBy(x => x.EndpointId)
-            .ThenBy(x => x.DependsOnEndpointId)
-            .ToListAsync(cancellationToken);
-
-        var dependencyLookup = dependencies
-            .GroupBy(x => x.EndpointId, StringComparer.Ordinal)
-            .ToDictionary(
-                group => group.Key,
-                group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).ToArray(),
-                StringComparer.Ordinal);
-
         var endpoints = await _dbContext.Endpoints
             .AsNoTracking()
             .OrderBy(x => x.Name)
@@ -183,13 +186,58 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
                 IconKey = x.IconKey,
                 Enabled = x.Enabled,
                 Tags = x.Tags,
-                DependsOnEndpointIds = dependencyLookup.TryGetValue(x.EndpointId, out var dependsOnIds)
-                    ? dependsOnIds
-                    : [],
                 Notes = x.Notes,
                 CreatedAtUtc = x.CreatedAtUtc
             })
             .ToArray();
+    }
+
+    private async Task<BackupGroupSection> LoadGroupsAsync(CancellationToken cancellationToken)
+    {
+        var groups = await _dbContext.Groups
+            .AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new BackupGroupRecord
+            {
+                GroupId = x.GroupId,
+                Name = x.Name,
+                Description = x.Description,
+                CreatedAtUtc = x.CreatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var memberships = await _dbContext.EndpointGroupMemberships
+            .AsNoTracking()
+            .OrderBy(x => x.GroupId)
+            .ThenBy(x => x.EndpointId)
+            .Select(x => new BackupEndpointGroupMembershipRecord
+            {
+                EndpointId = x.EndpointId,
+                GroupId = x.GroupId,
+                CreatedAtUtc = x.CreatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        return new BackupGroupSection
+        {
+            Groups = groups,
+            EndpointMemberships = memberships
+        };
+    }
+
+    private async Task<IReadOnlyList<BackupEndpointDependencyRecord>> LoadDependenciesAsync(CancellationToken cancellationToken)
+    {
+        return await _dbContext.EndpointDependencies
+            .AsNoTracking()
+            .OrderBy(x => x.EndpointId)
+            .ThenBy(x => x.DependsOnEndpointId)
+            .Select(x => new BackupEndpointDependencyRecord
+            {
+                EndpointId = x.EndpointId,
+                DependsOnEndpointId = x.DependsOnEndpointId,
+                CreatedAtUtc = x.CreatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
     }
 
     private async Task<IReadOnlyList<BackupAssignmentRecord>> LoadAssignmentsAsync(CancellationToken cancellationToken)
@@ -263,5 +311,117 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
             Roles = roles,
             UserRoles = userRoles
         };
+    }
+
+    private async Task<BackupSecuritySettingsRecord?> LoadSecuritySettingsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _dbContext.SecuritySettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.SecuritySettingsId == SecuritySettings.SingletonId, cancellationToken);
+        if (settings is null)
+        {
+            return null;
+        }
+
+        return new BackupSecuritySettingsRecord
+        {
+            AgentFailedAttemptsBeforeTemporaryIpBlock = settings.AgentFailedAttemptsBeforeTemporaryIpBlock,
+            AgentTemporaryIpBlockDurationMinutes = settings.AgentTemporaryIpBlockDurationMinutes,
+            AgentFailedAttemptsBeforePermanentIpBlock = settings.AgentFailedAttemptsBeforePermanentIpBlock,
+            UserFailedAttemptsBeforeTemporaryIpBlock = settings.UserFailedAttemptsBeforeTemporaryIpBlock,
+            UserTemporaryIpBlockDurationMinutes = settings.UserTemporaryIpBlockDurationMinutes,
+            UserFailedAttemptsBeforePermanentIpBlock = settings.UserFailedAttemptsBeforePermanentIpBlock,
+            UserFailedAttemptsBeforeTemporaryAccountLockout = settings.UserFailedAttemptsBeforeTemporaryAccountLockout,
+            UserTemporaryAccountLockoutDurationMinutes = settings.UserTemporaryAccountLockoutDurationMinutes,
+            SecurityLogRetentionEnabled = settings.SecurityLogRetentionEnabled,
+            SecurityLogRetentionDays = settings.SecurityLogRetentionDays,
+            SecurityLogAutoPruneEnabled = settings.SecurityLogAutoPruneEnabled,
+            UpdatedAtUtc = settings.UpdatedAtUtc
+        };
+    }
+
+    private async Task<BackupNotificationSettingsRecord?> LoadNotificationSettingsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _dbContext.NotificationSettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.NotificationSettingsId == NotificationSettings.SingletonId, cancellationToken);
+        if (settings is null)
+        {
+            return null;
+        }
+
+        return new BackupNotificationSettingsRecord
+        {
+            BrowserNotificationsEnabled = settings.BrowserNotificationsEnabled,
+            BrowserNotifyEndpointDown = settings.BrowserNotifyEndpointDown,
+            BrowserNotifyEndpointRecovered = settings.BrowserNotifyEndpointRecovered,
+            BrowserNotifyAgentOffline = settings.BrowserNotifyAgentOffline,
+            BrowserNotifyAgentOnline = settings.BrowserNotifyAgentOnline,
+            BrowserNotificationsPermissionState = settings.BrowserNotificationsPermissionState,
+            TelegramEnabled = settings.TelegramEnabled,
+            TelegramBotTokenProtected = settings.TelegramBotTokenProtected,
+            TelegramInboundMode = settings.TelegramInboundMode.ToString().ToLowerInvariant(),
+            TelegramPollIntervalSeconds = settings.TelegramPollIntervalSeconds,
+            TelegramLastProcessedUpdateId = settings.TelegramLastProcessedUpdateId,
+            TelegramWebhookUrl = settings.TelegramWebhookUrl,
+            TelegramWebhookSecretToken = settings.TelegramWebhookSecretToken,
+            QuietHoursEnabled = settings.QuietHoursEnabled,
+            QuietHoursStartLocalTime = settings.QuietHoursStartLocalTime,
+            QuietHoursEndLocalTime = settings.QuietHoursEndLocalTime,
+            QuietHoursTimeZoneId = settings.QuietHoursTimeZoneId,
+            QuietHoursSuppressBrowserNotifications = settings.QuietHoursSuppressBrowserNotifications,
+            QuietHoursSuppressSmtpNotifications = settings.QuietHoursSuppressSmtpNotifications,
+            SmtpNotificationsEnabled = settings.SmtpNotificationsEnabled,
+            SmtpHost = settings.SmtpHost,
+            SmtpPort = settings.SmtpPort,
+            SmtpUseTls = settings.SmtpUseTls,
+            SmtpUsername = settings.SmtpUsername,
+            SmtpPasswordProtected = settings.SmtpPasswordProtected,
+            SmtpFromAddress = settings.SmtpFromAddress,
+            SmtpFromDisplayName = settings.SmtpFromDisplayName,
+            SmtpRecipientAddresses = settings.SmtpRecipientAddresses,
+            SmtpNotifyEndpointDown = settings.SmtpNotifyEndpointDown,
+            SmtpNotifyEndpointRecovered = settings.SmtpNotifyEndpointRecovered,
+            SmtpNotifyAgentOffline = settings.SmtpNotifyAgentOffline,
+            SmtpNotifyAgentOnline = settings.SmtpNotifyAgentOnline,
+            UpdatedAtUtc = settings.UpdatedAtUtc,
+            UpdatedByUserId = settings.UpdatedByUserId
+        };
+    }
+
+    private async Task<IReadOnlyList<BackupUserNotificationSettingsRecord>> LoadUserNotificationSettingsAsync(CancellationToken cancellationToken)
+    {
+        return await _dbContext.UserNotificationSettings
+            .AsNoTracking()
+            .OrderBy(x => x.UserId)
+            .Select(x => new BackupUserNotificationSettingsRecord
+            {
+                UserId = x.UserId,
+                BrowserNotificationsEnabled = x.BrowserNotificationsEnabled,
+                BrowserNotifyEndpointDown = x.BrowserNotifyEndpointDown,
+                BrowserNotifyEndpointRecovered = x.BrowserNotifyEndpointRecovered,
+                BrowserNotifyAgentOffline = x.BrowserNotifyAgentOffline,
+                BrowserNotifyAgentOnline = x.BrowserNotifyAgentOnline,
+                BrowserNotificationsPermissionState = x.BrowserNotificationsPermissionState,
+                SmtpNotificationsEnabled = x.SmtpNotificationsEnabled,
+                SmtpNotifyEndpointDown = x.SmtpNotifyEndpointDown,
+                SmtpNotifyEndpointRecovered = x.SmtpNotifyEndpointRecovered,
+                SmtpNotifyAgentOffline = x.SmtpNotifyAgentOffline,
+                SmtpNotifyAgentOnline = x.SmtpNotifyAgentOnline,
+                TelegramNotificationsEnabled = x.TelegramNotificationsEnabled,
+                TelegramNotifyEndpointDown = x.TelegramNotifyEndpointDown,
+                TelegramNotifyEndpointRecovered = x.TelegramNotifyEndpointRecovered,
+                TelegramNotifyAgentOffline = x.TelegramNotifyAgentOffline,
+                TelegramNotifyAgentOnline = x.TelegramNotifyAgentOnline,
+                QuietHoursSuppressTelegramNotifications = x.QuietHoursSuppressTelegramNotifications,
+                QuietHoursEnabled = x.QuietHoursEnabled,
+                QuietHoursStartLocalTime = x.QuietHoursStartLocalTime,
+                QuietHoursEndLocalTime = x.QuietHoursEndLocalTime,
+                QuietHoursTimeZoneId = x.QuietHoursTimeZoneId,
+                QuietHoursSuppressBrowserNotifications = x.QuietHoursSuppressBrowserNotifications,
+                QuietHoursSuppressSmtpNotifications = x.QuietHoursSuppressSmtpNotifications,
+                UpdatedAtUtc = x.UpdatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
     }
 }
