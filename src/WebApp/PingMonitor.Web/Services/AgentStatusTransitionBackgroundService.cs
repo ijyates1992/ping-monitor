@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.EventLogs;
+using PingMonitor.Web.Services.StartupGate;
 
 namespace PingMonitor.Web.Services;
 
@@ -12,22 +13,45 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
     private static readonly TimeSpan OfflineThreshold = TimeSpan.FromMinutes(5);
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IStartupGateRuntimeState _startupGateRuntimeState;
     private readonly ILogger<AgentStatusTransitionBackgroundService> _logger;
 
     public AgentStatusTransitionBackgroundService(
         IServiceScopeFactory serviceScopeFactory,
+        IStartupGateRuntimeState startupGateRuntimeState,
         ILogger<AgentStatusTransitionBackgroundService> logger)
     {
         _serviceScopeFactory = serviceScopeFactory;
+        _startupGateRuntimeState = startupGateRuntimeState;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var wasBlockedByStartupGate = false;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
+                if (!_startupGateRuntimeState.IsOperationalMode)
+                {
+                    if (!wasBlockedByStartupGate)
+                    {
+                        _logger.LogInformation("Agent status transition evaluation is paused because Startup Gate is active.");
+                        wasBlockedByStartupGate = true;
+                    }
+
+                    await Task.Delay(PollInterval, stoppingToken);
+                    continue;
+                }
+
+                if (wasBlockedByStartupGate)
+                {
+                    _logger.LogInformation("Startup Gate is cleared. Agent status transition evaluation is resuming normal operation.");
+                    wasBlockedByStartupGate = false;
+                }
+
                 await EvaluateTransitionsAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

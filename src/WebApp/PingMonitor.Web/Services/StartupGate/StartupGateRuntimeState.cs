@@ -3,6 +3,7 @@ namespace PingMonitor.Web.Services.StartupGate;
 public interface IStartupGateRuntimeState
 {
     StartupMode CurrentMode { get; }
+    bool IsOperationalMode { get; }
     void Update(StartupGateStatus status);
 }
 
@@ -25,6 +26,17 @@ internal sealed class StartupGateRuntimeState : IStartupGateRuntimeState
             lock (_sync)
             {
                 return _currentMode;
+            }
+        }
+    }
+
+    public bool IsOperationalMode
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _currentMode == StartupMode.Normal;
             }
         }
     }
