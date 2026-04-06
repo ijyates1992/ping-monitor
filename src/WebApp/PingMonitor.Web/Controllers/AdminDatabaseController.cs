@@ -141,6 +141,112 @@ public sealed class AdminDatabaseController : Controller
         return RedirectToAction(nameof(Maintenance));
     }
 
+    [HttpPost("backup/upload")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UploadBackup([FromForm(Name = "UploadForm")] DatabaseBackupUploadForm uploadForm, CancellationToken cancellationToken)
+    {
+        if (uploadForm.BackupFile is null || uploadForm.BackupFile.Length <= 0)
+        {
+            ModelState.AddModelError($"{nameof(DatabaseBackupUploadForm)}.{nameof(DatabaseBackupUploadForm.BackupFile)}", "Select a database backup file to upload.");
+            var invalidModel = await BuildMaintenanceModelAsync(new DatabasePruneForm(), null, null, null, cancellationToken);
+            return View("Maintenance", invalidModel);
+        }
+
+        await using var stream = uploadForm.BackupFile.OpenReadStream();
+        var result = await _databaseMaintenanceService.UploadBackupAsync(
+            new DatabaseBackupUploadRequest
+            {
+                OriginalFileName = uploadForm.BackupFile.FileName,
+                Content = stream,
+                RequestedBy = GetOperatorIdentity()
+            },
+            cancellationToken);
+
+        TempData["DbBackupStatus"] = result.Succeeded
+            ? $"Database backup upload completed: {result.FileName} ({result.FileSizeBytes} bytes)."
+            : $"Database backup upload failed: {result.Message}";
+
+        return RedirectToAction(nameof(Maintenance));
+    }
+
+    [HttpPost("backup/restore")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestoreBackup([FromForm(Name = "RestoreForm")] DatabaseBackupRestoreForm restoreForm, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(restoreForm.FileId))
+        {
+            TempData["DbBackupStatus"] = "Database backup restore failed: select a DATABASE backup file.";
+            return RedirectToAction(nameof(Maintenance));
+        }
+
+        if (!string.Equals(restoreForm.ConfirmationText?.Trim(), DatabaseBackupRestoreRequest.ConfirmationKeyword, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError($"{nameof(DatabaseBackupRestoreForm)}.{nameof(DatabaseBackupRestoreForm.ConfirmationText)}", $"Type {DatabaseBackupRestoreRequest.ConfirmationKeyword} to confirm restore.");
+            var invalidModel = await BuildMaintenanceModelAsync(new DatabasePruneForm(), null, null, null, cancellationToken);
+            return View("Maintenance", invalidModel);
+        }
+
+        try
+        {
+            var result = await _databaseMaintenanceService.RestoreBackupAsync(
+                new DatabaseBackupRestoreRequest
+                {
+                    FileId = restoreForm.FileId,
+                    ConfirmationText = restoreForm.ConfirmationText ?? string.Empty,
+                    RequestedBy = GetOperatorIdentity()
+                },
+                cancellationToken);
+
+            TempData["DbBackupStatus"] = result.Succeeded
+                ? $"Database backup restored from {result.RestoredFileName}. Pre-restore backup: {result.PreRestoreBackupFileName ?? "(none)"}."
+                : $"Database backup restore failed: {result.Message}";
+        }
+        catch (FileNotFoundException)
+        {
+            TempData["DbBackupStatus"] = "Database backup restore failed: selected backup file was not found.";
+        }
+
+        return RedirectToAction(nameof(Maintenance));
+    }
+
+    [HttpPost("backup/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteBackup([FromForm(Name = "DeleteForm")] DatabaseBackupDeleteForm deleteForm, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(deleteForm.FileId))
+        {
+            TempData["DbBackupStatus"] = "Database backup delete failed: select a DATABASE backup file.";
+            return RedirectToAction(nameof(Maintenance));
+        }
+
+        if (!deleteForm.ConfirmDelete)
+        {
+            TempData["DbBackupStatus"] = "Database backup delete canceled: confirmation was not provided.";
+            return RedirectToAction(nameof(Maintenance));
+        }
+
+        try
+        {
+            var result = await _databaseMaintenanceService.DeleteBackupAsync(
+                new DatabaseBackupDeleteRequest
+                {
+                    FileId = deleteForm.FileId,
+                    ConfirmDelete = deleteForm.ConfirmDelete,
+                    RequestedBy = GetOperatorIdentity()
+                },
+                cancellationToken);
+            TempData["DbBackupStatus"] = result.Succeeded
+                ? $"Database backup deleted: {result.FileName}."
+                : $"Database backup delete failed: {result.Message}";
+        }
+        catch (FileNotFoundException)
+        {
+            TempData["DbBackupStatus"] = "Database backup delete failed: selected backup file was not found.";
+        }
+
+        return RedirectToAction(nameof(Maintenance));
+    }
+
     [HttpGet("backup/download")]
     public IActionResult DownloadBackup([FromQuery] string fileId)
     {
@@ -272,12 +378,17 @@ public sealed class AdminDatabaseController : Controller
             PruneStatusMessage = pruneStatusMessage,
             BackupStatusMessage = backupStatusMessage,
             BackupForm = new DatabaseBackupForm(),
+            UploadForm = new DatabaseBackupUploadForm(),
+            RestoreForm = new DatabaseBackupRestoreForm(),
+            DeleteForm = new DatabaseBackupDeleteForm(),
             Backups = backups.Select(x => new DatabaseBackupRowViewModel
             {
                 FileName = x.FileName,
                 FileId = x.FileId,
                 CreatedAtUtc = x.CreatedAtUtc,
-                SizeBytes = x.FileSizeBytes
+                SizeBytes = x.FileSizeBytes,
+                MetadataSummary = x.MetadataSummary,
+                BackupSource = x.BackupSource
             }).ToArray()
         };
     }

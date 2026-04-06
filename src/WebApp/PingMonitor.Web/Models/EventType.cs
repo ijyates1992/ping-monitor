@@ -28,4 +28,9 @@ public static class EventType
     public const string DatabaseBackupStarted = "database_backup_started";
     public const string DatabaseBackupCompleted = "database_backup_completed";
     public const string DatabaseBackupFailed = "database_backup_failed";
+    public const string DatabaseBackupUploadCompleted = "database_backup_upload_completed";
+    public const string DatabaseBackupRestoreStarted = "database_backup_restore_started";
+    public const string DatabaseBackupRestoreCompleted = "database_backup_restore_completed";
+    public const string DatabaseBackupRestoreFailed = "database_backup_restore_failed";
+    public const string DatabaseBackupDeleted = "database_backup_deleted";
 }

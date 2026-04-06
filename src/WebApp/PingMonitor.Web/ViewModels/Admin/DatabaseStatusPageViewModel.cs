@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 using PingMonitor.Web.Services.DatabaseStatus;
 
 namespace PingMonitor.Web.ViewModels.Admin;
@@ -26,6 +27,9 @@ public sealed class DatabaseMaintenancePageViewModel
     public DatabasePrunePreviewViewModel? PrunePreview { get; init; }
     public string? PruneStatusMessage { get; init; }
     public DatabaseBackupForm BackupForm { get; init; } = new();
+    public DatabaseBackupUploadForm UploadForm { get; init; } = new();
+    public DatabaseBackupRestoreForm RestoreForm { get; init; } = new();
+    public DatabaseBackupDeleteForm DeleteForm { get; init; } = new();
     public string? BackupStatusMessage { get; init; }
     public IReadOnlyList<DatabaseBackupRowViewModel> Backups { get; init; } = [];
 }
@@ -124,10 +128,35 @@ public sealed class DatabaseBackupForm
     public bool ConfirmBackup { get; set; }
 }
 
+public sealed class DatabaseBackupUploadForm
+{
+    [Required(ErrorMessage = "Backup file is required.")]
+    public IFormFile? BackupFile { get; set; }
+}
+
+public sealed class DatabaseBackupRestoreForm
+{
+    [Required(ErrorMessage = "Backup file selection is required.")]
+    public string FileId { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Type RESTORE to confirm.")]
+    public string ConfirmationText { get; set; } = string.Empty;
+}
+
+public sealed class DatabaseBackupDeleteForm
+{
+    [Required(ErrorMessage = "Backup file selection is required.")]
+    public string FileId { get; set; } = string.Empty;
+
+    public bool ConfirmDelete { get; set; }
+}
+
 public sealed class DatabaseBackupRowViewModel
 {
     public string FileName { get; init; } = string.Empty;
     public string FileId { get; init; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; init; }
     public long SizeBytes { get; init; }
+    public string MetadataSummary { get; init; } = string.Empty;
+    public string BackupSource { get; init; } = string.Empty;
 }
