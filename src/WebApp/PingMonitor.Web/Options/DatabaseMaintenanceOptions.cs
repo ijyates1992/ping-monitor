@@ -6,4 +6,5 @@ public sealed class DatabaseMaintenanceOptions
 
     public string BackupStoragePath { get; set; } = "App_Data/DbBackups";
     public string MySqlDumpExecutablePath { get; set; } = "mysqldump";
+    public string MySqlExecutablePath { get; set; } = "mysql";
 }
