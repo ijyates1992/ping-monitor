@@ -45,6 +45,55 @@ public sealed class DatabaseBackupCreateRequest
     public string? RequestedBy { get; init; }
 }
 
+public sealed class DatabaseBackupUploadRequest
+{
+    public string OriginalFileName { get; init; } = string.Empty;
+    public Stream Content { get; init; } = Stream.Null;
+    public string? RequestedBy { get; init; }
+}
+
+public sealed class DatabaseBackupUploadResult
+{
+    public bool Succeeded { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public string? FileName { get; init; }
+    public DateTimeOffset? UploadedAtUtc { get; init; }
+    public long? FileSizeBytes { get; init; }
+}
+
+public sealed class DatabaseBackupRestoreRequest
+{
+    public const string ConfirmationKeyword = "RESTORE";
+
+    public string FileId { get; init; } = string.Empty;
+    public string ConfirmationText { get; init; } = string.Empty;
+    public string? RequestedBy { get; init; }
+}
+
+public sealed class DatabaseBackupRestoreResult
+{
+    public bool Succeeded { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public string? RestoredFileName { get; init; }
+    public DateTimeOffset? RestoredFileCreatedAtUtc { get; init; }
+    public bool PreRestoreBackupCreated { get; init; }
+    public string? PreRestoreBackupFileName { get; init; }
+}
+
+public sealed class DatabaseBackupDeleteRequest
+{
+    public string FileId { get; init; } = string.Empty;
+    public bool ConfirmDelete { get; init; }
+    public string? RequestedBy { get; init; }
+}
+
+public sealed class DatabaseBackupDeleteResult
+{
+    public bool Succeeded { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public string? FileName { get; init; }
+}
+
 public sealed class DatabaseBackupCreateResult
 {
     public bool Succeeded { get; init; }
@@ -62,4 +111,6 @@ public sealed class DatabaseBackupFileSnapshot
     public DateTimeOffset CreatedAtUtc { get; init; }
     public long FileSizeBytes { get; init; }
     public string FullPath { get; init; } = string.Empty;
+    public string MetadataSummary { get; init; } = string.Empty;
+    public string BackupSource { get; init; } = string.Empty;
 }

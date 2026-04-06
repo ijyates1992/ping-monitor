@@ -1,7 +1,9 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MySqlConnector;
@@ -14,6 +16,8 @@ namespace PingMonitor.Web.Services.DatabaseStatus;
 
 internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 {
+    private const int MaxUploadBytes = 100 * 1024 * 1024;
+
     private readonly PingMonitorDbContext _dbContext;
     private readonly IEventLogService _eventLogService;
     private readonly IOptions<DatabaseMaintenanceOptions> _options;
@@ -142,7 +146,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var safeDatabaseName = string.IsNullOrWhiteSpace(builder.Database) ? "database" : builder.Database.Trim();
         var fileName = $"db-backup-{safeDatabaseName}-{backupTimestamp:yyyyMMdd-HHmmss}.sql";
         var fullPath = Path.Combine(backupDirectory, fileName);
-        var mysqldumpExecutablePath = ResolveMySqlDumpExecutablePath(options.MySqlDumpExecutablePath);
+        var mysqldumpExecutablePath = ResolveExecutablePath(options.MySqlDumpExecutablePath, "mysqldump");
         if (mysqldumpExecutablePath is null)
         {
             return await CreateBackupFailureAsync(
@@ -241,41 +245,332 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         }
     }
 
-    private string? ResolveMySqlDumpExecutablePath(string configuredPath)
+    public async Task<DatabaseBackupUploadResult> UploadBackupAsync(DatabaseBackupUploadRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(configuredPath))
+        if (request.Content is null || request.Content == Stream.Null)
         {
-            return null;
+            throw new InvalidOperationException("Database backup upload file is required.");
         }
 
-        var trimmedPath = configuredPath.Trim();
-        if (Path.IsPathRooted(trimmedPath) || trimmedPath.Contains(Path.DirectorySeparatorChar) || trimmedPath.Contains(Path.AltDirectorySeparatorChar))
+        var backupDirectory = GetBackupDirectory(_options.Value.BackupStoragePath);
+        Directory.CreateDirectory(backupDirectory);
+
+        var safeOriginalName = SanitizeFileName(request.OriginalFileName);
+        if (string.IsNullOrWhiteSpace(safeOriginalName))
         {
-            var rootedPath = Path.IsPathRooted(trimmedPath)
-                ? trimmedPath
-                : Path.GetFullPath(trimmedPath, _webHostEnvironment.ContentRootPath);
-            return File.Exists(rootedPath) ? rootedPath : null;
+            return new DatabaseBackupUploadResult { Succeeded = false, Message = "Backup file name is invalid." };
         }
 
-        var pathValue = Environment.GetEnvironmentVariable("PATH");
-        if (!string.IsNullOrWhiteSpace(pathValue))
+        if (!safeOriginalName.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
         {
-            foreach (var pathEntry in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            return new DatabaseBackupUploadResult { Succeeded = false, Message = "Only .sql database backup files are accepted." };
+        }
+
+        await using var uploadBuffer = new MemoryStream();
+        await request.Content.CopyToAsync(uploadBuffer, cancellationToken);
+        if (uploadBuffer.Length <= 0)
+        {
+            return new DatabaseBackupUploadResult { Succeeded = false, Message = "Backup file is empty." };
+        }
+
+        if (uploadBuffer.Length > MaxUploadBytes)
+        {
+            return new DatabaseBackupUploadResult { Succeeded = false, Message = $"Backup file exceeds the {MaxUploadBytes / (1024 * 1024)} MB upload limit." };
+        }
+
+        var contentBytes = uploadBuffer.ToArray();
+        var validationMessage = ValidateSqlBackupContent(contentBytes);
+        if (validationMessage is not null)
+        {
+            return new DatabaseBackupUploadResult { Succeeded = false, Message = validationMessage };
+        }
+
+        var uploadedAtUtc = DateTimeOffset.UtcNow;
+        var storedFileName = BuildStoredUploadFileName(safeOriginalName, uploadedAtUtc);
+        var fullPath = Path.Combine(backupDirectory, storedFileName);
+        EnsurePathIsWithinDirectory(backupDirectory, fullPath);
+
+        await File.WriteAllBytesAsync(fullPath, contentBytes, cancellationToken);
+        var fileInfo = new FileInfo(fullPath);
+
+        await _eventLogService.WriteAsync(new EventLogWriteRequest
+        {
+            Category = EventCategory.System,
+            EventType = EventType.DatabaseBackupUploadCompleted,
+            Severity = EventSeverity.Warning,
+            Message = $"Database backup upload completed. File: {storedFileName}.",
+            DetailsJson = JsonSerializer.Serialize(new
             {
-                var candidate = Path.Combine(pathEntry, trimmedPath);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
+                storedFileName,
+                originalFileName = request.OriginalFileName,
+                uploadedAtUtc,
+                fileSizeBytes = fileInfo.Length,
+                requestedBy = request.RequestedBy
+            })
+        }, cancellationToken);
 
-                if (OperatingSystem.IsWindows())
+        return new DatabaseBackupUploadResult
+        {
+            Succeeded = true,
+            Message = "Database backup upload completed successfully.",
+            FileName = storedFileName,
+            UploadedAtUtc = uploadedAtUtc,
+            FileSizeBytes = fileInfo.Length
+        };
+    }
+
+    public async Task<DatabaseBackupRestoreResult> RestoreBackupAsync(DatabaseBackupRestoreRequest request, CancellationToken cancellationToken)
+    {
+        if (!string.Equals(request.ConfirmationText?.Trim(), DatabaseBackupRestoreRequest.ConfirmationKeyword, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Type {DatabaseBackupRestoreRequest.ConfirmationKeyword} to confirm restore.");
+        }
+
+        var backupPath = ResolveBackupDownloadPath(request.FileId);
+        var backupFileInfo = new FileInfo(backupPath);
+        var contentBytes = await File.ReadAllBytesAsync(backupPath, cancellationToken);
+        var validationMessage = ValidateSqlBackupContent(contentBytes);
+        if (validationMessage is not null)
+        {
+            await _eventLogService.WriteAsync(new EventLogWriteRequest
+            {
+                Category = EventCategory.System,
+                EventType = EventType.DatabaseBackupRestoreFailed,
+                Severity = EventSeverity.Error,
+                Message = "Database backup restore rejected: validation failed.",
+                DetailsJson = JsonSerializer.Serialize(new
                 {
-                    var candidateWithExtension = candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-                        ? candidate
-                        : $"{candidate}.exe";
-                    if (File.Exists(candidateWithExtension))
+                    request.FileId,
+                    fileName = backupFileInfo.Name,
+                    validationMessage,
+                    requestedBy = request.RequestedBy
+                })
+            }, cancellationToken);
+
+            return new DatabaseBackupRestoreResult
+            {
+                Succeeded = false,
+                Message = validationMessage,
+                RestoredFileName = backupFileInfo.Name,
+                RestoredFileCreatedAtUtc = new DateTimeOffset(backupFileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+                PreRestoreBackupCreated = false
+            };
+        }
+
+        await _eventLogService.WriteAsync(new EventLogWriteRequest
+        {
+            Category = EventCategory.System,
+            EventType = EventType.DatabaseBackupRestoreStarted,
+            Severity = EventSeverity.Warning,
+            Message = $"Database backup restore started. File: {backupFileInfo.Name}.",
+            DetailsJson = JsonSerializer.Serialize(new
+            {
+                request.FileId,
+                fileName = backupFileInfo.Name,
+                fileSizeBytes = backupFileInfo.Length,
+                requestedBy = request.RequestedBy
+            })
+        }, cancellationToken);
+
+        var preRestoreBackup = await CreateBackupAsync(
+            new DatabaseBackupCreateRequest { RequestedBy = request.RequestedBy },
+            cancellationToken);
+        if (!preRestoreBackup.Succeeded)
+        {
+            await _eventLogService.WriteAsync(new EventLogWriteRequest
+            {
+                Category = EventCategory.System,
+                EventType = EventType.DatabaseBackupRestoreFailed,
+                Severity = EventSeverity.Error,
+                Message = "Database backup restore aborted because pre-restore backup failed.",
+                DetailsJson = JsonSerializer.Serialize(new
+                {
+                    request.FileId,
+                    fileName = backupFileInfo.Name,
+                    preRestoreBackupMessage = preRestoreBackup.Message,
+                    requestedBy = request.RequestedBy
+                })
+            }, cancellationToken);
+
+            return new DatabaseBackupRestoreResult
+            {
+                Succeeded = false,
+                Message = $"Restore was aborted because pre-restore backup failed: {preRestoreBackup.Message}",
+                RestoredFileName = backupFileInfo.Name,
+                RestoredFileCreatedAtUtc = new DateTimeOffset(backupFileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+                PreRestoreBackupCreated = false
+            };
+        }
+
+        var dbConnectionString = _dbContext.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(dbConnectionString))
+        {
+            return await CreateRestoreFailureAsync("Database connection string is unavailable.", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+        }
+
+        var builder = new MySqlConnectionStringBuilder(dbConnectionString);
+        var mysqlExecutablePath = ResolveExecutablePath(null, "mysql");
+        if (mysqlExecutablePath is null)
+        {
+            return await CreateRestoreFailureAsync("mysql executable was not found. Ensure mysql client is installed and available in PATH.", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+        }
+
+        var processInfo = new ProcessStartInfo
+        {
+            FileName = mysqlExecutablePath,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        processInfo.ArgumentList.Add("--host");
+        processInfo.ArgumentList.Add(builder.Server);
+        processInfo.ArgumentList.Add("--port");
+        processInfo.ArgumentList.Add(builder.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        processInfo.ArgumentList.Add("--user");
+        processInfo.ArgumentList.Add(builder.UserID);
+        processInfo.ArgumentList.Add(builder.Database);
+        processInfo.Environment["MYSQL_PWD"] = builder.Password;
+
+        try
+        {
+            using var process = Process.Start(processInfo);
+            if (process is null)
+            {
+                return await CreateRestoreFailureAsync("Unable to start mysql restore process.", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+            }
+
+            await process.StandardInput.BaseStream.WriteAsync(contentBytes, cancellationToken);
+            await process.StandardInput.BaseStream.FlushAsync(cancellationToken);
+            process.StandardInput.Close();
+            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+
+            if (process.ExitCode != 0)
+            {
+                return await CreateRestoreFailureAsync($"mysql restore exited with code {process.ExitCode}. {TrimDiagnostic(stderr)}", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+            }
+
+            await _eventLogService.WriteAsync(new EventLogWriteRequest
+            {
+                Category = EventCategory.System,
+                EventType = EventType.DatabaseBackupRestoreCompleted,
+                Severity = EventSeverity.Warning,
+                Message = $"Database backup restore completed. File: {backupFileInfo.Name}.",
+                DetailsJson = JsonSerializer.Serialize(new
+                {
+                    request.FileId,
+                    fileName = backupFileInfo.Name,
+                    restoredFileCreatedAtUtc = backupFileInfo.LastWriteTimeUtc,
+                    preRestoreBackupFileName = preRestoreBackup.FileName,
+                    requestedBy = request.RequestedBy
+                })
+            }, cancellationToken);
+
+            return new DatabaseBackupRestoreResult
+            {
+                Succeeded = true,
+                Message = "Database restore completed successfully.",
+                RestoredFileName = backupFileInfo.Name,
+                RestoredFileCreatedAtUtc = new DateTimeOffset(backupFileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+                PreRestoreBackupCreated = true,
+                PreRestoreBackupFileName = preRestoreBackup.FileName
+            };
+        }
+        catch (Exception ex) when (ex is Win32Exception || ex is InvalidOperationException || ex is IOException)
+        {
+            _logger.LogWarning(ex, "Database backup restore failed.");
+            return await CreateRestoreFailureAsync($"Database restore failed: {ex.Message}", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+        }
+    }
+
+    public async Task<DatabaseBackupDeleteResult> DeleteBackupAsync(DatabaseBackupDeleteRequest request, CancellationToken cancellationToken)
+    {
+        if (!request.ConfirmDelete)
+        {
+            return new DatabaseBackupDeleteResult
+            {
+                Succeeded = false,
+                Message = "Delete confirmation is required."
+            };
+        }
+
+        var backupPath = ResolveBackupDownloadPath(request.FileId);
+        var fileName = Path.GetFileName(backupPath);
+        File.Delete(backupPath);
+
+        await _eventLogService.WriteAsync(new EventLogWriteRequest
+        {
+            Category = EventCategory.System,
+            EventType = EventType.DatabaseBackupDeleted,
+            Severity = EventSeverity.Warning,
+            Message = $"Database backup deleted. File: {fileName}.",
+            DetailsJson = JsonSerializer.Serialize(new
+            {
+                request.FileId,
+                fileName,
+                requestedBy = request.RequestedBy
+            })
+        }, cancellationToken);
+
+        return new DatabaseBackupDeleteResult
+        {
+            Succeeded = true,
+            Message = "Database backup deleted.",
+            FileName = fileName
+        };
+    }
+
+    private string? ResolveExecutablePath(string? configuredPath, string fallbackExecutableName)
+    {
+        var candidateNames = new List<string>();
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            candidateNames.Add(configuredPath.Trim());
+        }
+
+        candidateNames.Add(fallbackExecutableName);
+
+        foreach (var trimmedPath in candidateNames)
+        {
+            if (string.IsNullOrWhiteSpace(trimmedPath))
+            {
+                continue;
+            }
+
+            if (Path.IsPathRooted(trimmedPath) || trimmedPath.Contains(Path.DirectorySeparatorChar) || trimmedPath.Contains(Path.AltDirectorySeparatorChar))
+            {
+                var rootedPath = Path.IsPathRooted(trimmedPath)
+                    ? trimmedPath
+                    : Path.GetFullPath(trimmedPath, _webHostEnvironment.ContentRootPath);
+                if (File.Exists(rootedPath))
+                {
+                    return rootedPath;
+                }
+            }
+
+            var pathValue = Environment.GetEnvironmentVariable("PATH");
+            if (!string.IsNullOrWhiteSpace(pathValue))
+            {
+                foreach (var pathEntry in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var candidate = Path.Combine(pathEntry, trimmedPath);
+                    if (File.Exists(candidate))
                     {
-                        return candidateWithExtension;
+                        return candidate;
+                    }
+
+                    if (OperatingSystem.IsWindows())
+                    {
+                        var candidateWithExtension = candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                            ? candidate
+                            : $"{candidate}.exe";
+                        if (File.Exists(candidateWithExtension))
+                        {
+                            return candidateWithExtension;
+                        }
                     }
                 }
             }
@@ -349,7 +644,9 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 FileId = ComputeFileId(x.Name),
                 CreatedAtUtc = new DateTimeOffset(x.LastWriteTimeUtc, TimeSpan.Zero),
                 FileSizeBytes = x.Length,
-                FullPath = x.FullName
+                FullPath = x.FullName,
+                MetadataSummary = BuildMetadataSummary(x.Name),
+                BackupSource = x.Name.StartsWith("uploaded-db-backup-", StringComparison.OrdinalIgnoreCase) ? "Uploaded" : "Created"
             })
             .ToArray();
 
@@ -426,6 +723,41 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         };
     }
 
+    private async Task<DatabaseBackupRestoreResult> CreateRestoreFailureAsync(
+        string message,
+        FileInfo backupFileInfo,
+        DatabaseBackupRestoreRequest request,
+        bool preRestoreBackupCreated,
+        string? preRestoreBackupFileName,
+        CancellationToken cancellationToken)
+    {
+        await _eventLogService.WriteAsync(new EventLogWriteRequest
+        {
+            Category = EventCategory.System,
+            EventType = EventType.DatabaseBackupRestoreFailed,
+            Severity = EventSeverity.Error,
+            Message = message,
+            DetailsJson = JsonSerializer.Serialize(new
+            {
+                request.FileId,
+                fileName = backupFileInfo.Name,
+                preRestoreBackupCreated,
+                preRestoreBackupFileName,
+                requestedBy = request.RequestedBy
+            })
+        }, cancellationToken);
+
+        return new DatabaseBackupRestoreResult
+        {
+            Succeeded = false,
+            Message = message,
+            RestoredFileName = backupFileInfo.Name,
+            RestoredFileCreatedAtUtc = new DateTimeOffset(backupFileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+            PreRestoreBackupCreated = preRestoreBackupCreated,
+            PreRestoreBackupFileName = preRestoreBackupFileName
+        };
+    }
+
     private string GetBackupDirectory(string configuredPath)
     {
         var contentRoot = _webHostEnvironment.ContentRootPath;
@@ -449,5 +781,84 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
         var trimmed = value.Trim();
         return trimmed.Length <= 300 ? trimmed : trimmed[..300];
+    }
+
+    private static string SanitizeFileName(string? originalFileName)
+    {
+        var input = string.IsNullOrWhiteSpace(originalFileName)
+            ? "uploaded.sql"
+            : Path.GetFileName(originalFileName.Trim());
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var builder = new StringBuilder(input.Length);
+        foreach (var character in input)
+        {
+            builder.Append(invalidChars.Contains(character) ? '-' : character);
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private static string BuildStoredUploadFileName(string safeOriginalName, DateTimeOffset uploadedAtUtc)
+    {
+        var baseName = Path.GetFileNameWithoutExtension(safeOriginalName);
+        var cleanedBaseName = Regex.Replace(baseName, "[^A-Za-z0-9._-]+", "-", RegexOptions.CultureInvariant).Trim('-');
+        if (string.IsNullOrWhiteSpace(cleanedBaseName))
+        {
+            cleanedBaseName = "uploaded";
+        }
+
+        return $"uploaded-db-backup-{cleanedBaseName}-{uploadedAtUtc:yyyyMMdd-HHmmss}.sql";
+    }
+
+    private static void EnsurePathIsWithinDirectory(string baseDirectory, string targetPath)
+    {
+        var fullBase = Path.GetFullPath(baseDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullTarget = Path.GetFullPath(targetPath);
+        if (!fullTarget.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Resolved backup path is invalid.");
+        }
+    }
+
+    private static string? ValidateSqlBackupContent(byte[] contentBytes)
+    {
+        string contentText;
+        try
+        {
+            contentText = Encoding.UTF8.GetString(contentBytes);
+        }
+        catch
+        {
+            return "Database backup file could not be read as UTF-8 SQL text.";
+        }
+
+        if (string.IsNullOrWhiteSpace(contentText))
+        {
+            return "Database backup file is empty.";
+        }
+
+        var hasSqlIndicators =
+            contentText.Contains("-- MySQL dump", StringComparison.OrdinalIgnoreCase) ||
+            contentText.Contains("CREATE TABLE", StringComparison.OrdinalIgnoreCase) ||
+            contentText.Contains("INSERT INTO", StringComparison.OrdinalIgnoreCase) ||
+            contentText.Contains("DROP TABLE", StringComparison.OrdinalIgnoreCase);
+
+        if (!hasSqlIndicators)
+        {
+            return "Database backup file is not a valid SQL backup format.";
+        }
+
+        return null;
+    }
+
+    private static string BuildMetadataSummary(string fileName)
+    {
+        var schemaMatch = Regex.Match(fileName, @"schema-v(?<version>\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (schemaMatch.Success)
+        {
+            return $"Schema v{schemaMatch.Groups["version"].Value}";
+        }
+
+        return "MySQL logical SQL dump";
     }
 }

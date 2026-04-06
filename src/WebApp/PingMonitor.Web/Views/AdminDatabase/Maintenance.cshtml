@@ -23,6 +23,8 @@
         input, select, button { min-height: 44px; padding: .55rem .65rem; font: inherit; }
         button { cursor: pointer; }
         .success { background: #ecfdf3; border: 1px solid #12b76a; color: #027a48; padding: .6rem; border-radius: 10px; }
+        .danger-box { background: #fef3f2; border: 1px solid #f04438; color: #912018; padding: .75rem; border-radius: 10px; }
+        .warning-box { background: #fffaeb; border: 1px solid #f79009; color: #7a2e0e; padding: .75rem; border-radius: 10px; }
         .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .55rem .8rem; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); text-decoration: none; }
     </style>
 </head>
@@ -78,7 +80,8 @@
 
         <section class="card">
             <h2>DB backup tool (MySQL logical dump)</h2>
-            <p class="muted">This tool runs <code>mysqldump</code> to create a full logical SQL export of the current MySQL database. This is separate from configuration JSON backups.</p>
+            <p class="muted">This section manages <strong>DATABASE backups only</strong>. It does not include configuration backups. Existing create/download behaviour remains unchanged, and upload/restore/delete actions apply only to MySQL SQL dump backups.</p>
+            <p class="muted">This tool runs <code>mysqldump</code> to create a full logical SQL export of the current MySQL database.</p>
             <form method="post" action="/admin/database/backup/create" class="form-grid">
                 @Html.AntiForgeryToken()
                 <label>
@@ -87,10 +90,20 @@
                 <button type="submit">Create DB backup</button>
             </form>
 
-            <h3>Backup files</h3>
+            <h3>Upload DATABASE backup</h3>
+            <form method="post" action="/admin/database/backup/upload" enctype="multipart/form-data" class="form-grid">
+                @Html.AntiForgeryToken()
+                <label>Backup SQL file
+                    <input asp-for="UploadForm.BackupFile" type="file" accept=".sql,text/plain,application/sql" />
+                </label>
+                <p class="muted">Accepted files are validated as SQL backup content before being stored in DB backup storage.</p>
+                <button type="submit">Upload DATABASE backup</button>
+            </form>
+
+            <h3>DATABASE backup files</h3>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>File</th><th>Created (UTC)</th><th>Size</th><th>Download</th></tr></thead>
+                    <thead><tr><th>File</th><th>Created/Exported (UTC)</th><th>Size</th><th>Source</th><th>Metadata</th><th>Actions</th></tr></thead>
                     <tbody>
                     @foreach (var backup in Model.Backups)
                     {
@@ -98,11 +111,58 @@
                             <td>@backup.FileName</td>
                             <td>@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc)</td>
                             <td>@DisplayFormatting.FormatBytes(backup.SizeBytes)</td>
-                            <td><a href="/admin/database/backup/download?fileId=@backup.FileId">Download</a></td>
+                            <td>@backup.BackupSource</td>
+                            <td>@backup.MetadataSummary</td>
+                            <td>
+                                <a href="/admin/database/backup/download?fileId=@backup.FileId">Download</a>
+                            </td>
                         </tr>
                     }
                     </tbody>
                 </table>
+            </div>
+
+            <div class="danger-box" style="margin-top:1rem;">
+                <h3>Restore DATABASE backup (High risk)</h3>
+                <p><strong>This will completely replace the current DATABASE.</strong></p>
+                <p class="muted">Select the backup file to restore. A pre-restore database backup will be created automatically before restore is applied.</p>
+                <form method="post" action="/admin/database/backup/restore" class="form-grid">
+                    @Html.AntiForgeryToken()
+                    <label>Backup to restore
+                        <select asp-for="RestoreForm.FileId">
+                            <option value="">-- Select DATABASE backup --</option>
+                            @foreach (var backup in Model.Backups)
+                            {
+                                <option value="@backup.FileId">@backup.FileName (@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc))</option>
+                            }
+                        </select>
+                    </label>
+                    <label>Type <strong>RESTORE</strong> to confirm
+                        <input asp-for="RestoreForm.ConfirmationText" autocomplete="off" />
+                    </label>
+                    <button type="submit">Restore DATABASE backup</button>
+                    <span asp-validation-for="RestoreForm.ConfirmationText"></span>
+                </form>
+            </div>
+
+            <div class="warning-box" style="margin-top:1rem;">
+                <h3>Delete DATABASE backup (Medium risk)</h3>
+                <form method="post" action="/admin/database/backup/delete" class="form-grid" onsubmit="return confirm('Delete selected DATABASE backup file? This cannot be undone.');">
+                    @Html.AntiForgeryToken()
+                    <label>Backup to delete
+                        <select asp-for="DeleteForm.FileId">
+                            <option value="">-- Select DATABASE backup --</option>
+                            @foreach (var backup in Model.Backups)
+                            {
+                                <option value="@backup.FileId">@backup.FileName (@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc))</option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        <input asp-for="DeleteForm.ConfirmDelete" type="checkbox" /> I confirm I want to delete the selected DATABASE backup file.
+                    </label>
+                    <button type="submit">Delete DATABASE backup</button>
+                </form>
             </div>
         </section>
     </div>
