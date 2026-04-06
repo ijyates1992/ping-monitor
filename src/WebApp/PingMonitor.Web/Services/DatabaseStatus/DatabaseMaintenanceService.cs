@@ -362,20 +362,12 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var validationMessage = ValidateSqlBackupContent(contentBytes);
         if (validationMessage is not null)
         {
-            await _eventLogService.WriteAsync(new EventLogWriteRequest
-            {
-                Category = EventCategory.System,
-                EventType = EventType.DatabaseBackupRestoreFailed,
-                Severity = EventSeverity.Error,
-                Message = "Database backup restore rejected: validation failed.",
-                DetailsJson = JsonSerializer.Serialize(new
-                {
-                    request.FileId,
-                    fileName = backupFileInfo.Name,
-                    validationMessage,
-                    requestedBy = request.RequestedBy
-                })
-            }, cancellationToken);
+            _logger.LogWarning(
+                "Database backup restore rejected before execution. FileId: {FileId}, FileName: {FileName}, ValidationMessage: {ValidationMessage}, RequestedBy: {RequestedBy}",
+                request.FileId,
+                backupFileInfo.Name,
+                validationMessage,
+                request.RequestedBy);
 
             return new DatabaseBackupRestoreResult
             {
@@ -388,41 +380,25 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             };
         }
 
-        await _eventLogService.WriteAsync(new EventLogWriteRequest
-        {
-            Category = EventCategory.System,
-            EventType = EventType.DatabaseBackupRestoreStarted,
-            Severity = EventSeverity.Warning,
-            Message = $"Database backup restore started. File: {backupFileInfo.Name}.",
-            DetailsJson = JsonSerializer.Serialize(new
-            {
-                request.FileId,
-                fileName = backupFileInfo.Name,
-                backupMode = backupDescriptor.Mode.ToString(),
-                fileSizeBytes = backupFileInfo.Length,
-                requestedBy = request.RequestedBy
-            })
-        }, cancellationToken);
+        _logger.LogInformation(
+            "Database backup restore started. FileId: {FileId}, FileName: {FileName}, BackupMode: {BackupMode}, FileSizeBytes: {FileSizeBytes}, RequestedBy: {RequestedBy}",
+            request.FileId,
+            backupFileInfo.Name,
+            backupDescriptor.Mode,
+            backupFileInfo.Length,
+            request.RequestedBy);
 
         var preRestoreBackup = await CreateBackupAsync(
             new DatabaseBackupCreateRequest { RequestedBy = request.RequestedBy },
             cancellationToken);
         if (!preRestoreBackup.Succeeded)
         {
-            await _eventLogService.WriteAsync(new EventLogWriteRequest
-            {
-                Category = EventCategory.System,
-                EventType = EventType.DatabaseBackupRestoreFailed,
-                Severity = EventSeverity.Error,
-                Message = "Database backup restore aborted because pre-restore backup failed.",
-                DetailsJson = JsonSerializer.Serialize(new
-                {
-                    request.FileId,
-                    fileName = backupFileInfo.Name,
-                    preRestoreBackupMessage = preRestoreBackup.Message,
-                    requestedBy = request.RequestedBy
-                })
-            }, cancellationToken);
+            _logger.LogWarning(
+                "Database backup restore aborted because pre-restore backup failed. FileId: {FileId}, FileName: {FileName}, PreRestoreBackupMessage: {PreRestoreBackupMessage}, RequestedBy: {RequestedBy}",
+                request.FileId,
+                backupFileInfo.Name,
+                preRestoreBackup.Message,
+                request.RequestedBy);
 
             return new DatabaseBackupRestoreResult
             {
@@ -775,7 +751,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         };
     }
 
-    private async Task<DatabaseBackupRestoreResult> CreateRestoreFailureAsync(
+    private Task<DatabaseBackupRestoreResult> CreateRestoreFailureAsync(
         string message,
         FileInfo backupFileInfo,
         DatabaseBackupRestoreRequest request,
@@ -784,24 +760,19 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         string? preRestoreBackupFileName,
         CancellationToken cancellationToken)
     {
-        await _eventLogService.WriteAsync(new EventLogWriteRequest
-        {
-            Category = EventCategory.System,
-            EventType = EventType.DatabaseBackupRestoreFailed,
-            Severity = EventSeverity.Error,
-            Message = message,
-            DetailsJson = JsonSerializer.Serialize(new
-            {
-                request.FileId,
-                fileName = backupFileInfo.Name,
-                backupMode = backupMode.ToString(),
-                preRestoreBackupCreated,
-                preRestoreBackupFileName,
-                requestedBy = request.RequestedBy
-            })
-        }, cancellationToken);
+        _ = cancellationToken;
 
-        return new DatabaseBackupRestoreResult
+        _logger.LogWarning(
+            "Database backup restore failed before completion. FileId: {FileId}, FileName: {FileName}, BackupMode: {BackupMode}, PreRestoreBackupCreated: {PreRestoreBackupCreated}, PreRestoreBackupFileName: {PreRestoreBackupFileName}, RequestedBy: {RequestedBy}, Message: {Message}",
+            request.FileId,
+            backupFileInfo.Name,
+            backupMode,
+            preRestoreBackupCreated,
+            preRestoreBackupFileName,
+            request.RequestedBy,
+            message);
+
+        return Task.FromResult(new DatabaseBackupRestoreResult
         {
             Succeeded = false,
             Message = message,
@@ -810,7 +781,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             BackupMode = backupMode,
             PreRestoreBackupCreated = preRestoreBackupCreated,
             PreRestoreBackupFileName = preRestoreBackupFileName
-        };
+        });
     }
 
     private static string BuildBackupHeader(DatabaseBackupMode mode, DateTimeOffset createdAtUtc)
