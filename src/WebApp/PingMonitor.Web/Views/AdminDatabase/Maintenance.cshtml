@@ -81,9 +81,16 @@
         <section class="card">
             <h2>DB backup tool (MySQL logical dump)</h2>
             <p class="muted">This section manages <strong>DATABASE backups only</strong>. It does not include configuration backups. Existing create/download behaviour remains unchanged, and upload/restore/delete actions apply only to MySQL SQL dump backups.</p>
-            <p class="muted">This tool runs <code>mysqldump</code> to create a full logical SQL export of the current MySQL database.</p>
+            <p class="muted">This tool runs <code>mysqldump</code> to create either a full or compact logical SQL export of the current MySQL database.</p>
             <form method="post" action="/admin/database/backup/create" class="form-grid">
                 @Html.AntiForgeryToken()
+                <label>Backup mode
+                    <select asp-for="BackupForm.BackupMode">
+                        <option value="@DatabaseBackupMode.Full">Full database backup</option>
+                        <option value="@DatabaseBackupMode.Compact">Compact database backup (excludes results, metrics, and logs)</option>
+                    </select>
+                </label>
+                <p class="muted">Compact backup preserves configuration and core state, while excluding bulky runtime history (results, metrics history, and logs) to reduce file size.</p>
                 <label>
                     <input asp-for="BackupForm.ConfirmBackup" type="checkbox" /> I confirm I want to create a database backup export now.
                 </label>
@@ -103,7 +110,7 @@
             <h3>DATABASE backup files</h3>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>File</th><th>Created/Exported (UTC)</th><th>Size</th><th>Source</th><th>Metadata</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>File</th><th>Created/Exported (UTC)</th><th>Size</th><th>Type</th><th>Source</th><th>Metadata</th><th>Actions</th></tr></thead>
                     <tbody>
                     @foreach (var backup in Model.Backups)
                     {
@@ -111,6 +118,7 @@
                             <td>@backup.FileName</td>
                             <td>@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc)</td>
                             <td>@DisplayFormatting.FormatBytes(backup.SizeBytes)</td>
+                            <td>@backup.BackupModeDisplayName</td>
                             <td>@backup.BackupSource</td>
                             <td>@backup.MetadataSummary</td>
                             <td>
@@ -126,6 +134,7 @@
                 <h3>Restore DATABASE backup (High risk)</h3>
                 <p><strong>This will completely replace the current DATABASE.</strong></p>
                 <p class="muted">Select the backup file to restore. A pre-restore database backup will be created automatically before restore is applied.</p>
+                <p class="muted"><strong>Compact restore note:</strong> compact backups exclude runtime history (results, metrics, logs). Those excluded runtime tables are reset to empty during restore.</p>
                 <form method="post" action="/admin/database/backup/restore" class="form-grid">
                     @Html.AntiForgeryToken()
                     <label>Backup to restore
@@ -133,7 +142,7 @@
                             <option value="">-- Select DATABASE backup --</option>
                             @foreach (var backup in Model.Backups)
                             {
-                                <option value="@backup.FileId">@backup.FileName (@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc))</option>
+                                <option value="@backup.FileId">@backup.FileName (@backup.BackupModeDisplayName, @DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc))</option>
                             }
                         </select>
                     </label>

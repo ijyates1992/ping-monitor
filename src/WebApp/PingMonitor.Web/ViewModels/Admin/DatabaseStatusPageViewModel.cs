@@ -125,6 +125,9 @@ public sealed class DatabasePrunePreviewViewModel
 
 public sealed class DatabaseBackupForm
 {
+    [Required]
+    public DatabaseBackupMode BackupMode { get; set; } = DatabaseBackupMode.Full;
+
     public bool ConfirmBackup { get; set; }
 }
 
@@ -157,6 +160,8 @@ public sealed class DatabaseBackupRowViewModel
     public string FileId { get; init; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; init; }
     public long SizeBytes { get; init; }
+    public DatabaseBackupMode BackupMode { get; init; } = DatabaseBackupMode.Full;
+    public string BackupModeDisplayName { get; init; } = string.Empty;
     public string MetadataSummary { get; init; } = string.Empty;
     public string BackupSource { get; init; } = string.Empty;
 }

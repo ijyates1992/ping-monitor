@@ -17,6 +17,21 @@ namespace PingMonitor.Web.Services.DatabaseStatus;
 internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 {
     private const int MaxUploadBytes = 100 * 1024 * 1024;
+    private const string BackupModeCommentPrefix = "-- pingmonitor_backup_mode:";
+    private const string BackupProfileCommentPrefix = "-- pingmonitor_backup_profile:";
+    private const string CompactBackupProfileName = "compact_runtime_excluded_v1";
+    private const int MetadataProbeBytes = 16 * 1024;
+    private static readonly string[] CompactExcludedTables =
+    [
+        "AgentHeartbeatHistory",
+        "CheckResults",
+        "ResultBatches",
+        "StateTransitions",
+        "AssignmentRttMinuteBuckets",
+        "AssignmentStateIntervals",
+        "EventLogs",
+        "SecurityAuthLogs"
+    ];
 
     private readonly PingMonitorDbContext _dbContext;
     private readonly IEventLogService _eventLogService;
@@ -144,6 +159,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var builder = new MySqlConnectionStringBuilder(dbConnectionString);
         var backupTimestamp = DateTimeOffset.UtcNow;
         var safeDatabaseName = string.IsNullOrWhiteSpace(builder.Database) ? "database" : builder.Database.Trim();
+        var normalizedBackupMode = NormalizeBackupMode(request.BackupMode);
         var fileName = $"db-backup-{safeDatabaseName}-{backupTimestamp:yyyyMMdd-HHmmss}.sql";
         var fullPath = Path.Combine(backupDirectory, fileName);
         var mysqldumpExecutablePath = ResolveExecutablePath(options.MySqlDumpExecutablePath, "mysqldump");
@@ -177,6 +193,14 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         processInfo.ArgumentList.Add("--user");
         processInfo.ArgumentList.Add(builder.UserID);
         processInfo.ArgumentList.Add(builder.Database);
+        if (normalizedBackupMode == DatabaseBackupMode.Compact)
+        {
+            foreach (var excludedTable in CompactExcludedTables)
+            {
+                processInfo.ArgumentList.Add($"--ignore-table={builder.Database}.{excludedTable}");
+            }
+        }
+
         processInfo.Environment["MYSQL_PWD"] = builder.Password;
 
         try
@@ -189,6 +213,9 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
             await using (var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
+                var headerText = BuildBackupHeader(normalizedBackupMode, backupTimestamp);
+                var headerBytes = Encoding.UTF8.GetBytes(headerText);
+                await fileStream.WriteAsync(headerBytes, cancellationToken);
                 await process.StandardOutput.BaseStream.CopyToAsync(fileStream, cancellationToken);
             }
 
@@ -217,6 +244,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 {
                     fileName,
                     fullPath,
+                    backupMode = normalizedBackupMode.ToString(),
                     fileSizeBytes = fileInfo.Length,
                     createdAtUtc = backupTimestamp,
                     requestedBy = request.RequestedBy
@@ -229,6 +257,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 Message = "Database backup export completed successfully.",
                 FileName = fileName,
                 FullPath = fullPath,
+                BackupMode = normalizedBackupMode,
                 FileSizeBytes = fileInfo.Length,
                 CreatedAtUtc = backupTimestamp
             };
@@ -329,6 +358,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var backupPath = ResolveBackupDownloadPath(request.FileId);
         var backupFileInfo = new FileInfo(backupPath);
         var contentBytes = await File.ReadAllBytesAsync(backupPath, cancellationToken);
+        var backupDescriptor = ReadBackupDescriptorFromContent(contentBytes);
         var validationMessage = ValidateSqlBackupContent(contentBytes);
         if (validationMessage is not null)
         {
@@ -353,6 +383,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 Message = validationMessage,
                 RestoredFileName = backupFileInfo.Name,
                 RestoredFileCreatedAtUtc = new DateTimeOffset(backupFileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+                BackupMode = backupDescriptor.Mode,
                 PreRestoreBackupCreated = false
             };
         }
@@ -367,6 +398,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             {
                 request.FileId,
                 fileName = backupFileInfo.Name,
+                backupMode = backupDescriptor.Mode.ToString(),
                 fileSizeBytes = backupFileInfo.Length,
                 requestedBy = request.RequestedBy
             })
@@ -398,6 +430,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 Message = $"Restore was aborted because pre-restore backup failed: {preRestoreBackup.Message}",
                 RestoredFileName = backupFileInfo.Name,
                 RestoredFileCreatedAtUtc = new DateTimeOffset(backupFileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+                BackupMode = backupDescriptor.Mode,
                 PreRestoreBackupCreated = false
             };
         }
@@ -405,14 +438,14 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var dbConnectionString = _dbContext.Database.GetConnectionString();
         if (string.IsNullOrWhiteSpace(dbConnectionString))
         {
-            return await CreateRestoreFailureAsync("Database connection string is unavailable.", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+            return await CreateRestoreFailureAsync("Database connection string is unavailable.", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
         }
 
         var builder = new MySqlConnectionStringBuilder(dbConnectionString);
         var mysqlExecutablePath = ResolveExecutablePath(null, "mysql");
         if (mysqlExecutablePath is null)
         {
-            return await CreateRestoreFailureAsync("mysql executable was not found. Ensure mysql client is installed and available in PATH.", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+            return await CreateRestoreFailureAsync("mysql executable was not found. Ensure mysql client is installed and available in PATH.", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
         }
 
         var processInfo = new ProcessStartInfo
@@ -439,7 +472,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             using var process = Process.Start(processInfo);
             if (process is null)
             {
-                return await CreateRestoreFailureAsync("Unable to start mysql restore process.", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+                return await CreateRestoreFailureAsync("Unable to start mysql restore process.", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
             }
 
             await process.StandardInput.BaseStream.WriteAsync(contentBytes, cancellationToken);
@@ -450,7 +483,12 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
             if (process.ExitCode != 0)
             {
-                return await CreateRestoreFailureAsync($"mysql restore exited with code {process.ExitCode}. {TrimDiagnostic(stderr)}", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+                return await CreateRestoreFailureAsync($"mysql restore exited with code {process.ExitCode}. {TrimDiagnostic(stderr)}", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
+            }
+
+            if (backupDescriptor.Mode == DatabaseBackupMode.Compact)
+            {
+                await ResetCompactExcludedTablesAsync(cancellationToken);
             }
 
             await _eventLogService.WriteAsync(new EventLogWriteRequest
@@ -463,6 +501,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 {
                     request.FileId,
                     fileName = backupFileInfo.Name,
+                    backupMode = backupDescriptor.Mode.ToString(),
                     restoredFileCreatedAtUtc = backupFileInfo.LastWriteTimeUtc,
                     preRestoreBackupFileName = preRestoreBackup.FileName,
                     requestedBy = request.RequestedBy
@@ -475,6 +514,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 Message = "Database restore completed successfully.",
                 RestoredFileName = backupFileInfo.Name,
                 RestoredFileCreatedAtUtc = new DateTimeOffset(backupFileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+                BackupMode = backupDescriptor.Mode,
                 PreRestoreBackupCreated = true,
                 PreRestoreBackupFileName = preRestoreBackup.FileName
             };
@@ -482,7 +522,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         catch (Exception ex) when (ex is Win32Exception || ex is InvalidOperationException || ex is IOException)
         {
             _logger.LogWarning(ex, "Database backup restore failed.");
-            return await CreateRestoreFailureAsync($"Database restore failed: {ex.Message}", backupFileInfo, request, true, preRestoreBackup.FileName, cancellationToken);
+            return await CreateRestoreFailureAsync($"Database restore failed: {ex.Message}", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
         }
     }
 
@@ -638,15 +678,27 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             .GetFiles(backupDirectory, "*.sql", SearchOption.TopDirectoryOnly)
             .Select(path => new FileInfo(path))
             .OrderByDescending(x => x.LastWriteTimeUtc)
-            .Select(x => new DatabaseBackupFileSnapshot
+            .Select(x =>
             {
-                FileName = x.Name,
-                FileId = ComputeFileId(x.Name),
-                CreatedAtUtc = new DateTimeOffset(x.LastWriteTimeUtc, TimeSpan.Zero),
-                FileSizeBytes = x.Length,
-                FullPath = x.FullName,
-                MetadataSummary = BuildMetadataSummary(x.Name),
-                BackupSource = x.Name.StartsWith("uploaded-db-backup-", StringComparison.OrdinalIgnoreCase) ? "Uploaded" : "Created"
+                // Probe lightweight backup metadata from the SQL comment header when available.
+                // This allows operator-visible mode (Full vs Compact) and restore warnings.
+                // Uploaded files without PingMonitor metadata default to Full mode semantics.
+                // The restore path also independently re-parses metadata from content bytes.
+                var descriptor = ReadBackupDescriptorFromFile(x.FullName);
+                return new DatabaseBackupFileSnapshot
+                {
+                    FileName = x.Name,
+                    FileId = ComputeFileId(x.Name),
+                    CreatedAtUtc = new DateTimeOffset(x.LastWriteTimeUtc, TimeSpan.Zero),
+                    FileSizeBytes = x.Length,
+                    FullPath = x.FullName,
+                    MetadataSummary = BuildMetadataSummary(x.FullName),
+                    BackupSource = x.Name.StartsWith("uploaded-db-backup-", StringComparison.OrdinalIgnoreCase) ? "Uploaded" : "Created",
+                    BackupMode = descriptor.Mode,
+                    BackupModeDisplayName = descriptor.Mode == DatabaseBackupMode.Compact
+                        ? "Compact database backup"
+                        : "Full database backup"
+                };
             })
             .ToArray();
 
@@ -727,6 +779,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         string message,
         FileInfo backupFileInfo,
         DatabaseBackupRestoreRequest request,
+        DatabaseBackupMode backupMode,
         bool preRestoreBackupCreated,
         string? preRestoreBackupFileName,
         CancellationToken cancellationToken)
@@ -741,6 +794,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             {
                 request.FileId,
                 fileName = backupFileInfo.Name,
+                backupMode = backupMode.ToString(),
                 preRestoreBackupCreated,
                 preRestoreBackupFileName,
                 requestedBy = request.RequestedBy
@@ -753,9 +807,94 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             Message = message,
             RestoredFileName = backupFileInfo.Name,
             RestoredFileCreatedAtUtc = new DateTimeOffset(backupFileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+            BackupMode = backupMode,
             PreRestoreBackupCreated = preRestoreBackupCreated,
             PreRestoreBackupFileName = preRestoreBackupFileName
         };
+    }
+
+    private static string BuildBackupHeader(DatabaseBackupMode mode, DateTimeOffset createdAtUtc)
+    {
+        var profile = mode == DatabaseBackupMode.Compact ? CompactBackupProfileName : "full_database";
+        var modeToken = mode == DatabaseBackupMode.Compact ? "compact" : "full";
+        return
+            $"-- PingMonitor database backup metadata{Environment.NewLine}" +
+            $"{BackupModeCommentPrefix}{modeToken}{Environment.NewLine}" +
+            $"{BackupProfileCommentPrefix}{profile}{Environment.NewLine}" +
+            $"-- pingmonitor_backup_created_at_utc:{createdAtUtc:O}{Environment.NewLine}";
+    }
+
+    private static DatabaseBackupMode NormalizeBackupMode(DatabaseBackupMode mode)
+    {
+        return mode == DatabaseBackupMode.Compact ? DatabaseBackupMode.Compact : DatabaseBackupMode.Full;
+    }
+
+    private async Task ResetCompactExcludedTablesAsync(CancellationToken cancellationToken)
+    {
+        foreach (var tableName in CompactExcludedTables)
+        {
+            var sql = $"DELETE FROM `{tableName}`;";
+            await _dbContext.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+        }
+    }
+
+    private static BackupDescriptor ReadBackupDescriptorFromFile(string fullPath)
+    {
+        try
+        {
+            using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var probeLength = (int)Math.Min(MetadataProbeBytes, stream.Length);
+            if (probeLength <= 0)
+            {
+                return BackupDescriptor.FullByDefault;
+            }
+
+            var buffer = new byte[probeLength];
+            _ = stream.Read(buffer, 0, probeLength);
+            return ReadBackupDescriptorFromContent(buffer);
+        }
+        catch
+        {
+            return BackupDescriptor.FullByDefault;
+        }
+    }
+
+    private static BackupDescriptor ReadBackupDescriptorFromContent(byte[] contentBytes)
+    {
+        try
+        {
+            var prefixLength = Math.Min(contentBytes.Length, MetadataProbeBytes);
+            if (prefixLength <= 0)
+            {
+                return BackupDescriptor.FullByDefault;
+            }
+
+            var text = Encoding.UTF8.GetString(contentBytes, 0, prefixLength);
+            foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!line.StartsWith(BackupModeCommentPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var rawMode = line[BackupModeCommentPrefix.Length..].Trim();
+                if (rawMode.Equals("compact", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new BackupDescriptor(DatabaseBackupMode.Compact);
+                }
+
+                if (rawMode.Equals("full", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new BackupDescriptor(DatabaseBackupMode.Full);
+                }
+            }
+        }
+        catch
+        {
+            // Fall back to full mode semantics for unknown or non-UTF8 files.
+        }
+
+        return BackupDescriptor.FullByDefault;
     }
 
     private string GetBackupDirectory(string configuredPath)
@@ -851,14 +990,19 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         return null;
     }
 
-    private static string BuildMetadataSummary(string fileName)
+    private static string BuildMetadataSummary(string fullPath)
     {
-        var schemaMatch = Regex.Match(fileName, @"schema-v(?<version>\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        if (schemaMatch.Success)
+        var descriptor = ReadBackupDescriptorFromFile(fullPath);
+        if (descriptor.Mode == DatabaseBackupMode.Compact)
         {
-            return $"Schema v{schemaMatch.Groups["version"].Value}";
+            return "Compact profile: excludes results, metrics history, and logs";
         }
 
-        return "MySQL logical SQL dump";
+        return "Full profile: includes complete MySQL logical SQL dump";
+    }
+
+    private readonly record struct BackupDescriptor(DatabaseBackupMode Mode)
+    {
+        public static BackupDescriptor FullByDefault => new(DatabaseBackupMode.Full);
     }
 }

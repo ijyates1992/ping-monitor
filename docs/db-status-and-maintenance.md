@@ -41,7 +41,9 @@ The DB maintenance page is action-oriented and keeps all existing maintenance to
 
 - prune preview/count
 - prune execution (typed confirmation required)
-- DB backup creation (`mysqldump` logical export)
+- DB backup creation (`mysqldump` logical export) with two explicit modes:
+  - full database backup (all tables/data)
+  - compact database backup (excludes bulky runtime/history tables such as results, metrics history, and logs)
 - backup file listing/download
 
 DB maintenance intentionally does **not** include full database overview or table-inventory status sections.
