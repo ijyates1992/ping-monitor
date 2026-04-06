@@ -93,6 +93,13 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 group => group.Key,
                 group => (IReadOnlyList<string>)group.Select(x => x.DependsOnEndpointId).ToArray(),
                 StringComparer.Ordinal);
+        var dependencyChildLookup = dependencies
+            .Where(x => endpointIdSet.Contains(x.DependsOnEndpointId))
+            .GroupBy(x => x.DependsOnEndpointId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.Select(x => x.EndpointId).ToArray(),
+                StringComparer.Ordinal);
 
         var assignmentIds = rows.Select(x => x.AssignmentId).ToArray();
         var metricsByAssignmentId = await _assignmentMetrics24hService.GetSummariesAsync(
@@ -131,6 +138,10 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
                 Target = row.Target,
                 AgentDisplay = row.AgentDisplay,
                 DependencyEndpointNames = dependencyLookup.GetValueOrDefault(row.EndpointId, Array.Empty<string>())
+                    .Select(endpointId => endpointNames.GetValueOrDefault(endpointId, endpointId))
+                    .OrderBy(x => x)
+                    .ToArray(),
+                DependencyChildEndpointNames = dependencyChildLookup.GetValueOrDefault(row.EndpointId, Array.Empty<string>())
                     .Select(endpointId => endpointNames.GetValueOrDefault(endpointId, endpointId))
                     .OrderBy(x => x)
                     .ToArray(),

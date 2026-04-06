@@ -21,6 +21,7 @@ public sealed class ManageEndpointRowViewModel
     public string Target { get; init; } = string.Empty;
     public string AgentDisplay { get; init; } = string.Empty;
     public IReadOnlyList<string> DependencyEndpointNames { get; init; } = [];
+    public IReadOnlyList<string> DependencyChildEndpointNames { get; init; } = [];
     public IReadOnlyList<string> GroupNames { get; init; } = [];
     public bool EndpointEnabled { get; init; }
     public bool AssignmentEnabled { get; init; }
