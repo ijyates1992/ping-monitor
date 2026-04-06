@@ -180,6 +180,7 @@ builder.Services.AddScoped<ISecurityEnforcementService, SecurityEnforcementServi
 builder.Services.AddScoped<IEndpointStatusQueryService, EndpointStatusQueryService>();
 builder.Services.AddScoped<IStartupGateService, StartupGateService>();
 builder.Services.AddSingleton<IStartupGateRuntimeState, StartupGateRuntimeState>();
+builder.Services.AddSingleton<IStartupGateDiagnosticsLogger, StartupGateDiagnosticsLogger>();
 builder.Services.AddSingleton<IStartupDatabaseConfigurationStore, FileStartupDatabaseConfigurationStore>();
 builder.Services.AddSingleton<ILocalRequestEvaluator, LocalRequestEvaluator>();
 builder.Services.AddScoped<IStartupSchemaService, StartupSchemaService>();

@@ -11,6 +11,7 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.EventLogs;
+using PingMonitor.Web.Services.StartupGate;
 
 namespace PingMonitor.Web.Services.DatabaseStatus;
 
@@ -37,6 +38,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
     private readonly IEventLogService _eventLogService;
     private readonly IOptions<DatabaseMaintenanceOptions> _options;
     private readonly IWebHostEnvironment _webHostEnvironment;
+    private readonly IStartupGateDiagnosticsLogger _startupGateDiagnosticsLogger;
     private readonly ILogger<DatabaseMaintenanceService> _logger;
 
     public DatabaseMaintenanceService(
@@ -44,12 +46,14 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         IEventLogService eventLogService,
         IOptions<DatabaseMaintenanceOptions> options,
         IWebHostEnvironment webHostEnvironment,
+        IStartupGateDiagnosticsLogger startupGateDiagnosticsLogger,
         ILogger<DatabaseMaintenanceService> logger)
     {
         _dbContext = dbContext;
         _eventLogService = eventLogService;
         _options = options;
         _webHostEnvironment = webHostEnvironment;
+        _startupGateDiagnosticsLogger = startupGateDiagnosticsLogger;
         _logger = logger;
     }
 
@@ -358,6 +362,12 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
     public async Task<DatabaseBackupRestoreResult> RestoreBackupAsync(DatabaseBackupRestoreRequest request, CancellationToken cancellationToken)
     {
+        var restoreStopwatch = Stopwatch.StartNew();
+        var isStartupGateRestoreRequest = IsStartupGateRestoreRequest(request);
+        _startupGateDiagnosticsLogger.Write(
+            "database-restore.entry",
+            $"Restore requested. requestedBy='{request.RequestedBy ?? "(null)"}', startupGateModeRequest={isStartupGateRestoreRequest.ToString().ToLowerInvariant()}, fileId='{request.FileId}'.");
+
         if (!string.Equals(request.ConfirmationText?.Trim(), DatabaseBackupRestoreRequest.ConfirmationKeyword, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Type {DatabaseBackupRestoreRequest.ConfirmationKeyword} to confirm restore.");
@@ -365,6 +375,9 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
         var backupPath = ResolveBackupDownloadPath(request.FileId);
         var backupFileInfo = new FileInfo(backupPath);
+        _startupGateDiagnosticsLogger.Write(
+            "database-restore.backup-selected",
+            $"Selected backup file. fileId='{request.FileId}', fileName='{backupFileInfo.Name}', fullPath='{backupPath}', fileSizeBytes={backupFileInfo.Length}.");
         var contentBytes = await File.ReadAllBytesAsync(backupPath, cancellationToken);
         var backupDescriptor = ReadBackupDescriptorFromContent(contentBytes);
         var validationMessage = ValidateSqlBackupContent(contentBytes);
@@ -396,13 +409,19 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             backupFileInfo.Length,
             request.RequestedBy);
 
+        _startupGateDiagnosticsLogger.Write(
+            "database-restore.pre-restore-backup.start",
+            $"Starting pre-restore backup. fileName='{backupFileInfo.Name}', backupMode={backupDescriptor.Mode}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
         var preRestoreBackup = await CreateBackupAsync(
             new DatabaseBackupCreateRequest
             {
                 RequestedBy = request.RequestedBy,
-                SuppressEventLogWrites = IsStartupGateRestoreRequest(request)
+                SuppressEventLogWrites = isStartupGateRestoreRequest
             },
             cancellationToken);
+        _startupGateDiagnosticsLogger.Write(
+            "database-restore.pre-restore-backup.complete",
+            $"Pre-restore backup completed. succeeded={preRestoreBackup.Succeeded.ToString().ToLowerInvariant()}, fileName='{preRestoreBackup.FileName ?? "(none)"}', message='{preRestoreBackup.Message}', elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
         if (!preRestoreBackup.Succeeded)
         {
             _logger.LogWarning(
@@ -454,20 +473,48 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         processInfo.ArgumentList.Add(builder.UserID);
         processInfo.ArgumentList.Add(builder.Database);
         processInfo.Environment["MYSQL_PWD"] = builder.Password;
+        var argumentSummary = string.Join(' ', processInfo.ArgumentList.Select(QuoteProcessArgument));
 
         try
         {
+            _startupGateDiagnosticsLogger.Write(
+                "database-restore.process.launch",
+                $"Launching mysql restore process. executable='{processInfo.FileName}', arguments=\"{argumentSummary}\", elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
             using var process = Process.Start(processInfo);
             if (process is null)
             {
                 return await CreateRestoreFailureAsync("Unable to start mysql restore process.", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
             }
 
+            _startupGateDiagnosticsLogger.Write(
+                "database-restore.process.started",
+                $"mysql restore process started. processId={process.Id}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
+            _startupGateDiagnosticsLogger.Write(
+                "database-restore.stdin-copy.start",
+                $"Starting stdin copy of restore payload. bytes={contentBytes.Length}, processId={process.Id}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
             await process.StandardInput.BaseStream.WriteAsync(contentBytes, cancellationToken);
             await process.StandardInput.BaseStream.FlushAsync(cancellationToken);
+            _startupGateDiagnosticsLogger.Write(
+                "database-restore.stdin-copy.complete",
+                $"Completed stdin copy of restore payload. bytes={contentBytes.Length}, processId={process.Id}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
             process.StandardInput.Close();
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+            _startupGateDiagnosticsLogger.Write(
+                "database-restore.stdin.close",
+                $"Closed mysql restore process stdin. processId={process.Id}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
+            var stderrReadTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            var stdoutReadTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            _startupGateDiagnosticsLogger.Write(
+                "database-restore.process.waiting-for-exit",
+                $"Waiting for mysql restore process exit. processId={process.Id}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
             await process.WaitForExitAsync(cancellationToken);
+            var stderr = await stderrReadTask;
+            var stdout = await stdoutReadTask;
+            _startupGateDiagnosticsLogger.Write(
+                "database-restore.process.exit",
+                $"mysql restore process exited. processId={process.Id}, exitCode={process.ExitCode}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
+            _startupGateDiagnosticsLogger.Write(
+                "database-restore.process.output-summary",
+                $"stdout='{TrimDiagnostic(stdout)}', stderr='{TrimDiagnostic(stderr)}', elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
 
             if (process.ExitCode != 0)
             {
@@ -510,7 +557,19 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         catch (Exception ex) when (ex is Win32Exception || ex is InvalidOperationException || ex is IOException)
         {
             _logger.LogWarning(ex, "Database backup restore failed.");
+            _startupGateDiagnosticsLogger.WriteException(
+                "database-restore.exception",
+                ex,
+                $"Restore failed with handled exception category. elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
             return await CreateRestoreFailureAsync($"Database restore failed: {ex.Message}", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _startupGateDiagnosticsLogger.WriteException(
+                "database-restore.exception-unhandled",
+                ex,
+                $"Restore failed with unhandled exception category. elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
+            throw;
         }
     }
 
@@ -910,6 +969,16 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
         var trimmed = value.Trim();
         return trimmed.Length <= 300 ? trimmed : trimmed[..300];
+    }
+
+    private static string QuoteProcessArgument(string argument)
+    {
+        if (argument.Contains(' ', StringComparison.Ordinal))
+        {
+            return $"\"{argument}\"";
+        }
+
+        return argument;
     }
 
     private static string SanitizeFileName(string? originalFileName)
