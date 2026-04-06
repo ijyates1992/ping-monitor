@@ -49,3 +49,21 @@ public sealed class StartupAdminBootstrapForm
     [Display(Name = "Confirm password")]
     public string ConfirmPassword { get; set; } = string.Empty;
 }
+
+public sealed class StartupDatabaseBackupUploadForm
+{
+    [Required(ErrorMessage = "Select a DATABASE backup file to upload.")]
+    [Display(Name = "DATABASE backup SQL file")]
+    public IFormFile? BackupFile { get; set; }
+}
+
+public sealed class StartupDatabaseBackupRestoreForm
+{
+    [Required(ErrorMessage = "Select a DATABASE backup file to restore.")]
+    [Display(Name = "DATABASE backup to restore")]
+    public string FileId { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Type RESTORE to confirm.")]
+    [Display(Name = "Typed confirmation")]
+    public string ConfirmationText { get; set; } = string.Empty;
+}
