@@ -42,6 +42,7 @@ public sealed class DatabasePruneExecuteResult
 
 public sealed class DatabaseBackupCreateRequest
 {
+    public DatabaseBackupMode BackupMode { get; init; } = DatabaseBackupMode.Full;
     public string? RequestedBy { get; init; }
 }
 
@@ -76,6 +77,7 @@ public sealed class DatabaseBackupRestoreResult
     public string Message { get; init; } = string.Empty;
     public string? RestoredFileName { get; init; }
     public DateTimeOffset? RestoredFileCreatedAtUtc { get; init; }
+    public DatabaseBackupMode BackupMode { get; init; } = DatabaseBackupMode.Full;
     public bool PreRestoreBackupCreated { get; init; }
     public string? PreRestoreBackupFileName { get; init; }
 }
@@ -100,6 +102,7 @@ public sealed class DatabaseBackupCreateResult
     public string Message { get; init; } = string.Empty;
     public string? FileName { get; init; }
     public string? FullPath { get; init; }
+    public DatabaseBackupMode BackupMode { get; init; } = DatabaseBackupMode.Full;
     public long? FileSizeBytes { get; init; }
     public DateTimeOffset? CreatedAtUtc { get; init; }
 }
@@ -113,4 +116,12 @@ public sealed class DatabaseBackupFileSnapshot
     public string FullPath { get; init; } = string.Empty;
     public string MetadataSummary { get; init; } = string.Empty;
     public string BackupSource { get; init; } = string.Empty;
+    public DatabaseBackupMode BackupMode { get; init; } = DatabaseBackupMode.Full;
+    public string BackupModeDisplayName { get; init; } = string.Empty;
+}
+
+public enum DatabaseBackupMode
+{
+    Full = 1,
+    Compact = 2
 }

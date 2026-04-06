@@ -130,12 +130,13 @@ public sealed class AdminDatabaseController : Controller
         var result = await _databaseMaintenanceService.CreateBackupAsync(
             new DatabaseBackupCreateRequest
             {
+                BackupMode = backupForm.BackupMode,
                 RequestedBy = GetOperatorIdentity()
             },
             cancellationToken);
 
         TempData["DbBackupStatus"] = result.Succeeded
-            ? $"Database backup created: {result.FileName} ({result.FileSizeBytes} bytes)."
+            ? $"{result.BackupMode} database backup created: {result.FileName} ({result.FileSizeBytes} bytes)."
             : $"Database backup failed: {result.Message}";
 
         return RedirectToAction(nameof(Maintenance));
@@ -198,7 +199,9 @@ public sealed class AdminDatabaseController : Controller
                 cancellationToken);
 
             TempData["DbBackupStatus"] = result.Succeeded
-                ? $"Database backup restored from {result.RestoredFileName}. Pre-restore backup: {result.PreRestoreBackupFileName ?? "(none)"}."
+                ? result.BackupMode == DatabaseBackupMode.Compact
+                    ? $"Compact database backup restored from {result.RestoredFileName}. Historical/runtime tables excluded by compact profile were reset to empty. Pre-restore backup: {result.PreRestoreBackupFileName ?? "(none)"}."
+                    : $"Full database backup restored from {result.RestoredFileName}. Pre-restore backup: {result.PreRestoreBackupFileName ?? "(none)"}."
                 : $"Database backup restore failed: {result.Message}";
         }
         catch (FileNotFoundException)
@@ -387,6 +390,8 @@ public sealed class AdminDatabaseController : Controller
                 FileId = x.FileId,
                 CreatedAtUtc = x.CreatedAtUtc,
                 SizeBytes = x.FileSizeBytes,
+                BackupMode = x.BackupMode,
+                BackupModeDisplayName = x.BackupModeDisplayName,
                 MetadataSummary = x.MetadataSummary,
                 BackupSource = x.BackupSource
             }).ToArray()
