@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Services.DatabaseStatus;
 using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.ViewModels.StartupGate;
 
@@ -15,6 +16,7 @@ public sealed class StartupGateController : Controller
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
     private readonly IStartupSchemaService _schemaService;
     private readonly IStartupAdminBootstrapService _adminBootstrapService;
+    private readonly IDatabaseMaintenanceService _databaseMaintenanceService;
     private readonly StartupGateOptions _options;
     private readonly ILogger<StartupGateController> _logger;
 
@@ -23,6 +25,7 @@ public sealed class StartupGateController : Controller
         IStartupDatabaseConfigurationStore configurationStore,
         IStartupSchemaService schemaService,
         IStartupAdminBootstrapService adminBootstrapService,
+        IDatabaseMaintenanceService databaseMaintenanceService,
         IOptions<StartupGateOptions> options,
         ILogger<StartupGateController> logger)
     {
@@ -30,6 +33,7 @@ public sealed class StartupGateController : Controller
         _configurationStore = configurationStore;
         _schemaService = schemaService;
         _adminBootstrapService = adminBootstrapService;
+        _databaseMaintenanceService = databaseMaintenanceService;
         _options = options.Value;
         _logger = logger;
     }
@@ -38,7 +42,7 @@ public sealed class StartupGateController : Controller
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
-        return View("Index", BuildViewModel(status, null, null));
+        return View("Index", await BuildViewModelAsync(status, null, null, null, null, cancellationToken: cancellationToken));
     }
 
     [HttpPost("database")]
@@ -53,7 +57,7 @@ public sealed class StartupGateController : Controller
 
         if (!ModelState.IsValid)
         {
-            return View("Index", BuildViewModel(status, form, null, errorMessage: "Database configuration could not be saved."));
+            return View("Index", await BuildViewModelAsync(status, form, null, null, null, errorMessage: "Database configuration could not be saved.", cancellationToken: cancellationToken));
         }
 
         _logger.LogInformation("Startup gate database configuration save attempt for {Host}:{Port}/{DatabaseName}.", form.Host, form.Port, form.DatabaseName);
@@ -73,11 +77,11 @@ public sealed class StartupGateController : Controller
         {
             _logger.LogWarning(exception, "Startup gate database configuration save failed.");
             status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
-            return View("Index", BuildViewModel(status, form, null, errorMessage: $"Database configuration save failed: {exception.Message}"));
+            return View("Index", await BuildViewModelAsync(status, form, null, null, null, errorMessage: $"Database configuration save failed: {exception.Message}", cancellationToken: cancellationToken));
         }
 
         status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
-        return View("Index", BuildViewModel(status, null, null, statusMessage: "Database configuration saved. Password values are not shown after saving."));
+        return View("Index", await BuildViewModelAsync(status, null, null, null, null, statusMessage: "Database configuration saved. Password values are not shown after saving.", cancellationToken: cancellationToken));
     }
 
     [HttpPost("schema/apply")]
@@ -98,11 +102,11 @@ public sealed class StartupGateController : Controller
         {
             _logger.LogWarning(exception, "Startup gate schema apply failed.");
             status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
-            return View("Index", BuildViewModel(status, null, null, errorMessage: $"Schema apply failed: {exception.Message}"));
+            return View("Index", await BuildViewModelAsync(status, null, null, null, null, errorMessage: $"Schema apply failed: {exception.Message}", cancellationToken: cancellationToken));
         }
 
         status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
-        return View("Index", BuildViewModel(status, null, null, statusMessage: "Schema apply completed."));
+        return View("Index", await BuildViewModelAsync(status, null, null, null, null, statusMessage: "Schema apply completed.", cancellationToken: cancellationToken));
     }
 
     [HttpPost("admin")]
@@ -117,7 +121,7 @@ public sealed class StartupGateController : Controller
 
         if (!ModelState.IsValid)
         {
-            return View("Index", BuildViewModel(status, null, form, errorMessage: "Initial admin could not be created."));
+            return View("Index", await BuildViewModelAsync(status, null, form, null, null, errorMessage: "Initial admin could not be created.", cancellationToken: cancellationToken));
         }
 
         var result = await _adminBootstrapService.CreateInitialAdminAsync(form, cancellationToken);
@@ -129,21 +133,125 @@ public sealed class StartupGateController : Controller
             }
 
             status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
-            return View("Index", BuildViewModel(status, null, form, errorMessage: "Initial admin could not be created."));
+            return View("Index", await BuildViewModelAsync(status, null, form, null, null, errorMessage: "Initial admin could not be created.", cancellationToken: cancellationToken));
         }
 
         status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
-        return View("Index", BuildViewModel(status, null, null, statusMessage: "Initial admin created."));
+        return View("Index", await BuildViewModelAsync(status, null, null, null, null, statusMessage: "Initial admin created.", cancellationToken: cancellationToken));
     }
 
-    private StartupGatePageViewModel BuildViewModel(
+    [HttpPost("database-backup/upload")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UploadDatabaseBackup([FromForm(Name = "DatabaseBackupUploadForm")] StartupDatabaseBackupUploadForm form, CancellationToken cancellationToken)
+    {
+        var status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
+        if (!status.CanPerformWriteActions)
+        {
+            return Forbid();
+        }
+
+        if (form.BackupFile is null || form.BackupFile.Length <= 0)
+        {
+            ModelState.AddModelError($"{nameof(StartupDatabaseBackupUploadForm)}.{nameof(StartupDatabaseBackupUploadForm.BackupFile)}", "Select a DATABASE backup file to upload.");
+            return View("Index", await BuildViewModelAsync(status, null, null, form, null, errorMessage: "DATABASE backup upload failed.", cancellationToken: cancellationToken));
+        }
+
+        await using var stream = form.BackupFile.OpenReadStream();
+        var result = await _databaseMaintenanceService.UploadBackupAsync(
+            new DatabaseBackupUploadRequest
+            {
+                OriginalFileName = form.BackupFile.FileName,
+                Content = stream,
+                RequestedBy = "startup-gate"
+            },
+            cancellationToken);
+
+        status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
+        return View("Index", await BuildViewModelAsync(
+            status,
+            null,
+            null,
+            null,
+            null,
+            statusMessage: result.Succeeded
+                ? $"DATABASE backup upload completed: {result.FileName} ({result.FileSizeBytes} bytes)."
+                : null,
+            errorMessage: result.Succeeded
+                ? null
+                : $"DATABASE backup upload failed: {result.Message}",
+            cancellationToken: cancellationToken));
+    }
+
+    [HttpPost("database-backup/restore")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestoreDatabaseBackup([FromForm(Name = "DatabaseBackupRestoreForm")] StartupDatabaseBackupRestoreForm form, CancellationToken cancellationToken)
+    {
+        var status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
+        if (!status.CanPerformWriteActions)
+        {
+            return Forbid();
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View("Index", await BuildViewModelAsync(status, null, null, null, form, errorMessage: "DATABASE restore could not be started.", cancellationToken: cancellationToken));
+        }
+
+        if (!string.Equals(form.ConfirmationText?.Trim(), DatabaseBackupRestoreRequest.ConfirmationKeyword, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError($"{nameof(StartupDatabaseBackupRestoreForm)}.{nameof(StartupDatabaseBackupRestoreForm.ConfirmationText)}", $"Type {DatabaseBackupRestoreRequest.ConfirmationKeyword} to confirm restore.");
+            return View("Index", await BuildViewModelAsync(status, null, null, null, form, errorMessage: "DATABASE restore could not be started.", cancellationToken: cancellationToken));
+        }
+
+        DatabaseBackupRestoreResult result;
+        try
+        {
+            result = await _databaseMaintenanceService.RestoreBackupAsync(
+                new DatabaseBackupRestoreRequest
+                {
+                    FileId = form.FileId,
+                    ConfirmationText = form.ConfirmationText ?? string.Empty,
+                    RequestedBy = "startup-gate"
+                },
+                cancellationToken);
+        }
+        catch (FileNotFoundException)
+        {
+            status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
+            return View("Index", await BuildViewModelAsync(status, null, null, null, form, errorMessage: "DATABASE restore failed: selected backup file was not found.", cancellationToken: cancellationToken));
+        }
+
+        status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
+        return View("Index", await BuildViewModelAsync(
+            status,
+            null,
+            null,
+            null,
+            null,
+            statusMessage: result.Succeeded
+                ? result.BackupMode == DatabaseBackupMode.Compact
+                    ? $"Compact DATABASE backup restored from {result.RestoredFileName}. Runtime history tables excluded by compact profile were reset to empty. Pre-restore backup: {result.PreRestoreBackupFileName ?? "(none)"}."
+                    : $"Full DATABASE backup restored from {result.RestoredFileName}. Pre-restore backup: {result.PreRestoreBackupFileName ?? "(none)"}."
+                : null,
+            errorMessage: result.Succeeded
+                ? null
+                : $"DATABASE restore failed: {result.Message}",
+            cancellationToken: cancellationToken));
+    }
+
+    private async Task<StartupGatePageViewModel> BuildViewModelAsync(
         StartupGateStatus status,
         StartupDatabaseConfigurationForm? databaseForm,
         StartupAdminBootstrapForm? adminForm,
+        StartupDatabaseBackupUploadForm? databaseBackupUploadForm,
+        StartupDatabaseBackupRestoreForm? databaseBackupRestoreForm,
         string? statusMessage = null,
-        string? errorMessage = null)
+        string? errorMessage = null,
+        CancellationToken cancellationToken = default)
     {
         var existingConfig = status.DatabaseConfiguration;
+        var databaseBackups = await _databaseMaintenanceService.ListBackupsAsync(cancellationToken);
+
         return new StartupGatePageViewModel
         {
             Status = status,
@@ -156,7 +264,10 @@ public sealed class StartupGateController : Controller
                 DatabaseName = existingConfig?.DatabaseName ?? string.Empty,
                 Username = existingConfig?.Username ?? string.Empty
             },
-            AdminForm = adminForm ?? new StartupAdminBootstrapForm()
+            AdminForm = adminForm ?? new StartupAdminBootstrapForm(),
+            DatabaseBackupUploadForm = databaseBackupUploadForm ?? new StartupDatabaseBackupUploadForm(),
+            DatabaseBackupRestoreForm = databaseBackupRestoreForm ?? new StartupDatabaseBackupRestoreForm(),
+            DatabaseBackups = databaseBackups
         };
     }
 }

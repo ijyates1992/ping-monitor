@@ -30,6 +30,9 @@
         .inline-list dt { font-weight: 600; }
         .hint { font-size: .95rem; }
         .validation-summary-errors { color: #b42318; }
+        .danger { border: 1px solid #fda29b; background: #fff5f4; border-radius: 10px; padding: .75rem; }
+        .warning { color: #b42318; font-weight: 700; }
+        select { width: 100%; box-sizing: border-box; padding: .85rem; border: 1px solid #cbd2d9; border-radius: 10px; font-size: 1rem; }
     </style>
 </head>
 <body>
@@ -106,6 +109,52 @@
             </div>
             <div style="grid-column: 1 / -1;">
                 <button type="submit" disabled="@(!Model.Status.CanPerformWriteActions)">Save MySQL configuration</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>DATABASE backup restore (Recovery)</h2>
+        <p class="muted">Use this only when DATABASE recovery is required before normal app use. This section is <strong>DATABASE-only</strong> and does not include configuration backup/restore.</p>
+        <div class="danger">
+            <p class="warning">Danger: restoring a DATABASE backup replaces current DATABASE contents.</p>
+            <p class="muted">Backup validation runs before restore. Restore uses the shared DATABASE maintenance restore workflow and automatically attempts a pre-restore DATABASE backup first.</p>
+        </div>
+
+        <h3>Upload DATABASE backup file</h3>
+        <form method="post" action="/startup-gate/database-backup/upload" enctype="multipart/form-data" class="grid">
+            @Html.AntiForgeryToken()
+            <div>
+                <label asp-for="DatabaseBackupUploadForm.BackupFile"></label>
+                <input asp-for="DatabaseBackupUploadForm.BackupFile" type="file" accept=".sql,text/plain,application/sql" disabled="@(!Model.Status.CanPerformWriteActions)" />
+                <span asp-validation-for="DatabaseBackupUploadForm.BackupFile"></span>
+            </div>
+            <div>
+                <button type="submit" disabled="@(!Model.Status.CanPerformWriteActions)">Upload DATABASE backup</button>
+            </div>
+        </form>
+
+        <h3>Restore DATABASE backup</h3>
+        <form method="post" action="/startup-gate/database-backup/restore" class="grid">
+            @Html.AntiForgeryToken()
+            <div>
+                <label asp-for="DatabaseBackupRestoreForm.FileId"></label>
+                <select asp-for="DatabaseBackupRestoreForm.FileId" disabled="@(!Model.Status.CanPerformWriteActions)">
+                    <option value="">-- Select DATABASE backup --</option>
+                    @foreach (var backup in Model.DatabaseBackups)
+                    {
+                        <option value="@backup.FileId">@backup.FileName (@backup.BackupModeDisplayName, @backup.CreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") UTC, @backup.MetadataSummary)</option>
+                    }
+                </select>
+                <span asp-validation-for="DatabaseBackupRestoreForm.FileId"></span>
+            </div>
+            <div>
+                <label asp-for="DatabaseBackupRestoreForm.ConfirmationText">Type <strong>RESTORE</strong> to confirm DATABASE replacement</label>
+                <input asp-for="DatabaseBackupRestoreForm.ConfirmationText" autocomplete="off" disabled="@(!Model.Status.CanPerformWriteActions)" />
+                <span asp-validation-for="DatabaseBackupRestoreForm.ConfirmationText"></span>
+            </div>
+            <div>
+                <button type="submit" disabled="@(!Model.Status.CanPerformWriteActions)">Restore DATABASE backup</button>
             </div>
         </form>
     </section>
