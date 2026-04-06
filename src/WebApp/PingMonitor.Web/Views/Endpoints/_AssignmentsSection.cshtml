@@ -46,6 +46,7 @@
                         <div class="meta-item"><span>Agent / instance</span><div>@row.AgentDisplay</div></div>
                         <div class="meta-item"><span>Groups</span><div>@(row.GroupNames.Count == 0 ? "None" : string.Join(", ", row.GroupNames))</div></div>
                         <div class="meta-item"><span>Dependency parents</span><div>@(row.DependencyEndpointNames.Count == 0 ? "None" : string.Join(", ", row.DependencyEndpointNames))</div></div>
+                        <div class="meta-item"><span>Dependency children</span><div>@(row.DependencyChildEndpointNames.Count == 0 ? "None" : string.Join(", ", row.DependencyChildEndpointNames))</div></div>
                         <div class="meta-item"><span>Endpoint enabled</span><div>@(row.EndpointEnabled ? "Enabled" : "Disabled")</div></div>
                         <div class="meta-item"><span>Assignment enabled</span><div>@(row.AssignmentEnabled ? "Enabled" : "Disabled")</div></div>
                         <div class="meta-item"><span>Ping interval</span><div>@row.PingIntervalSeconds s</div></div>
