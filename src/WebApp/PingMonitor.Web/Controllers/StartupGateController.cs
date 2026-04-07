@@ -221,7 +221,7 @@ public sealed class StartupGateController : Controller
             result = await _databaseMaintenanceService.RestoreBackupAsync(
                 new DatabaseBackupRestoreRequest
                 {
-                    FileId = form.FileId,
+                    FileId = form.FileId ?? string.Empty,
                     ConfirmationText = form.ConfirmationText ?? string.Empty,
                     RequestedBy = "startup-gate"
                 },
