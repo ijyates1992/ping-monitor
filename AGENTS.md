@@ -14,6 +14,17 @@ Correctness, safety, and predictability take priority over elegance.
   - an explicit new issue, and
   - a corresponding update to `docs/PLATFORM_CONSTRAINTS.md`.
 
+
+## Startup Gate Isolation Guard (High Priority)
+
+- Any change involving background services, hosted services, polling, notifications, logging, startup behavior, restore/setup flows, or database access **MUST** review the Startup Gate documentation/rules before implementation.
+- While Startup Gate is active:
+  - non-startup-gate background/hosted services must not run
+  - non-startup-gate components must not access the database
+  - DB-backed event logging must not be used before the schema is fully available
+- Do not assume work is unrelated to Startup Gate because it appears feature-specific (for example Telegram polling, notifications, or logging).
+
+---
 ## Implementation references (authoritative when unsure)
 
 - .NET 10 documentation: https://learn.microsoft.com/dotnet/core/whats-new/dotnet-10/overview
