@@ -43,6 +43,7 @@ public sealed class DatabasePruneExecuteResult
 public sealed class DatabaseBackupCreateRequest
 {
     public DatabaseBackupMode BackupMode { get; init; } = DatabaseBackupMode.Full;
+    public DatabaseBackupCreationSource BackupSource { get; init; } = DatabaseBackupCreationSource.Manual;
     public string? RequestedBy { get; init; }
     public bool SuppressEventLogWrites { get; init; }
 }
@@ -125,4 +126,10 @@ public enum DatabaseBackupMode
 {
     Full = 1,
     Compact = 2
+}
+
+public enum DatabaseBackupCreationSource
+{
+    Manual = 1,
+    PreRestore = 2
 }

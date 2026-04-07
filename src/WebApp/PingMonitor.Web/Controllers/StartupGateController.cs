@@ -144,6 +144,8 @@ public sealed class StartupGateController : Controller
     }
 
     [HttpPost("database-backup/upload")]
+    [DisableRequestSizeLimit]
+    [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UploadDatabaseBackup([FromForm(Name = "DatabaseBackupUploadForm")] StartupDatabaseBackupUploadForm form, CancellationToken cancellationToken)
     {
