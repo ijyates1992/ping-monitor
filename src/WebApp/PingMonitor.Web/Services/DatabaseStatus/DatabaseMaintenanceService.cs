@@ -449,7 +449,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         }
 
         var builder = new MySqlConnectionStringBuilder(dbConnectionString);
-        var mysqlExecutablePath = ResolveExecutablePath(null, "mysql");
+        var mysqlExecutablePath = ResolveExecutablePath(_options.Value.MySqlExecutablePath, "mysql");
         if (mysqlExecutablePath is null)
         {
             return await CreateRestoreFailureAsync("mysql executable was not found. Ensure mysql client is installed and available in PATH.", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
@@ -686,7 +686,10 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 .OrderByDescending(x => x, StringComparer.OrdinalIgnoreCase);
             foreach (var serverDirectory in serverDirectories)
             {
-                var candidate = Path.Combine(serverDirectory, "bin", "mysqldump.exe");
+                var windowsExecutableName = fallbackExecutableName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                    ? fallbackExecutableName
+                    : $"{fallbackExecutableName}.exe";
+                var candidate = Path.Combine(serverDirectory, "bin", windowsExecutableName);
                 if (File.Exists(candidate))
                 {
                     return candidate;
