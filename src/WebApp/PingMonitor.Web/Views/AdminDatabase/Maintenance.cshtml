@@ -148,7 +148,7 @@
                             <option value="">-- Select DATABASE backup --</option>
                             @foreach (var backup in Model.Backups)
                             {
-                                <option value="@backup.FileId">@backup.FileName (@backup.BackupModeDisplayName, @DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc))</option>
+                                <option value="@backup.FileId">@backup.FileName (@backup.BackupSource, @backup.BackupModeDisplayName, @DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc))</option>
                             }
                         </select>
                     </label>

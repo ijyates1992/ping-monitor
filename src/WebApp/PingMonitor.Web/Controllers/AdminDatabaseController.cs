@@ -143,6 +143,8 @@ public sealed class AdminDatabaseController : Controller
     }
 
     [HttpPost("backup/upload")]
+    [DisableRequestSizeLimit]
+    [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UploadBackup([FromForm(Name = "UploadForm")] DatabaseBackupUploadForm uploadForm, CancellationToken cancellationToken)
     {

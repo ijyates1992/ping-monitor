@@ -17,7 +17,6 @@ namespace PingMonitor.Web.Services.DatabaseStatus;
 
 internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 {
-    private const int MaxUploadBytes = 100 * 1024 * 1024;
     private const string BackupModeCommentPrefix = "-- pingmonitor_backup_mode:";
     private const string BackupProfileCommentPrefix = "-- pingmonitor_backup_profile:";
     private const string CompactBackupProfileName = "compact_runtime_excluded_v1";
@@ -142,16 +141,21 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         Directory.CreateDirectory(backupDirectory);
         var suppressEventLogWrites = request.SuppressEventLogWrites;
 
+        var normalizedBackupSource = NormalizeBackupCreationSource(request.BackupSource);
+
         await WriteDatabaseBackupEventAsync(
             new EventLogWriteRequest
             {
                 Category = EventCategory.System,
                 EventType = EventType.DatabaseBackupStarted,
                 Severity = EventSeverity.Info,
-                Message = "Database backup export started.",
+                Message = normalizedBackupSource == DatabaseBackupCreationSource.PreRestore
+                    ? "Database pre-restore safety backup export started."
+                    : "Database backup export started.",
                 DetailsJson = JsonSerializer.Serialize(new
                 {
                     backupDirectory,
+                    backupSource = normalizedBackupSource.ToString(),
                     requestedBy = request.RequestedBy
                 })
             },
@@ -168,7 +172,9 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var backupTimestamp = DateTimeOffset.UtcNow;
         var safeDatabaseName = string.IsNullOrWhiteSpace(builder.Database) ? "database" : builder.Database.Trim();
         var normalizedBackupMode = NormalizeBackupMode(request.BackupMode);
-        var fileName = $"db-backup-{safeDatabaseName}-{backupTimestamp:yyyyMMdd-HHmmss}.sql";
+        var fileName = normalizedBackupSource == DatabaseBackupCreationSource.PreRestore
+            ? $"pre-restore-db-backup-{safeDatabaseName}-{backupTimestamp:yyyyMMdd-HHmmss}.sql"
+            : $"db-backup-{safeDatabaseName}-{backupTimestamp:yyyyMMdd-HHmmss}.sql";
         var fullPath = Path.Combine(backupDirectory, fileName);
         var mysqldumpExecutablePath = ResolveExecutablePath(options.MySqlDumpExecutablePath, "mysqldump");
         if (mysqldumpExecutablePath is null)
@@ -255,6 +261,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                         fileName,
                         fullPath,
                         backupMode = normalizedBackupMode.ToString(),
+                        backupSource = normalizedBackupSource.ToString(),
                         fileSizeBytes = fileInfo.Length,
                         createdAtUtc = backupTimestamp,
                         requestedBy = request.RequestedBy
@@ -307,19 +314,11 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             return new DatabaseBackupUploadResult { Succeeded = false, Message = "Only .sql database backup files are accepted." };
         }
 
-        await using var uploadBuffer = new MemoryStream();
-        await request.Content.CopyToAsync(uploadBuffer, cancellationToken);
-        if (uploadBuffer.Length <= 0)
+        var contentBytes = await ReadAllBytesAsync(request.Content, cancellationToken);
+        if (contentBytes.Length <= 0)
         {
             return new DatabaseBackupUploadResult { Succeeded = false, Message = "Backup file is empty." };
         }
-
-        if (uploadBuffer.Length > MaxUploadBytes)
-        {
-            return new DatabaseBackupUploadResult { Succeeded = false, Message = $"Backup file exceeds the {MaxUploadBytes / (1024 * 1024)} MB upload limit." };
-        }
-
-        var contentBytes = uploadBuffer.ToArray();
         var validationMessage = ValidateSqlBackupContent(contentBytes);
         if (validationMessage is not null)
         {
@@ -415,6 +414,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var preRestoreBackup = await CreateBackupAsync(
             new DatabaseBackupCreateRequest
             {
+                BackupSource = DatabaseBackupCreationSource.PreRestore,
                 RequestedBy = request.RequestedBy,
                 SuppressEventLogWrites = isStartupGateRestoreRequest
             },
@@ -743,7 +743,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                     FileSizeBytes = x.Length,
                     FullPath = x.FullName,
                     MetadataSummary = BuildMetadataSummary(x.FullName),
-                    BackupSource = x.Name.StartsWith("uploaded-db-backup-", StringComparison.OrdinalIgnoreCase) ? "Uploaded" : "Created",
+                    BackupSource = BuildBackupSourceDisplayName(x.Name),
                     BackupMode = descriptor.Mode,
                     BackupModeDisplayName = descriptor.Mode == DatabaseBackupMode.Compact
                         ? "Compact database backup"
@@ -879,6 +879,13 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
     private static DatabaseBackupMode NormalizeBackupMode(DatabaseBackupMode mode)
     {
         return mode == DatabaseBackupMode.Compact ? DatabaseBackupMode.Compact : DatabaseBackupMode.Full;
+    }
+
+    private static DatabaseBackupCreationSource NormalizeBackupCreationSource(DatabaseBackupCreationSource source)
+    {
+        return source == DatabaseBackupCreationSource.PreRestore
+            ? DatabaseBackupCreationSource.PreRestore
+            : DatabaseBackupCreationSource.Manual;
     }
 
     private async Task ResetCompactExcludedTablesAsync(CancellationToken cancellationToken)
@@ -1055,12 +1062,38 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
     private static string BuildMetadataSummary(string fullPath)
     {
         var descriptor = ReadBackupDescriptorFromFile(fullPath);
+        var fileName = Path.GetFileName(fullPath);
+        var preRestorePrefix = fileName.StartsWith("pre-restore-db-backup-", StringComparison.OrdinalIgnoreCase)
+            ? "Pre-restore safety backup. "
+            : string.Empty;
         if (descriptor.Mode == DatabaseBackupMode.Compact)
         {
-            return "Compact profile: excludes results, metrics history, and logs";
+            return $"{preRestorePrefix}Compact profile: excludes results, metrics history, and logs";
         }
 
-        return "Full profile: includes complete MySQL logical SQL dump";
+        return $"{preRestorePrefix}Full profile: includes complete MySQL logical SQL dump";
+    }
+
+    private static string BuildBackupSourceDisplayName(string fileName)
+    {
+        if (fileName.StartsWith("pre-restore-db-backup-", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Pre-restore (Automatic)";
+        }
+
+        if (fileName.StartsWith("uploaded-db-backup-", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Uploaded";
+        }
+
+        return "Created (Manual)";
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        await using var memoryStream = new MemoryStream();
+        await stream.CopyToAsync(memoryStream, cancellationToken);
+        return memoryStream.ToArray();
     }
 
     private readonly record struct BackupDescriptor(DatabaseBackupMode Mode)
