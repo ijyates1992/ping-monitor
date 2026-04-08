@@ -42,6 +42,7 @@ public sealed class DatabasePruneExecuteResult
 
 public sealed class DatabaseBackupCreateRequest
 {
+    public string? OperationId { get; init; }
     public DatabaseBackupMode BackupMode { get; init; } = DatabaseBackupMode.Full;
     public DatabaseBackupCreationSource BackupSource { get; init; } = DatabaseBackupCreationSource.Manual;
     public string? RequestedBy { get; init; }
@@ -68,6 +69,7 @@ public sealed class DatabaseBackupRestoreRequest
 {
     public const string ConfirmationKeyword = "RESTORE";
 
+    public string? OperationId { get; init; }
     public string FileId { get; init; } = string.Empty;
     public string ConfirmationText { get; init; } = string.Empty;
     public string? RequestedBy { get; init; }

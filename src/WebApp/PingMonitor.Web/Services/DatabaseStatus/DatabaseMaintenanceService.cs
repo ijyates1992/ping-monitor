@@ -38,6 +38,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
     private readonly IOptions<DatabaseMaintenanceOptions> _options;
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IStartupGateDiagnosticsLogger _startupGateDiagnosticsLogger;
+    private readonly IDatabaseMaintenanceProgressTracker _progressTracker;
     private readonly ILogger<DatabaseMaintenanceService> _logger;
 
     public DatabaseMaintenanceService(
@@ -46,6 +47,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         IOptions<DatabaseMaintenanceOptions> options,
         IWebHostEnvironment webHostEnvironment,
         IStartupGateDiagnosticsLogger startupGateDiagnosticsLogger,
+        IDatabaseMaintenanceProgressTracker progressTracker,
         ILogger<DatabaseMaintenanceService> logger)
     {
         _dbContext = dbContext;
@@ -53,6 +55,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         _options = options;
         _webHostEnvironment = webHostEnvironment;
         _startupGateDiagnosticsLogger = startupGateDiagnosticsLogger;
+        _progressTracker = progressTracker;
         _logger = logger;
     }
 
@@ -136,6 +139,15 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
     public async Task<DatabaseBackupCreateResult> CreateBackupAsync(DatabaseBackupCreateRequest request, CancellationToken cancellationToken)
     {
+        ReportProgress(
+            request.OperationId,
+            stage: "preparing backup export",
+            approximatePercentComplete: 3,
+            bytesProcessed: null,
+            totalBytes: null,
+            statusMessage: "Preparing DATABASE backup export.",
+            detailsMessage: null);
+
         var options = _options.Value;
         var backupDirectory = GetBackupDirectory(options.BackupStoragePath);
         Directory.CreateDirectory(backupDirectory);
@@ -165,7 +177,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         var dbConnectionString = _dbContext.Database.GetConnectionString();
         if (string.IsNullOrWhiteSpace(dbConnectionString))
         {
-            return await CreateBackupFailureAsync("Database connection string is unavailable.", request.RequestedBy, suppressEventLogWrites, cancellationToken);
+            return await CreateBackupFailureAsync("Database connection string is unavailable.", request.OperationId, request.RequestedBy, suppressEventLogWrites, cancellationToken);
         }
 
         var builder = new MySqlConnectionStringBuilder(dbConnectionString);
@@ -181,6 +193,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         {
             return await CreateBackupFailureAsync(
                 "mysqldump executable was not found. Configure DatabaseMaintenance:MySqlDumpExecutablePath with the full executable path.",
+                request.OperationId,
                 request.RequestedBy,
                 suppressEventLogWrites,
                 cancellationToken);
@@ -223,16 +236,52 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             using var process = Process.Start(processInfo);
             if (process is null)
             {
-                return await CreateBackupFailureAsync("Unable to start mysqldump process.", request.RequestedBy, suppressEventLogWrites, cancellationToken);
+                return await CreateBackupFailureAsync("Unable to start mysqldump process.", request.OperationId, request.RequestedBy, suppressEventLogWrites, cancellationToken);
             }
+
+            ReportProgress(
+                request.OperationId,
+                stage: "streaming SQL dump to file",
+                approximatePercentComplete: 12,
+                bytesProcessed: 0,
+                totalBytes: null,
+                statusMessage: "Streaming mysqldump output to backup file.",
+                detailsMessage: null);
 
             await using (var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 var headerText = BuildBackupHeader(normalizedBackupMode, backupTimestamp);
                 var headerBytes = Encoding.UTF8.GetBytes(headerText);
                 await fileStream.WriteAsync(headerBytes, cancellationToken);
-                await process.StandardOutput.BaseStream.CopyToAsync(fileStream, cancellationToken);
+                var bytesWritten = headerBytes.Length;
+                ReportProgress(request.OperationId, "streaming SQL dump to file", 13, bytesWritten, null, "Backup stream started.", null);
+
+                var buffer = new byte[128 * 1024];
+                int read;
+                while ((read = await process.StandardOutput.BaseStream.ReadAsync(buffer, cancellationToken)) > 0)
+                {
+                    await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    bytesWritten += read;
+                    var progressPercent = Math.Min(90, 12 + (int)Math.Min(78d, Math.Log10(Math.Max(10, bytesWritten)) * 14d));
+                    ReportProgress(
+                        request.OperationId,
+                        stage: "streaming SQL dump to file",
+                        approximatePercentComplete: progressPercent,
+                        bytesProcessed: bytesWritten,
+                        totalBytes: null,
+                        statusMessage: "Backup stream is actively writing.",
+                        detailsMessage: null);
+                }
             }
+
+            ReportProgress(
+                request.OperationId,
+                stage: "waiting for mysqldump exit",
+                approximatePercentComplete: 94,
+                bytesProcessed: new FileInfo(fullPath).Length,
+                totalBytes: null,
+                statusMessage: "Finalizing backup export.",
+                detailsMessage: null);
 
             var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
@@ -245,7 +294,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 }
 
                 var message = $"mysqldump exited with code {process.ExitCode}. {TrimDiagnostic(stderr)}";
-                return await CreateBackupFailureAsync(message, request.RequestedBy, suppressEventLogWrites, cancellationToken);
+                return await CreateBackupFailureAsync(message, request.OperationId, request.RequestedBy, suppressEventLogWrites, cancellationToken);
             }
 
             var fileInfo = new FileInfo(fullPath);
@@ -270,6 +319,12 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 suppressEventLogWrites,
                 cancellationToken);
 
+            _progressTracker.CompleteSuccess(
+                request.OperationId ?? string.Empty,
+                stage: "completed",
+                statusMessage: "DATABASE backup export completed successfully.",
+                detailsMessage: fileName);
+
             return new DatabaseBackupCreateResult
             {
                 Succeeded = true,
@@ -289,7 +344,12 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             }
 
             _logger.LogWarning(ex, "Database backup export failed.");
-            return await CreateBackupFailureAsync($"Database backup export failed: {ex.Message}", request.RequestedBy, suppressEventLogWrites, cancellationToken);
+            _progressTracker.CompleteFailure(
+                request.OperationId ?? string.Empty,
+                stage: "failed",
+                errorMessage: $"Database backup export failed: {ex.Message}",
+                detailsMessage: null);
+            return await CreateBackupFailureAsync($"Database backup export failed: {ex.Message}", request.OperationId, request.RequestedBy, suppressEventLogWrites, cancellationToken);
         }
     }
 
@@ -361,6 +421,15 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
     public async Task<DatabaseBackupRestoreResult> RestoreBackupAsync(DatabaseBackupRestoreRequest request, CancellationToken cancellationToken)
     {
+        ReportProgress(
+            request.OperationId,
+            stage: "validating backup",
+            approximatePercentComplete: 3,
+            bytesProcessed: null,
+            totalBytes: null,
+            statusMessage: "Validating backup before restore.",
+            detailsMessage: null);
+
         var restoreStopwatch = Stopwatch.StartNew();
         var isStartupGateRestoreRequest = IsStartupGateRestoreRequest(request);
         _startupGateDiagnosticsLogger.Write(
@@ -411,6 +480,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         _startupGateDiagnosticsLogger.Write(
             "database-restore.pre-restore-backup.start",
             $"Starting pre-restore backup. fileName='{backupFileInfo.Name}', backupMode={backupDescriptor.Mode}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
+        ReportProgress(request.OperationId, "creating pre-restore backup", 10, null, null, "Creating pre-restore safety backup.", backupFileInfo.Name);
         var preRestoreBackup = await CreateBackupAsync(
             new DatabaseBackupCreateRequest
             {
@@ -431,6 +501,11 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 preRestoreBackup.Message,
                 request.RequestedBy);
 
+            _progressTracker.CompleteFailure(
+                request.OperationId ?? string.Empty,
+                stage: "failed",
+                errorMessage: $"Restore aborted: pre-restore backup failed: {preRestoreBackup.Message}",
+                detailsMessage: backupFileInfo.Name);
             return new DatabaseBackupRestoreResult
             {
                 Succeeded = false,
@@ -477,6 +552,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
         try
         {
+            ReportProgress(request.OperationId, "starting mysql restore", 28, 0, contentBytes.Length, "Starting mysql restore process.", backupFileInfo.Name);
             _startupGateDiagnosticsLogger.Write(
                 "database-restore.process.launch",
                 $"Launching mysql restore process. executable='{processInfo.FileName}', arguments=\"{argumentSummary}\", elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
@@ -492,7 +568,21 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             _startupGateDiagnosticsLogger.Write(
                 "database-restore.stdin-copy.start",
                 $"Starting stdin copy of restore payload. bytes={contentBytes.Length}, processId={process.Id}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
-            await process.StandardInput.BaseStream.WriteAsync(contentBytes, cancellationToken);
+            ReportProgress(request.OperationId, "streaming restore payload", 35, 0, contentBytes.Length, "Streaming restore payload to mysql stdin.", backupFileInfo.Name);
+            var buffer = new byte[128 * 1024];
+            var totalBytes = contentBytes.Length;
+            var totalWritten = 0;
+            var offset = 0;
+            while (offset < contentBytes.Length)
+            {
+                var chunkLength = Math.Min(buffer.Length, contentBytes.Length - offset);
+                Buffer.BlockCopy(contentBytes, offset, buffer, 0, chunkLength);
+                await process.StandardInput.BaseStream.WriteAsync(buffer.AsMemory(0, chunkLength), cancellationToken);
+                offset += chunkLength;
+                totalWritten += chunkLength;
+                var percent = Math.Min(88, 35 + (int)Math.Round((totalWritten / (double)Math.Max(1, totalBytes)) * 53d));
+                ReportProgress(request.OperationId, "streaming restore payload", percent, totalWritten, totalBytes, "Restore payload stream is active.", backupFileInfo.Name);
+            }
             await process.StandardInput.BaseStream.FlushAsync(cancellationToken);
             _startupGateDiagnosticsLogger.Write(
                 "database-restore.stdin-copy.complete",
@@ -506,6 +596,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             _startupGateDiagnosticsLogger.Write(
                 "database-restore.process.waiting-for-exit",
                 $"Waiting for mysql restore process exit. processId={process.Id}, elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
+            ReportProgress(request.OperationId, "waiting for mysql exit", 92, contentBytes.Length, contentBytes.Length, "Waiting for mysql process to finish restore.", backupFileInfo.Name);
             await process.WaitForExitAsync(cancellationToken);
             var stderr = await stderrReadTask;
             var stdout = await stdoutReadTask;
@@ -523,6 +614,7 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
             if (backupDescriptor.Mode == DatabaseBackupMode.Compact)
             {
+                ReportProgress(request.OperationId, "resetting compact tables", 96, contentBytes.Length, contentBytes.Length, "Resetting compact-excluded runtime tables.", backupFileInfo.Name);
                 await ResetCompactExcludedTablesAsync(cancellationToken);
             }
 
@@ -543,6 +635,12 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 })
             }, cancellationToken);
 
+            _progressTracker.CompleteSuccess(
+                request.OperationId ?? string.Empty,
+                stage: "completed",
+                statusMessage: "DATABASE restore completed successfully.",
+                detailsMessage: backupFileInfo.Name);
+
             return new DatabaseBackupRestoreResult
             {
                 Succeeded = true,
@@ -561,6 +659,11 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 "database-restore.exception",
                 ex,
                 $"Restore failed with handled exception category. elapsedMs={restoreStopwatch.ElapsedMilliseconds}.");
+            _progressTracker.CompleteFailure(
+                request.OperationId ?? string.Empty,
+                stage: "failed",
+                errorMessage: $"Database restore failed: {ex.Message}",
+                detailsMessage: backupFileInfo.Name);
             return await CreateRestoreFailureAsync($"Database restore failed: {ex.Message}", backupFileInfo, request, backupDescriptor.Mode, true, preRestoreBackup.FileName, cancellationToken);
         }
         catch (Exception ex)
@@ -806,10 +909,17 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
     private async Task<DatabaseBackupCreateResult> CreateBackupFailureAsync(
         string message,
+        string? operationId,
         string? requestedBy,
         bool suppressEventLogWrites,
         CancellationToken cancellationToken)
     {
+        _progressTracker.CompleteFailure(
+            operationId ?? string.Empty,
+            stage: "failed",
+            errorMessage: message,
+            detailsMessage: null);
+
         await WriteDatabaseBackupEventAsync(
             new EventLogWriteRequest
             {
@@ -842,6 +952,11 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         CancellationToken cancellationToken)
     {
         _ = cancellationToken;
+        _progressTracker.CompleteFailure(
+            request.OperationId ?? string.Empty,
+            stage: "failed",
+            errorMessage: message,
+            detailsMessage: backupFileInfo.Name);
 
         _logger.LogWarning(
             "Database backup restore failed before completion. FileId: {FileId}, FileName: {FileName}, BackupMode: {BackupMode}, PreRestoreBackupCreated: {PreRestoreBackupCreated}, PreRestoreBackupFileName: {PreRestoreBackupFileName}, RequestedBy: {RequestedBy}, Message: {Message}",
@@ -863,6 +978,30 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
             PreRestoreBackupCreated = preRestoreBackupCreated,
             PreRestoreBackupFileName = preRestoreBackupFileName
         });
+    }
+
+    private void ReportProgress(
+        string? operationId,
+        string stage,
+        int approximatePercentComplete,
+        long? bytesProcessed,
+        long? totalBytes,
+        string? statusMessage,
+        string? detailsMessage)
+    {
+        if (string.IsNullOrWhiteSpace(operationId))
+        {
+            return;
+        }
+
+        _progressTracker.UpdateProgress(
+            operationId,
+            stage,
+            approximatePercentComplete,
+            bytesProcessed,
+            totalBytes,
+            statusMessage,
+            detailsMessage);
     }
 
     private static string BuildBackupHeader(DatabaseBackupMode mode, DateTimeOffset createdAtUtc)

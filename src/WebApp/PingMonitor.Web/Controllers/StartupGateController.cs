@@ -18,6 +18,8 @@ public sealed class StartupGateController : Controller
     private readonly IStartupAdminBootstrapService _adminBootstrapService;
     private readonly IDatabaseMaintenanceService _databaseMaintenanceService;
     private readonly IStartupGateDiagnosticsLogger _startupGateDiagnosticsLogger;
+    private readonly IDatabaseMaintenanceProgressTracker _progressTracker;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly StartupGateOptions _options;
     private readonly ILogger<StartupGateController> _logger;
 
@@ -28,6 +30,8 @@ public sealed class StartupGateController : Controller
         IStartupAdminBootstrapService adminBootstrapService,
         IDatabaseMaintenanceService databaseMaintenanceService,
         IStartupGateDiagnosticsLogger startupGateDiagnosticsLogger,
+        IDatabaseMaintenanceProgressTracker progressTracker,
+        IServiceScopeFactory serviceScopeFactory,
         IOptions<StartupGateOptions> options,
         ILogger<StartupGateController> logger)
     {
@@ -37,6 +41,8 @@ public sealed class StartupGateController : Controller
         _adminBootstrapService = adminBootstrapService;
         _databaseMaintenanceService = databaseMaintenanceService;
         _startupGateDiagnosticsLogger = startupGateDiagnosticsLogger;
+        _progressTracker = progressTracker;
+        _serviceScopeFactory = serviceScopeFactory;
         _options = options.Value;
         _logger = logger;
     }
@@ -263,6 +269,80 @@ public sealed class StartupGateController : Controller
                 ? null
                 : $"DATABASE restore failed: {result.Message}",
             cancellationToken: cancellationToken));
+    }
+
+    [HttpPost("database-backup/restore/start")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartRestoreDatabaseBackup([FromForm(Name = "DatabaseBackupRestoreForm")] StartupDatabaseBackupRestoreForm form, CancellationToken cancellationToken)
+    {
+        var status = await _startupGateService.EvaluateAsync(HttpContext, cancellationToken);
+        if (!status.CanPerformWriteActions)
+        {
+            return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(form.FileId))
+        {
+            return BadRequest(new { succeeded = false, message = "Select a DATABASE backup file to restore." });
+        }
+
+        if (!string.Equals(form.ConfirmationText?.Trim(), DatabaseBackupRestoreRequest.ConfirmationKeyword, StringComparison.Ordinal))
+        {
+            return BadRequest(new { succeeded = false, message = $"Type {DatabaseBackupRestoreRequest.ConfirmationKeyword} to confirm restore." });
+        }
+
+        var start = _progressTracker.TryStartOperation(
+            DatabaseMaintenanceOperationType.Restore,
+            stage: "validating backup",
+            fileName: form.FileId,
+            detailsMessage: "startup-gate");
+        if (!start.Started || start.Operation is null)
+        {
+            return Conflict(new { succeeded = false, message = start.Message, activeOperation = start.Operation });
+        }
+
+        var operationId = start.Operation.OperationId;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var maintenanceService = scope.ServiceProvider.GetRequiredService<IDatabaseMaintenanceService>();
+                var result = await maintenanceService.RestoreBackupAsync(
+                    new DatabaseBackupRestoreRequest
+                    {
+                        OperationId = operationId,
+                        FileId = form.FileId ?? string.Empty,
+                        ConfirmationText = form.ConfirmationText ?? string.Empty,
+                        RequestedBy = "startup-gate"
+                    },
+                    CancellationToken.None);
+
+                if (!result.Succeeded)
+                {
+                    _progressTracker.CompleteFailure(operationId, "failed", result.Message, result.RestoredFileName);
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                _progressTracker.CompleteFailure(operationId, "failed", "Selected backup file was not found.", form.FileId);
+            }
+            catch (Exception ex)
+            {
+                _progressTracker.CompleteFailure(operationId, "failed", ex.Message, form.FileId);
+            }
+        });
+
+        return Json(new { succeeded = true, operationId });
+    }
+
+    [HttpGet("database-backup/progress")]
+    public IActionResult GetDatabaseBackupProgress([FromQuery] string? operationId = null)
+    {
+        var operation = string.IsNullOrWhiteSpace(operationId)
+            ? _progressTracker.GetCurrentOperation()
+            : _progressTracker.GetOperation(operationId);
+        return Json(new { operation });
     }
 
     private async Task<StartupGatePageViewModel> BuildViewModelAsync(

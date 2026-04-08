@@ -30,6 +30,9 @@
         .risk-emphasis { color: #912018; }
         .warning-emphasis { color: #7a2e0e; }
         .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .55rem .8rem; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); text-decoration: none; }
+        .progress-wrap { border: 1px solid var(--border); border-radius: 10px; padding: .75rem; }
+        .progress-bar { height: 14px; background: var(--border); border-radius: 999px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0; background: #0f62fe; transition: width .2s linear; }
         html[data-theme='dark'] .risk-emphasis { color: #ffb4ae; }
         html[data-theme='dark'] .warning-emphasis { color: #ffd29d; }
     </style>
@@ -103,6 +106,13 @@
                 <button type="submit">Create DB backup</button>
             </form>
 
+            <div id="db-maintenance-progress" class="progress-wrap" style="margin-top:.75rem; display:none;">
+                <p><strong>Live operation progress</strong></p>
+                <p id="progress-stage" class="muted">Waiting…</p>
+                <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+                <p id="progress-meta" class="muted" style="margin-bottom:0;"></p>
+            </div>
+
             <h3>Upload DATABASE backup</h3>
             <form method="post" action="/admin/database/backup/upload" enctype="multipart/form-data" class="form-grid">
                 @Html.AntiForgeryToken()
@@ -141,7 +151,7 @@
                 <p><strong class="risk-emphasis">This will completely replace the current DATABASE.</strong></p>
                 <p class="muted">Select the backup file to restore. A pre-restore database backup will be created automatically before restore is applied.</p>
                 <p class="muted"><strong>Compact restore note:</strong> compact backups exclude runtime history (results, metrics, logs). Those excluded runtime tables are reset to empty during restore.</p>
-                <form method="post" action="/admin/database/backup/restore" class="form-grid">
+                <form id="admin-restore-form" method="post" action="/admin/database/backup/restore" class="form-grid">
                     @Html.AntiForgeryToken()
                     <label>Backup to restore
                         <select asp-for="RestoreForm.FileId">
@@ -183,5 +193,63 @@
         </section>
     </div>
 </main>
+<script>
+(() => {
+    const createForm = document.querySelector('form[action="/admin/database/backup/create"]');
+    const restoreForm = document.getElementById('admin-restore-form');
+    const panel = document.getElementById('db-maintenance-progress');
+    const stageEl = document.getElementById('progress-stage');
+    const fillEl = document.getElementById('progress-fill');
+    const metaEl = document.getElementById('progress-meta');
+    let pollTimer = null;
+
+    function setProgress(op) {
+        if (!op) return;
+        panel.style.display = 'block';
+        stageEl.textContent = `${op.stage || 'Working'}${op.failed ? ' (failed)' : op.succeeded ? ' (completed)' : ''}`;
+        fillEl.style.width = `${Math.max(0, Math.min(100, op.approximatePercentComplete || 0))}%`;
+        const bytes = op.bytesProcessed != null ? `Bytes: ${op.bytesProcessed}${op.totalBytes != null ? ' / ' + op.totalBytes : ''}` : '';
+        const msg = op.errorMessage || op.statusMessage || op.detailsMessage || '';
+        metaEl.textContent = [bytes, msg].filter(Boolean).join(' • ');
+    }
+
+    async function poll(operationId) {
+        const res = await fetch(`/admin/database/backup/progress?operationId=${encodeURIComponent(operationId)}`);
+        const payload = await res.json();
+        setProgress(payload.operation);
+        if (payload.operation && payload.operation.isRunning) {
+            pollTimer = setTimeout(() => poll(operationId), 1000);
+            return;
+        }
+        setTimeout(() => window.location.reload(), 1200);
+    }
+
+    async function start(form, endpoint) {
+        if (pollTimer) clearTimeout(pollTimer);
+        const submit = form.querySelector('button[type="submit"]');
+        submit.disabled = true;
+        const body = new FormData(form);
+        const res = await fetch(endpoint, { method: 'POST', body });
+        const payload = await res.json();
+        if (!res.ok || !payload.succeeded) {
+            alert(payload.message || 'Failed to start DATABASE maintenance operation.');
+            submit.disabled = false;
+            return;
+        }
+        panel.style.display = 'block';
+        await poll(payload.operationId);
+        submit.disabled = false;
+    }
+
+    createForm?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        start(createForm, '/admin/database/backup/create/start');
+    });
+    restoreForm?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        start(restoreForm, '/admin/database/backup/restore/start');
+    });
+})();
+</script>
 </body>
 </html>
