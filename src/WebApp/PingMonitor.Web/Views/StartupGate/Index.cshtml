@@ -33,6 +33,9 @@
         .danger { border: 1px solid #fda29b; background: #fff5f4; border-radius: 10px; padding: .75rem; }
         .warning { color: #b42318; font-weight: 700; }
         select { width: 100%; box-sizing: border-box; padding: .85rem; border: 1px solid #cbd2d9; border-radius: 10px; font-size: 1rem; }
+        .progress-wrap { border: 1px solid #cbd2d9; border-radius: 10px; padding: .75rem; }
+        .progress-bar { height: 12px; background: #d9e2ec; border-radius: 999px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0; background: #0f62fe; transition: width .2s linear; }
     </style>
 </head>
 <body>
@@ -135,7 +138,7 @@
         </form>
 
         <h3>Restore DATABASE backup</h3>
-        <form method="post" action="/startup-gate/database-backup/restore" class="grid">
+        <form id="startup-gate-restore-form" method="post" action="/startup-gate/database-backup/restore" class="grid">
             @Html.AntiForgeryToken()
             <div>
                 <label asp-for="DatabaseBackupRestoreForm.FileId"></label>
@@ -157,6 +160,12 @@
                 <button type="submit" disabled="@(!Model.Status.CanPerformWriteActions)">Restore DATABASE backup</button>
             </div>
         </form>
+        <div id="startup-gate-progress" class="progress-wrap" style="display:none; margin-top:.75rem;">
+            <p><strong>Live restore progress</strong></p>
+            <p id="startup-progress-stage" class="muted">Waiting…</p>
+            <div class="progress-bar"><div id="startup-progress-fill" class="progress-fill"></div></div>
+            <p id="startup-progress-meta" class="muted" style="margin-bottom:0;"></p>
+        </div>
     </section>
 
     <section class="card">
@@ -196,5 +205,52 @@
         </form>
     </section>
 </main>
+<script>
+(() => {
+    const form = document.getElementById('startup-gate-restore-form');
+    const panel = document.getElementById('startup-gate-progress');
+    const stageEl = document.getElementById('startup-progress-stage');
+    const fillEl = document.getElementById('startup-progress-fill');
+    const metaEl = document.getElementById('startup-progress-meta');
+    let pollTimer = null;
+
+    function setProgress(op) {
+        if (!op) return;
+        panel.style.display = 'block';
+        stageEl.textContent = `${op.stage || 'Working'}${op.failed ? ' (failed)' : op.succeeded ? ' (completed)' : ''}`;
+        fillEl.style.width = `${Math.max(0, Math.min(100, op.approximatePercentComplete || 0))}%`;
+        const bytes = op.bytesProcessed != null ? `Bytes: ${op.bytesProcessed}${op.totalBytes != null ? ' / ' + op.totalBytes : ''}` : '';
+        const msg = op.errorMessage || op.statusMessage || op.detailsMessage || '';
+        metaEl.textContent = [bytes, msg].filter(Boolean).join(' • ');
+    }
+
+    async function poll(operationId) {
+        const res = await fetch(`/startup-gate/database-backup/progress?operationId=${encodeURIComponent(operationId)}`);
+        const payload = await res.json();
+        setProgress(payload.operation);
+        if (payload.operation && payload.operation.isRunning) {
+            pollTimer = setTimeout(() => poll(operationId), 1000);
+            return;
+        }
+        setTimeout(() => window.location.reload(), 1500);
+    }
+
+    form?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (pollTimer) clearTimeout(pollTimer);
+        const submit = form.querySelector('button[type="submit"]');
+        submit.disabled = true;
+        const res = await fetch('/startup-gate/database-backup/restore/start', { method: 'POST', body: new FormData(form) });
+        const payload = await res.json();
+        if (!res.ok || !payload.succeeded) {
+            alert(payload.message || 'DATABASE restore could not be started.');
+            submit.disabled = false;
+            return;
+        }
+        await poll(payload.operationId);
+        submit.disabled = false;
+    });
+})();
+</script>
 </body>
 </html>

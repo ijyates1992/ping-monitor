@@ -192,6 +192,7 @@ builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsServi
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
 builder.Services.AddScoped<IDatabaseStatusQueryService, DatabaseStatusQueryService>();
 builder.Services.AddScoped<IDatabaseMaintenanceService, DatabaseMaintenanceService>();
+builder.Services.AddSingleton<IDatabaseMaintenanceProgressTracker, DatabaseMaintenanceProgressTracker>();
 builder.Services.AddScoped<INotificationSettingsService, NotificationSettingsService>();
 builder.Services.AddScoped<IUserNotificationSettingsService, UserNotificationSettingsService>();
 builder.Services.AddScoped<INotificationSuppressionService, NotificationSuppressionService>();

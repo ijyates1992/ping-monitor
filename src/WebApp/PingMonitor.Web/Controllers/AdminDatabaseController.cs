@@ -13,13 +13,19 @@ public sealed class AdminDatabaseController : Controller
 {
     private readonly IDatabaseStatusQueryService _databaseStatusQueryService;
     private readonly IDatabaseMaintenanceService _databaseMaintenanceService;
+    private readonly IDatabaseMaintenanceProgressTracker _progressTracker;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public AdminDatabaseController(
         IDatabaseStatusQueryService databaseStatusQueryService,
-        IDatabaseMaintenanceService databaseMaintenanceService)
+        IDatabaseMaintenanceService databaseMaintenanceService,
+        IDatabaseMaintenanceProgressTracker progressTracker,
+        IServiceScopeFactory serviceScopeFactory)
     {
         _databaseStatusQueryService = databaseStatusQueryService;
         _databaseMaintenanceService = databaseMaintenanceService;
+        _progressTracker = progressTracker;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     [HttpGet]
@@ -212,6 +218,126 @@ public sealed class AdminDatabaseController : Controller
         }
 
         return RedirectToAction(nameof(Maintenance));
+    }
+
+    [HttpPost("backup/create/start")]
+    [ValidateAntiForgeryToken]
+    public IActionResult StartCreateBackup([FromForm(Name = "BackupForm")] DatabaseBackupForm backupForm)
+    {
+        if (!backupForm.ConfirmBackup)
+        {
+            return BadRequest(new { succeeded = false, message = "Confirm backup creation before continuing." });
+        }
+
+        var start = _progressTracker.TryStartOperation(
+            DatabaseMaintenanceOperationType.BackupCreate,
+            stage: "preparing backup export",
+            fileName: null,
+            detailsMessage: null);
+        if (!start.Started || start.Operation is null)
+        {
+            return Conflict(new { succeeded = false, message = start.Message, activeOperation = start.Operation });
+        }
+
+        var operationId = start.Operation.OperationId;
+        var requestedBy = GetOperatorIdentity();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var maintenanceService = scope.ServiceProvider.GetRequiredService<IDatabaseMaintenanceService>();
+                var result = await maintenanceService.CreateBackupAsync(
+                    new DatabaseBackupCreateRequest
+                    {
+                        OperationId = operationId,
+                        BackupMode = backupForm.BackupMode,
+                        RequestedBy = requestedBy
+                    },
+                    CancellationToken.None);
+
+                if (!result.Succeeded)
+                {
+                    _progressTracker.CompleteFailure(operationId, "failed", result.Message, result.FileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _progressTracker.CompleteFailure(operationId, "failed", ex.Message, null);
+            }
+        });
+
+        return Json(new { succeeded = true, operationId });
+    }
+
+    [HttpPost("backup/restore/start")]
+    [ValidateAntiForgeryToken]
+    public IActionResult StartRestoreBackup([FromForm(Name = "RestoreForm")] DatabaseBackupRestoreForm restoreForm)
+    {
+        if (string.IsNullOrWhiteSpace(restoreForm.FileId))
+        {
+            return BadRequest(new { succeeded = false, message = "Select a DATABASE backup file." });
+        }
+
+        if (!string.Equals(restoreForm.ConfirmationText?.Trim(), DatabaseBackupRestoreRequest.ConfirmationKeyword, StringComparison.Ordinal))
+        {
+            return BadRequest(new { succeeded = false, message = $"Type {DatabaseBackupRestoreRequest.ConfirmationKeyword} to confirm restore." });
+        }
+
+        var start = _progressTracker.TryStartOperation(
+            DatabaseMaintenanceOperationType.Restore,
+            stage: "validating backup",
+            fileName: restoreForm.FileId,
+            detailsMessage: null);
+        if (!start.Started || start.Operation is null)
+        {
+            return Conflict(new { succeeded = false, message = start.Message, activeOperation = start.Operation });
+        }
+
+        var operationId = start.Operation.OperationId;
+        var requestedBy = GetOperatorIdentity();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var maintenanceService = scope.ServiceProvider.GetRequiredService<IDatabaseMaintenanceService>();
+                var result = await maintenanceService.RestoreBackupAsync(
+                    new DatabaseBackupRestoreRequest
+                    {
+                        OperationId = operationId,
+                        FileId = restoreForm.FileId ?? string.Empty,
+                        ConfirmationText = restoreForm.ConfirmationText ?? string.Empty,
+                        RequestedBy = requestedBy
+                    },
+                    CancellationToken.None);
+
+                if (!result.Succeeded)
+                {
+                    _progressTracker.CompleteFailure(operationId, "failed", result.Message, result.RestoredFileName);
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                _progressTracker.CompleteFailure(operationId, "failed", "Selected backup file was not found.", null);
+            }
+            catch (Exception ex)
+            {
+                _progressTracker.CompleteFailure(operationId, "failed", ex.Message, null);
+            }
+        });
+
+        return Json(new { succeeded = true, operationId });
+    }
+
+    [HttpGet("backup/progress")]
+    public IActionResult GetBackupProgress([FromQuery] string? operationId = null)
+    {
+        var progress = string.IsNullOrWhiteSpace(operationId)
+            ? _progressTracker.GetCurrentOperation()
+            : _progressTracker.GetOperation(operationId);
+
+        return Json(new { operation = progress });
     }
 
     [HttpPost("backup/delete")]
