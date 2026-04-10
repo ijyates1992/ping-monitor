@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
@@ -12,6 +13,8 @@ namespace PingMonitor.Web.Services.BufferedResults;
 
 internal sealed class BufferedResultFlushBackgroundService : BackgroundService
 {
+    private const int AssignmentLookupBatchSize = 200;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IBufferedResultIngestionService _buffer;
     private readonly ResultBufferOptions _options;
@@ -158,15 +161,7 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        var assignmentContextRows = await dbContext.MonitorAssignments.AsNoTracking()
-            .Where(x => assignmentIds.Contains(x.AssignmentId))
-            .Select(x => new
-            {
-                x.AssignmentId,
-                x.AgentId,
-                x.EndpointId
-            })
-            .ToArrayAsync(cancellationToken);
+        var assignmentContextRows = await LoadAssignmentContextRowsAsync(dbContext, assignmentIds, cancellationToken);
 
         var assignmentContexts = assignmentContextRows
             .ToDictionary(x => x.AssignmentId, StringComparer.Ordinal);
@@ -224,6 +219,39 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
             AssignmentEnqueuedCount: enqueueResult.EnqueuedCount,
             LastAssignmentsEnqueuedAtUtc: enqueueResult.EnqueuedCount > 0 ? enqueueTimeUtc : null);
     }
+
+    private static async Task<List<AssignmentContextRow>> LoadAssignmentContextRowsAsync(
+        PingMonitorDbContext dbContext,
+        IReadOnlyCollection<string> assignmentIds,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<AssignmentContextRow>(assignmentIds.Count);
+
+        foreach (var chunk in assignmentIds.Chunk(AssignmentLookupBatchSize))
+        {
+            var parameters = chunk
+                .Select((assignmentId, index) => new MySqlParameter($"@p{index}", assignmentId))
+                .ToArray();
+
+            var placeholders = string.Join(", ", parameters.Select(x => x.ParameterName));
+            var sql = $"SELECT `AssignmentId`, `AgentId`, `EndpointId` FROM `MonitorAssignments` WHERE `AssignmentId` IN ({placeholders})";
+
+            var chunkRows = await dbContext.MonitorAssignments
+                .FromSqlRaw(sql, parameters)
+                .AsNoTracking()
+                .Select(x => new AssignmentContextRow(
+                    x.AssignmentId,
+                    x.AgentId,
+                    x.EndpointId))
+                .ToListAsync(cancellationToken);
+
+            rows.AddRange(chunkRows);
+        }
+
+        return rows;
+    }
+
+    private sealed record AssignmentContextRow(string AssignmentId, string AgentId, string EndpointId);
 
     private sealed record FlushResult(long PersistDurationMs, int AssignmentEnqueuedCount, DateTimeOffset? LastAssignmentsEnqueuedAtUtc);
 }
