@@ -3,9 +3,10 @@ namespace PingMonitor.Web.Services.BufferedResults;
 public sealed class BufferedCheckResult
 {
     public string CheckResultId { get; init; } = string.Empty;
+
+    // AssignmentId is the authoritative identity for buffered raw results.
+    // Agent/endpoint are resolved from MonitorAssignments at flush time.
     public string AssignmentId { get; init; } = string.Empty;
-    public string AgentId { get; init; } = string.Empty;
-    public string EndpointId { get; init; } = string.Empty;
     public DateTimeOffset CheckedAtUtc { get; init; }
     public bool Success { get; init; }
     public int? RoundTripMs { get; init; }

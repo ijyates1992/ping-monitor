@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
@@ -151,12 +152,42 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
         var dbActivityScope = scope.ServiceProvider.GetRequiredService<IDbActivityScope>();
         using var dbScope = dbActivityScope.BeginScope("RawResultFlush");
 
+        var assignmentIds = batch
+            .Select(item => item.AssignmentId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var assignmentContextRows = await dbContext.MonitorAssignments.AsNoTracking()
+            .Where(x => assignmentIds.Contains(x.AssignmentId))
+            .Select(x => new
+            {
+                x.AssignmentId,
+                x.AgentId,
+                x.EndpointId
+            })
+            .ToArrayAsync(cancellationToken);
+
+        var assignmentContexts = assignmentContextRows
+            .ToDictionary(x => x.AssignmentId, StringComparer.Ordinal);
+
+        var missingAssignmentIds = assignmentIds
+            .Where(x => !assignmentContexts.ContainsKey(x))
+            .ToArray();
+        if (missingAssignmentIds.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Buffered raw result flush could not resolve assignment metadata for assignment IDs: {string.Join(", ", missingAssignmentIds)}.");
+        }
+
         var checkResults = batch.Select(item => new CheckResult
         {
+            // AssignmentId is the source-of-truth identity for raw rows.
+            // AgentId/EndpointId are compatibility fields until Phase 2 schema slimming.
             CheckResultId = item.CheckResultId,
             AssignmentId = item.AssignmentId,
-            AgentId = item.AgentId,
-            EndpointId = item.EndpointId,
+            AgentId = assignmentContexts[item.AssignmentId].AgentId,
+            EndpointId = assignmentContexts[item.AssignmentId].EndpointId,
             CheckedAtUtc = item.CheckedAtUtc,
             Success = item.Success,
             RoundTripMs = item.RoundTripMs,
