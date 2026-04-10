@@ -171,31 +171,49 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
         var assignmentContexts = assignmentContextRows
             .ToDictionary(x => x.AssignmentId, StringComparer.Ordinal);
 
-        var missingAssignmentIds = assignmentIds
-            .Where(x => !assignmentContexts.ContainsKey(x))
-            .ToArray();
-        if (missingAssignmentIds.Length > 0)
+        var checkResults = new List<CheckResult>(batch.Count);
+        var missingAssignmentIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in batch)
         {
-            throw new InvalidOperationException(
-                $"Buffered raw result flush could not resolve assignment metadata for assignment IDs: {string.Join(", ", missingAssignmentIds)}.");
+            if (!assignmentContexts.TryGetValue(item.AssignmentId, out var assignmentContext))
+            {
+                missingAssignmentIds.Add(item.AssignmentId);
+                continue;
+            }
+
+            checkResults.Add(new CheckResult
+            {
+                // AssignmentId is the source-of-truth identity for raw rows.
+                // AgentId/EndpointId are compatibility fields until Phase 2 schema slimming.
+                CheckResultId = item.CheckResultId,
+                AssignmentId = item.AssignmentId,
+                AgentId = assignmentContext.AgentId,
+                EndpointId = assignmentContext.EndpointId,
+                CheckedAtUtc = item.CheckedAtUtc,
+                Success = item.Success,
+                RoundTripMs = item.RoundTripMs,
+                ErrorCode = item.ErrorCode,
+                ErrorMessage = item.ErrorMessage,
+                ReceivedAtUtc = item.ReceivedAtUtc,
+                BatchId = item.BatchId
+            });
         }
 
-        var checkResults = batch.Select(item => new CheckResult
+        if (missingAssignmentIds.Count > 0)
         {
-            // AssignmentId is the source-of-truth identity for raw rows.
-            // AgentId/EndpointId are compatibility fields until Phase 2 schema slimming.
-            CheckResultId = item.CheckResultId,
-            AssignmentId = item.AssignmentId,
-            AgentId = assignmentContexts[item.AssignmentId].AgentId,
-            EndpointId = assignmentContexts[item.AssignmentId].EndpointId,
-            CheckedAtUtc = item.CheckedAtUtc,
-            Success = item.Success,
-            RoundTripMs = item.RoundTripMs,
-            ErrorCode = item.ErrorCode,
-            ErrorMessage = item.ErrorMessage,
-            ReceivedAtUtc = item.ReceivedAtUtc,
-            BatchId = item.BatchId
-        }).ToArray();
+            _logger.LogWarning(
+                "Buffered raw result flush skipped {SkippedCount} rows due to missing assignment metadata. Missing assignment IDs: {MissingAssignmentIds}.",
+                batch.Count - checkResults.Count,
+                string.Join(", ", missingAssignmentIds.OrderBy(x => x, StringComparer.Ordinal)));
+        }
+
+        if (checkResults.Count == 0)
+        {
+            return new FlushResult(
+                PersistDurationMs: 0,
+                AssignmentEnqueuedCount: 0,
+                LastAssignmentsEnqueuedAtUtc: null);
+        }
 
         var persistStartedAtUtc = DateTimeOffset.UtcNow;
         dbContext.CheckResults.AddRange(checkResults);
@@ -214,7 +232,7 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
 
         _logger.LogInformation(
             "Buffered result flush persisted {PersistedCount} raw check results across {AssignmentCount} assignments. Enqueued {EnqueuedAssignments} assignments for downstream processing ({CoalescedDuplicates} coalesced duplicates).",
-            checkResults.Length,
+            checkResults.Count,
             affectedAssignmentIds.Length,
             enqueueResult.EnqueuedCount,
             enqueueResult.CoalescedDuplicateCount);
