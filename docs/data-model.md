@@ -326,8 +326,8 @@ Represents a single raw check result.
 
 - `resultId` (optional, or implicit)
 - `assignmentId` (authoritative ownership identity)
-- `agentId` (compatibility duplicate; derived from `MonitorAssignment` and planned for later schema removal)
-- `endpointId` (compatibility duplicate; derived from `MonitorAssignment` and planned for later schema removal)
+
+`agentId` and `endpointId` are derived through `MonitorAssignment` when needed (`assignmentId -> MonitorAssignment.agentId/endpointId`) and are not persisted on `CheckResult`.
 
 #### Result data
 

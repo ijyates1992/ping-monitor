@@ -166,14 +166,11 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         checkResult.HasKey(x => x.CheckResultId);
         checkResult.Property(x => x.CheckResultId).HasMaxLength(64);
         checkResult.Property(x => x.AssignmentId).HasMaxLength(64).IsRequired();
-        checkResult.Property(x => x.AgentId).HasMaxLength(64).IsRequired();
-        checkResult.Property(x => x.EndpointId).HasMaxLength(64).IsRequired();
         checkResult.Property(x => x.ErrorCode).HasMaxLength(128);
         checkResult.Property(x => x.ErrorMessage).HasMaxLength(2048);
         checkResult.Property(x => x.BatchId).HasMaxLength(128).IsRequired();
         checkResult.Property(x => x.CheckedAtUtc).IsRequired();
         checkResult.Property(x => x.ReceivedAtUtc).IsRequired();
-        checkResult.HasIndex(x => new { x.AgentId, x.BatchId });
         checkResult.HasIndex(x => new { x.AssignmentId, x.CheckedAtUtc });
 
         var resultBatch = modelBuilder.Entity<ResultBatch>();

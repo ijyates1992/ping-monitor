@@ -698,8 +698,47 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
+        await EnsureCheckResultsNormalizedAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
+    }
+
+    private static async Task EnsureCheckResultsNormalizedAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (await HasTableIndexAsync(connection, "CheckResults", "IX_CheckResults_AgentId_BatchId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                DROP INDEX `IX_CheckResults_AgentId_BatchId` ON `CheckResults`;
+                """,
+                cancellationToken);
+        }
+
+        if (await HasTableColumnAsync(connection, "CheckResults", "AgentId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `CheckResults`
+                DROP COLUMN `AgentId`;
+                """,
+                cancellationToken);
+        }
+
+        if (await HasTableColumnAsync(connection, "CheckResults", "EndpointId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `CheckResults`
+                DROP COLUMN `EndpointId`;
+                """,
+                cancellationToken);
+        }
     }
 
     private static async Task EnsureMetricsIndexesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
@@ -1516,104 +1555,52 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
     private static async Task<bool> HasEndpointColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'Endpoints'
-              AND column_name = @columnName;
-            """;
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "@columnName";
-        parameter.Value = columnName;
-        command.Parameters.Add(parameter);
-
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+        return await HasTableColumnAsync(connection, "Endpoints", columnName, cancellationToken);
     }
 
     private static async Task<bool> HasAssignmentMetrics24hColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'AssignmentMetrics24h'
-              AND column_name = @columnName;
-            """;
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "@columnName";
-        parameter.Value = columnName;
-        command.Parameters.Add(parameter);
-
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+        return await HasTableColumnAsync(connection, "AssignmentMetrics24h", columnName, cancellationToken);
     }
 
     private static async Task<bool> HasEndpointDependencyColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'EndpointDependencies'
-              AND column_name = @columnName;
-            """;
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "@columnName";
-        parameter.Value = columnName;
-        command.Parameters.Add(parameter);
-
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+        return await HasTableColumnAsync(connection, "EndpointDependencies", columnName, cancellationToken);
     }
 
     private static async Task<bool> HasSecuritySettingsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'SecuritySettings'
-              AND column_name = @columnName;
-            """;
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "@columnName";
-        parameter.Value = columnName;
-        command.Parameters.Add(parameter);
-
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+        return await HasTableColumnAsync(connection, "SecuritySettings", columnName, cancellationToken);
     }
 
     private static async Task<bool> HasNotificationSettingsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'NotificationSettings'
-              AND column_name = @columnName;
-            """;
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "@columnName";
-        parameter.Value = columnName;
-        command.Parameters.Add(parameter);
-
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+        return await HasTableColumnAsync(connection, "NotificationSettings", columnName, cancellationToken);
     }
 
     private static async Task<bool> HasUserNotificationSettingsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        return await HasTableColumnAsync(connection, "UserNotificationSettings", columnName, cancellationToken);
+    }
+
+    private static async Task<bool> HasTableColumnAsync(
+        System.Data.Common.DbConnection connection,
+        string tableName,
+        string columnName,
+        CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT COUNT(*)
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
-              AND table_name = 'UserNotificationSettings'
+              AND table_name = @tableName
               AND column_name = @columnName;
             """;
+        var tableParameter = command.CreateParameter();
+        tableParameter.ParameterName = "@tableName";
+        tableParameter.Value = tableName;
+        command.Parameters.Add(tableParameter);
         var parameter = command.CreateParameter();
         parameter.ParameterName = "@columnName";
         parameter.Value = columnName;
@@ -1642,14 +1629,27 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
     private static async Task<bool> HasEndpointDependencyIndexAsync(System.Data.Common.DbConnection connection, string indexName, CancellationToken cancellationToken)
     {
+        return await HasTableIndexAsync(connection, "EndpointDependencies", indexName, cancellationToken);
+    }
+
+    private static async Task<bool> HasTableIndexAsync(
+        System.Data.Common.DbConnection connection,
+        string tableName,
+        string indexName,
+        CancellationToken cancellationToken)
+    {
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT COUNT(*)
             FROM information_schema.statistics
             WHERE table_schema = DATABASE()
-              AND table_name = 'EndpointDependencies'
+              AND table_name = @tableName
               AND index_name = @indexName;
             """;
+        var tableParameter = command.CreateParameter();
+        tableParameter.ParameterName = "@tableName";
+        tableParameter.Value = tableName;
+        command.Parameters.Add(tableParameter);
         var parameter = command.CreateParameter();
         parameter.ParameterName = "@indexName";
         parameter.Value = indexName;
