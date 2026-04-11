@@ -156,6 +156,8 @@ internal sealed class ResultIngestionService : IResultIngestionService
             {
                 CheckResultId = x.CheckResultId,
                 AssignmentId = x.AssignmentId,
+                AgentId = x.AgentId,
+                EndpointId = x.EndpointId,
                 CheckedAtUtc = x.CheckedAtUtc,
                 Success = x.Success,
                 RoundTripMs = x.RoundTripMs,
