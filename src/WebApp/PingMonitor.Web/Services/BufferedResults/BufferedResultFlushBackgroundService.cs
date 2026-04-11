@@ -116,7 +116,7 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
                 var flushResult = await PersistAndEnqueueAssignmentsAsync(batch, cancellationToken);
                 _buffer.RecordFlushOutcome(
                     batch.Count,
-                    batch.Count,
+                    flushResult.PersistedCount,
                     DateTimeOffset.UtcNow,
                     null,
                     flushResult.PersistDurationMs,
@@ -153,6 +153,8 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
 
         var checkResults = batch.Select(item => new CheckResult
         {
+            // AssignmentId is the source-of-truth identity for raw rows.
+            // AgentId/EndpointId are compatibility fields until Phase 2 schema slimming.
             CheckResultId = item.CheckResultId,
             AssignmentId = item.AssignmentId,
             AgentId = item.AgentId,
@@ -189,10 +191,10 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
             enqueueResult.CoalescedDuplicateCount);
 
         return new FlushResult(
+            PersistedCount: checkResults.Length,
             PersistDurationMs: persistDurationMs,
             AssignmentEnqueuedCount: enqueueResult.EnqueuedCount,
             LastAssignmentsEnqueuedAtUtc: enqueueResult.EnqueuedCount > 0 ? enqueueTimeUtc : null);
     }
-
-    private sealed record FlushResult(long PersistDurationMs, int AssignmentEnqueuedCount, DateTimeOffset? LastAssignmentsEnqueuedAtUtc);
+    private sealed record FlushResult(int PersistedCount, long PersistDurationMs, int AssignmentEnqueuedCount, DateTimeOffset? LastAssignmentsEnqueuedAtUtc);
 }

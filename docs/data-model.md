@@ -325,9 +325,9 @@ Represents a single raw check result.
 #### Key fields
 
 - `resultId` (optional, or implicit)
-- `assignmentId`
-- `agentId`
-- `endpointId`
+- `assignmentId` (authoritative ownership identity)
+- `agentId` (compatibility duplicate; derived from `MonitorAssignment` and planned for later schema removal)
+- `endpointId` (compatibility duplicate; derived from `MonitorAssignment` and planned for later schema removal)
 
 #### Result data
 
