@@ -5,8 +5,11 @@ public sealed class BufferedCheckResult
     public string CheckResultId { get; init; } = string.Empty;
 
     // AssignmentId is the authoritative identity for buffered raw results.
-    // Agent/endpoint are resolved from MonitorAssignments at flush time.
+    // AgentId/EndpointId are compatibility payload fields for Phase 1 and
+    // must be preserved with accepted raw results until Phase 2 schema slimming.
     public string AssignmentId { get; init; } = string.Empty;
+    public string AgentId { get; init; } = string.Empty;
+    public string EndpointId { get; init; } = string.Empty;
     public DateTimeOffset CheckedAtUtc { get; init; }
     public bool Success { get; init; }
     public int? RoundTripMs { get; init; }

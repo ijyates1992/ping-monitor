@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Options;
-using Microsoft.EntityFrameworkCore;
-using System.Linq.Expressions;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
@@ -118,7 +116,7 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
                 var flushResult = await PersistAndEnqueueAssignmentsAsync(batch, cancellationToken);
                 _buffer.RecordFlushOutcome(
                     batch.Count,
-                    batch.Count,
+                    flushResult.PersistedCount,
                     DateTimeOffset.UtcNow,
                     null,
                     flushResult.PersistDurationMs,
@@ -153,77 +151,22 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
         var dbActivityScope = scope.ServiceProvider.GetRequiredService<IDbActivityScope>();
         using var dbScope = dbActivityScope.BeginScope("RawResultFlush");
 
-        var assignmentIds = batch
-            .Select(item => item.AssignmentId)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        if (assignmentIds.Length == 0)
+        var checkResults = batch.Select(item => new CheckResult
         {
-            return new FlushResult(
-                PersistDurationMs: 0,
-                AssignmentEnqueuedCount: 0,
-                LastAssignmentsEnqueuedAtUtc: null);
-        }
-
-        var assignmentIdPredicate = BuildAssignmentIdPredicate(assignmentIds);
-        var assignmentContextRows = await dbContext.MonitorAssignments.AsNoTracking()
-            .Where(assignmentIdPredicate)
-            .Select(x => new
-            {
-                x.AssignmentId,
-                x.AgentId,
-                x.EndpointId
-            })
-            .ToArrayAsync(cancellationToken);
-
-        var assignmentContexts = assignmentContextRows
-            .ToDictionary(x => x.AssignmentId, StringComparer.Ordinal);
-
-        var checkResults = new List<CheckResult>(batch.Count);
-        var missingAssignmentIds = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var item in batch)
-        {
-            if (!assignmentContexts.TryGetValue(item.AssignmentId, out var assignmentContext))
-            {
-                missingAssignmentIds.Add(item.AssignmentId);
-                continue;
-            }
-
-            checkResults.Add(new CheckResult
-            {
-                // AssignmentId is the source-of-truth identity for raw rows.
-                // AgentId/EndpointId are compatibility fields until Phase 2 schema slimming.
-                CheckResultId = item.CheckResultId,
-                AssignmentId = item.AssignmentId,
-                AgentId = assignmentContext.AgentId,
-                EndpointId = assignmentContext.EndpointId,
-                CheckedAtUtc = item.CheckedAtUtc,
-                Success = item.Success,
-                RoundTripMs = item.RoundTripMs,
-                ErrorCode = item.ErrorCode,
-                ErrorMessage = item.ErrorMessage,
-                ReceivedAtUtc = item.ReceivedAtUtc,
-                BatchId = item.BatchId
-            });
-        }
-
-        if (missingAssignmentIds.Count > 0)
-        {
-            _logger.LogWarning(
-                "Buffered raw result flush skipped {SkippedCount} rows due to missing assignment metadata. Missing assignment IDs: {MissingAssignmentIds}.",
-                batch.Count - checkResults.Count,
-                string.Join(", ", missingAssignmentIds.OrderBy(x => x, StringComparer.Ordinal)));
-        }
-
-        if (checkResults.Count == 0)
-        {
-            return new FlushResult(
-                PersistDurationMs: 0,
-                AssignmentEnqueuedCount: 0,
-                LastAssignmentsEnqueuedAtUtc: null);
-        }
+            // AssignmentId is the source-of-truth identity for raw rows.
+            // AgentId/EndpointId are compatibility fields until Phase 2 schema slimming.
+            CheckResultId = item.CheckResultId,
+            AssignmentId = item.AssignmentId,
+            AgentId = item.AgentId,
+            EndpointId = item.EndpointId,
+            CheckedAtUtc = item.CheckedAtUtc,
+            Success = item.Success,
+            RoundTripMs = item.RoundTripMs,
+            ErrorCode = item.ErrorCode,
+            ErrorMessage = item.ErrorMessage,
+            ReceivedAtUtc = item.ReceivedAtUtc,
+            BatchId = item.BatchId
+        }).ToArray();
 
         var persistStartedAtUtc = DateTimeOffset.UtcNow;
         dbContext.CheckResults.AddRange(checkResults);
@@ -242,35 +185,16 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
 
         _logger.LogInformation(
             "Buffered result flush persisted {PersistedCount} raw check results across {AssignmentCount} assignments. Enqueued {EnqueuedAssignments} assignments for downstream processing ({CoalescedDuplicates} coalesced duplicates).",
-            checkResults.Count,
+            checkResults.Length,
             affectedAssignmentIds.Length,
             enqueueResult.EnqueuedCount,
             enqueueResult.CoalescedDuplicateCount);
 
         return new FlushResult(
+            PersistedCount: checkResults.Length,
             PersistDurationMs: persistDurationMs,
             AssignmentEnqueuedCount: enqueueResult.EnqueuedCount,
             LastAssignmentsEnqueuedAtUtc: enqueueResult.EnqueuedCount > 0 ? enqueueTimeUtc : null);
     }
-
-    private static Expression<Func<MonitorAssignment, bool>> BuildAssignmentIdPredicate(IReadOnlyList<string> assignmentIds)
-    {
-        var assignmentParameter = Expression.Parameter(typeof(MonitorAssignment), "assignment");
-        var assignmentIdProperty = Expression.Property(assignmentParameter, nameof(MonitorAssignment.AssignmentId));
-        Expression? predicateBody = null;
-
-        foreach (var assignmentId in assignmentIds)
-        {
-            var assignmentIdConstant = Expression.Constant(assignmentId, typeof(string));
-            var equalsExpression = Expression.Equal(assignmentIdProperty, assignmentIdConstant);
-            predicateBody = predicateBody is null
-                ? equalsExpression
-                : Expression.OrElse(predicateBody, equalsExpression);
-        }
-
-        predicateBody ??= Expression.Constant(false);
-        return Expression.Lambda<Func<MonitorAssignment, bool>>(predicateBody, assignmentParameter);
-    }
-
-    private sealed record FlushResult(long PersistDurationMs, int AssignmentEnqueuedCount, DateTimeOffset? LastAssignmentsEnqueuedAtUtc);
+    private sealed record FlushResult(int PersistedCount, long PersistDurationMs, int AssignmentEnqueuedCount, DateTimeOffset? LastAssignmentsEnqueuedAtUtc);
 }
