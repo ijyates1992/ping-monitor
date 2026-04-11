@@ -153,12 +153,8 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
 
         var checkResults = batch.Select(item => new CheckResult
         {
-            // AssignmentId is the source-of-truth identity for raw rows.
-            // AgentId/EndpointId are compatibility fields until Phase 2 schema slimming.
             CheckResultId = item.CheckResultId,
             AssignmentId = item.AssignmentId,
-            AgentId = item.AgentId,
-            EndpointId = item.EndpointId,
             CheckedAtUtc = item.CheckedAtUtc,
             Success = item.Success,
             RoundTripMs = item.RoundTripMs,

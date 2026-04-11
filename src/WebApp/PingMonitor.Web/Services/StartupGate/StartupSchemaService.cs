@@ -163,6 +163,18 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "LastSuccessfulCheckUtc",
         "UpdatedAtUtc"
     ];
+    private static readonly string[] RequiredCheckResultsColumns =
+    [
+        "CheckResultId",
+        "AssignmentId",
+        "CheckedAtUtc",
+        "Success",
+        "RoundTripMs",
+        "ErrorCode",
+        "ErrorMessage",
+        "ReceivedAtUtc",
+        "BatchId"
+    ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
@@ -264,6 +276,23 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"AssignmentMetrics24h table is missing required columns: {string.Join(", ", missingAssignmentMetrics24hColumns)}.");
+            return status;
+        }
+
+        var missingCheckResultsColumns = await GetMissingCheckResultsColumnsAsync(connection, cancellationToken);
+        if (missingCheckResultsColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"CheckResults table is missing required columns: {string.Join(", ", missingCheckResultsColumns)}.");
+            return status;
+        }
+
+        var hasLegacyCheckResultsAgentId = await HasCheckResultsColumnAsync(connection, "AgentId", cancellationToken);
+        var hasLegacyCheckResultsEndpointId = await HasCheckResultsColumnAsync(connection, "EndpointId", cancellationToken);
+        if (hasLegacyCheckResultsAgentId || hasLegacyCheckResultsEndpointId)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add("CheckResults table still contains legacy compatibility columns (AgentId and/or EndpointId). Apply schema upgrade to complete Phase 2 normalization.");
             return status;
         }
 
@@ -698,6 +727,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
+        await EnsureCheckResultsNormalizedSchemaAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }
@@ -717,6 +747,45 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             "IX_StateTransitions_AssignmentId_TransitionAtUtc",
             "CREATE INDEX `IX_StateTransitions_AssignmentId_TransitionAtUtc` ON `StateTransitions` (`AssignmentId`, `TransitionAtUtc`);",
             cancellationToken);
+    }
+
+    private static async Task EnsureCheckResultsNormalizedSchemaAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (await HasCheckResultsIndexAsync(connection, "IX_CheckResults_AgentId_BatchId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `CheckResults`
+                DROP INDEX `IX_CheckResults_AgentId_BatchId`;
+                """,
+                cancellationToken);
+        }
+
+        if (await HasCheckResultsColumnAsync(connection, "AgentId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `CheckResults`
+                DROP COLUMN `AgentId`;
+                """,
+                cancellationToken);
+        }
+
+        if (await HasCheckResultsColumnAsync(connection, "EndpointId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `CheckResults`
+                DROP COLUMN `EndpointId`;
+                """,
+                cancellationToken);
+        }
     }
 
     private static async Task EnsureIndexExistsAsync(
@@ -872,6 +941,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
 
         return RequiredAssignmentMetrics24hColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
+    }
+
+    private static async Task<string[]> GetMissingCheckResultsColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'CheckResults';
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return RequiredCheckResultsColumns
             .Where(column => !existingColumns.Contains(column))
             .ToArray();
     }
@@ -1548,6 +1639,46 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         command.Parameters.Add(parameter);
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+    private static async Task<bool> HasCheckResultsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'CheckResults'
+              AND column_name = @columnName;
+            """;
+
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        var count = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), System.Globalization.CultureInfo.InvariantCulture);
+        return count > 0;
+    }
+
+    private static async Task<bool> HasCheckResultsIndexAsync(System.Data.Common.DbConnection connection, string indexName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = 'CheckResults'
+              AND index_name = @indexName;
+            """;
+
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@indexName";
+        parameter.Value = indexName;
+        command.Parameters.Add(parameter);
+
+        var count = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), System.Globalization.CultureInfo.InvariantCulture);
+        return count > 0;
     }
 
     private static async Task<bool> HasEndpointDependencyColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)

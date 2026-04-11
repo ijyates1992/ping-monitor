@@ -4,11 +4,7 @@ public sealed class CheckResult
 {
     public string CheckResultId { get; set; } = string.Empty;
 
-    // AssignmentId is the authoritative identity for raw result ownership.
-    // AgentId/EndpointId remain compatibility columns until Phase 2 schema slimming.
     public string AssignmentId { get; set; } = string.Empty;
-    public string AgentId { get; set; } = string.Empty;
-    public string EndpointId { get; set; } = string.Empty;
     public DateTimeOffset CheckedAtUtc { get; set; }
     public bool Success { get; set; }
     public int? RoundTripMs { get; set; }

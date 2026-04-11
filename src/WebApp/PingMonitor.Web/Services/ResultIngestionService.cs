@@ -122,8 +122,6 @@ internal sealed class ResultIngestionService : IResultIngestionService
                 {
                     CheckResultId = Guid.NewGuid().ToString(),
                     AssignmentId = assignment.AssignmentId,
-                    AgentId = agent.AgentId,
-                    EndpointId = assignment.EndpointId,
                     CheckedAtUtc = result.CheckedAtUtc,
                     Success = result.Success,
                     RoundTripMs = result.RoundTripMs,
@@ -156,8 +154,6 @@ internal sealed class ResultIngestionService : IResultIngestionService
             {
                 CheckResultId = x.CheckResultId,
                 AssignmentId = x.AssignmentId,
-                AgentId = x.AgentId,
-                EndpointId = x.EndpointId,
                 CheckedAtUtc = x.CheckedAtUtc,
                 Success = x.Success,
                 RoundTripMs = x.RoundTripMs,
