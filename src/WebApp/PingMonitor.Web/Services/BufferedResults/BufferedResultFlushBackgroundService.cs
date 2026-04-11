@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
@@ -158,8 +159,17 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
+        if (assignmentIds.Length == 0)
+        {
+            return new FlushResult(
+                PersistDurationMs: 0,
+                AssignmentEnqueuedCount: 0,
+                LastAssignmentsEnqueuedAtUtc: null);
+        }
+
+        var assignmentIdPredicate = BuildAssignmentIdPredicate(assignmentIds);
         var assignmentContextRows = await dbContext.MonitorAssignments.AsNoTracking()
-            .Where(x => assignmentIds.Contains(x.AssignmentId))
+            .Where(assignmentIdPredicate)
             .Select(x => new
             {
                 x.AssignmentId,
@@ -241,6 +251,25 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
             PersistDurationMs: persistDurationMs,
             AssignmentEnqueuedCount: enqueueResult.EnqueuedCount,
             LastAssignmentsEnqueuedAtUtc: enqueueResult.EnqueuedCount > 0 ? enqueueTimeUtc : null);
+    }
+
+    private static Expression<Func<MonitorAssignment, bool>> BuildAssignmentIdPredicate(IReadOnlyList<string> assignmentIds)
+    {
+        var assignmentParameter = Expression.Parameter(typeof(MonitorAssignment), "assignment");
+        var assignmentIdProperty = Expression.Property(assignmentParameter, nameof(MonitorAssignment.AssignmentId));
+        Expression? predicateBody = null;
+
+        foreach (var assignmentId in assignmentIds)
+        {
+            var assignmentIdConstant = Expression.Constant(assignmentId, typeof(string));
+            var equalsExpression = Expression.Equal(assignmentIdProperty, assignmentIdConstant);
+            predicateBody = predicateBody is null
+                ? equalsExpression
+                : Expression.OrElse(predicateBody, equalsExpression);
+        }
+
+        predicateBody ??= Expression.Constant(false);
+        return Expression.Lambda<Func<MonitorAssignment, bool>>(predicateBody, assignmentParameter);
     }
 
     private sealed record FlushResult(long PersistDurationMs, int AssignmentEnqueuedCount, DateTimeOffset? LastAssignmentsEnqueuedAtUtc);
