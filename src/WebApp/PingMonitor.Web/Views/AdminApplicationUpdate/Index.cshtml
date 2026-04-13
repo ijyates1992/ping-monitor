@@ -1,0 +1,129 @@
+@model PingMonitor.Web.ViewModels.Admin.ApplicationUpdatePageViewModel
+@using PingMonitor.Web.Services.ApplicationUpdate
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Application update check</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 860px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .muted { color: var(--muted); }
+        .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .6rem .9rem; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: #fff; text-decoration: none; font-weight: 600; }
+        .button-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .6rem .9rem; border: 1px solid #1f6feb; border-radius: 10px; color: #fff; background: #1f6feb; font-weight: 700; }
+        .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:.75rem; }
+        .metric { border: 1px solid var(--border); border-radius: 10px; padding: .7rem; }
+        .label { font-size: .85rem; color: var(--muted); }
+        .value { margin-top: .25rem; font-weight: 700; }
+        .status { font-weight: 700; }
+        .status-ok { color: #0f766e; }
+        .status-warn { color: #b45309; }
+        .status-fail { color: #b42318; }
+    </style>
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Application update check (Stage 1)</h1>
+            <p class="muted">Manual admin-only release detection. This page only checks current version vs latest GitHub release metadata.</p>
+            <p class="muted">Repository source: <strong>@Model.RepositoryDisplayName</strong></p>
+            <form method="post" action="/admin/application-update/check">
+                @Html.AntiForgeryToken()
+                <button class="button-primary" type="submit" @(Model.ChecksEnabled ? null : "disabled")>Check now</button>
+                <a class="button-secondary" href="/admin">Back to admin settings</a>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>Current status</h2>
+            <p class="status @GetStatusClass(Model.Result.State)">@GetStatusLabel(Model.Result.State)</p>
+            @if (!string.IsNullOrWhiteSpace(Model.Result.ErrorMessage))
+            {
+                <p class="muted">@Model.Result.ErrorMessage</p>
+            }
+
+            <div class="grid">
+                <div class="metric">
+                    <div class="label">Installed version (raw)</div>
+                    <div class="value">@Model.Result.CurrentVersionRaw</div>
+                </div>
+                <div class="metric">
+                    <div class="label">Installed version (normalized)</div>
+                    <div class="value">@(Model.Result.CurrentVersionNormalized ?? "Unknown")</div>
+                </div>
+                <div class="metric">
+                    <div class="label">Latest release tag (raw)</div>
+                    <div class="value">@(Model.Result.LatestVersionRaw ?? "Not checked")</div>
+                </div>
+                <div class="metric">
+                    <div class="label">Latest release tag (normalized)</div>
+                    <div class="value">@(Model.Result.LatestVersionNormalized ?? "Unknown")</div>
+                </div>
+                <div class="metric">
+                    <div class="label">Release title</div>
+                    <div class="value">@(string.IsNullOrWhiteSpace(Model.Result.ReleaseName) ? "n/a" : Model.Result.ReleaseName)</div>
+                </div>
+                <div class="metric">
+                    <div class="label">Published (UTC)</div>
+                    <div class="value">@(Model.Result.ReleasePublishedAtUtc?.ToString("yyyy-MM-dd HH:mm:ss") ?? "n/a")</div>
+                </div>
+                <div class="metric">
+                    <div class="label">Prerelease</div>
+                    <div class="value">@(Model.Result.ReleaseIsPrerelease is null ? "n/a" : (Model.Result.ReleaseIsPrerelease.Value ? "Yes" : "No"))</div>
+                </div>
+                <div class="metric">
+                    <div class="label">Release URL</div>
+                    <div class="value">
+                        @if (string.IsNullOrWhiteSpace(Model.Result.ReleaseUrl))
+                        {
+                            @:n/a
+                        }
+                        else
+                        {
+                            <a href="@Model.Result.ReleaseUrl" target="_blank" rel="noreferrer">View release</a>
+                        }
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</main>
+</body>
+</html>
+
+@functions {
+    private static string GetStatusLabel(ApplicationUpdateCheckState state)
+    {
+        return state switch
+        {
+            ApplicationUpdateCheckState.CheckDisabled => "Update check disabled",
+            ApplicationUpdateCheckState.CheckNotPerformed => "Check not performed",
+            ApplicationUpdateCheckState.CurrentVersionUnknown => "Installed version unknown/uncomparable",
+            ApplicationUpdateCheckState.LatestVersionUnknown => "Latest release version unknown/uncomparable",
+            ApplicationUpdateCheckState.UpdateAvailable => "Update available",
+            ApplicationUpdateCheckState.AlreadyUpToDate => "Already up to date",
+            ApplicationUpdateCheckState.CheckFailed => "Unable to check",
+            _ => "Unknown"
+        };
+    }
+
+    private static string GetStatusClass(ApplicationUpdateCheckState state)
+    {
+        return state switch
+        {
+            ApplicationUpdateCheckState.UpdateAvailable => "status status-warn",
+            ApplicationUpdateCheckState.AlreadyUpToDate => "status status-ok",
+            ApplicationUpdateCheckState.CheckNotPerformed => "status",
+            ApplicationUpdateCheckState.CheckDisabled => "status",
+            _ => "status status-fail"
+        };
+    }
+}

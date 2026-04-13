@@ -27,6 +27,7 @@ using PingMonitor.Web.Services.SmtpNotifications;
 using PingMonitor.Web.Services.BrowserNotifications;
 using PingMonitor.Web.Services.DatabaseStatus;
 using PingMonitor.Web.Services.ApplicationMetadata;
+using PingMonitor.Web.Services.ApplicationUpdate;
 using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.Telegram;
 using PingMonitor.Web.Support;
@@ -47,6 +48,7 @@ builder.Services.Configure<BackupOptions>(builder.Configuration.GetSection(Backu
 builder.Services.Configure<ResultBufferOptions>(builder.Configuration.GetSection(ResultBufferOptions.SectionName));
 builder.Services.Configure<DatabaseMaintenanceOptions>(builder.Configuration.GetSection(DatabaseMaintenanceOptions.SectionName));
 builder.Services.Configure<ApplicationMetadataOptions>(builder.Configuration.GetSection(ApplicationMetadataOptions.SectionName));
+builder.Services.Configure<ApplicationUpdateOptions>(builder.Configuration.GetSection(ApplicationUpdateOptions.SectionName));
 
 builder.Services.AddSingleton<IDbContextFactory<PingMonitorDbContext>, DynamicPingMonitorDbContextFactory>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<PingMonitorDbContext>>().CreateDbContext());
@@ -190,6 +192,12 @@ builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
+builder.Services.AddHttpClient<IApplicationUpdateReleaseLookupService, ApplicationUpdateReleaseLookupService>(client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("PingMonitor.Web/1.0");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddScoped<IApplicationUpdateCheckService, ApplicationUpdateCheckService>();
 builder.Services.AddScoped<IDatabaseStatusQueryService, DatabaseStatusQueryService>();
 builder.Services.AddScoped<IDatabaseMaintenanceService, DatabaseMaintenanceService>();
 builder.Services.AddSingleton<IDatabaseMaintenanceProgressTracker, DatabaseMaintenanceProgressTracker>();
