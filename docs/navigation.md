@@ -19,9 +19,12 @@ The authenticated top navigation uses dropdown menus with this structure:
 - **Admin** (Admin only)
   - Security settings → `/admin/security#security-settings`
   - Configuration backups → `/admin/backups`
-  - DB maintenance → `/admin`
+  - Admin settings → `/admin`
+  - DB status → `/admin/database/status`
+  - DB maintenance → `/admin/database/maintenance`
   - Notification infrastructure settings → `/admin/notification-infrastructure-settings`
   - Default endpoint values → `/admin/default-endpoint-values`
+  - Application updater → `/admin/application-updater`
   - User management → `/users`
 - **Profile**
   - My profile → `/profile`
