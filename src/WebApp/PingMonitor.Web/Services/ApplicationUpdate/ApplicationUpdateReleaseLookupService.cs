@@ -45,14 +45,13 @@ public sealed class ApplicationUpdateReleaseLookupService : IApplicationUpdateRe
             var (latestReleasePayload, latestReleaseStatusCode) = await TryGetReleasePayloadAsync(baseUri, latestReleasePath, cancellationToken);
             if (latestReleasePayload is null && latestReleaseStatusCode == 404)
             {
-                var releasesPath = $"/repos/{Uri.EscapeDataString(_options.Owner)}/{Uri.EscapeDataString(_options.Repository)}/releases?per_page=20";
-                var (allReleasesPayload, allReleasesStatusCode) = await TryGetReleaseListPayloadAsync(baseUri, releasesPath, cancellationToken);
-                if (allReleasesPayload is null)
+                var (fallbackReleasePayload, fallbackStatusCode) = await TryGetLatestSupportedReleaseFromListAsync(baseUri, cancellationToken);
+                if (fallbackStatusCode is not null)
                 {
-                    return (null, $"GitHub release lookup failed with HTTP {allReleasesStatusCode}.");
+                    return (null, $"GitHub release lookup failed with HTTP {fallbackStatusCode}.");
                 }
 
-                latestReleasePayload = ResolveLatestSupportedRelease(allReleasesPayload);
+                latestReleasePayload = fallbackReleasePayload;
                 if (latestReleasePayload is null)
                 {
                     return (null, _options.IncludePrerelease
@@ -117,6 +116,35 @@ public sealed class ApplicationUpdateReleaseLookupService : IApplicationUpdateRe
         await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
         var payload = await JsonSerializer.DeserializeAsync<GitHubLatestReleaseResponse>(responseStream, SerializerOptions, cancellationToken);
         return (payload, (int)response.StatusCode);
+    }
+
+
+    private async Task<(GitHubLatestReleaseResponse? Payload, int? ErrorStatusCode)> TryGetLatestSupportedReleaseFromListAsync(
+        Uri baseUri,
+        CancellationToken cancellationToken)
+    {
+        const int perPage = 20;
+
+        for (var page = 1; ; page++)
+        {
+            var releasesPath = $"/repos/{Uri.EscapeDataString(_options.Owner)}/{Uri.EscapeDataString(_options.Repository)}/releases?per_page={perPage}&page={page}";
+            var (allReleasesPayload, allReleasesStatusCode) = await TryGetReleaseListPayloadAsync(baseUri, releasesPath, cancellationToken);
+            if (allReleasesPayload is null)
+            {
+                return (null, allReleasesStatusCode);
+            }
+
+            if (allReleasesPayload.Count == 0)
+            {
+                return (null, null);
+            }
+
+            var latestSupportedRelease = ResolveLatestSupportedRelease(allReleasesPayload);
+            if (latestSupportedRelease is not null)
+            {
+                return (latestSupportedRelease, null);
+            }
+        }
     }
 
     private async Task<(IReadOnlyList<GitHubLatestReleaseResponse>? Payload, int StatusCode)> TryGetReleaseListPayloadAsync(
