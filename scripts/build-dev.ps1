@@ -107,14 +107,19 @@ if (-not $dotnetCommand) {
 $gitCommand = Get-Command git -ErrorAction SilentlyContinue
 $commitHash = $null
 if ($gitCommand) {
-    $gitStatus = & $gitCommand.Source status --porcelain
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($gitStatus -join ''))) {
-        Write-Warning 'Git working tree is not clean. Dev artifacts will include uncommitted changes.'
-    }
+    $isGitRepository = & $gitCommand.Source rev-parse --is-inside-work-tree 2>$null
+    if ($LASTEXITCODE -eq 0 -and $isGitRepository -eq 'true') {
+        $gitStatus = & $gitCommand.Source status --porcelain
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($gitStatus -join ''))) {
+            Write-Warning 'Git working tree is not clean. Dev artifacts will include uncommitted changes.'
+        }
 
-    $resolvedCommitHash = & $gitCommand.Source rev-parse --short=12 HEAD
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($resolvedCommitHash)) {
-        $commitHash = $resolvedCommitHash.Trim()
+        $resolvedCommitHash = & $gitCommand.Source rev-parse --short=12 HEAD
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($resolvedCommitHash)) {
+            $commitHash = $resolvedCommitHash.Trim()
+        }
+    } else {
+        Write-Warning 'Current directory is not a Git repository. Commit hash metadata will be unavailable.'
     }
 }
 
