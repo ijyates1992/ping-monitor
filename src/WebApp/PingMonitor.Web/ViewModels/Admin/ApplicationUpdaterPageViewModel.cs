@@ -1,0 +1,19 @@
+using PingMonitor.Web.Services.ApplicationUpdater;
+
+namespace PingMonitor.Web.ViewModels.Admin;
+
+public sealed class ApplicationUpdaterPageViewModel
+{
+    public string CurrentVersion { get; init; } = string.Empty;
+    public bool AllowPreviewReleases { get; set; }
+    public bool UpdateChecksEnabled { get; init; }
+    public string RepositoryOwner { get; init; } = string.Empty;
+    public string RepositoryName { get; init; } = string.Empty;
+    public ApplicationUpdateCheckState State { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public string? LatestVersion { get; init; }
+    public string? LatestReleaseName { get; init; }
+    public bool? LatestIsPrerelease { get; init; }
+    public string? LatestReleaseUrl { get; init; }
+    public DateTimeOffset? LatestPublishedAtUtc { get; init; }
+}
