@@ -39,42 +39,55 @@ public sealed class ApplicationUpdateReleaseLookupService : IApplicationUpdateRe
             return (null, "Update check configuration is invalid. Configure a valid ApplicationUpdate:GitHubApiBaseUrl.");
         }
 
-        var requestUri = new Uri(baseUri, $"/repos/{Uri.EscapeDataString(_options.Owner)}/{Uri.EscapeDataString(_options.Repository)}/releases/latest");
-        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-
         try
         {
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var latestReleasePath = $"/repos/{Uri.EscapeDataString(_options.Owner)}/{Uri.EscapeDataString(_options.Repository)}/releases/latest";
+            var (latestReleasePayload, latestReleaseStatusCode) = await TryGetReleasePayloadAsync(baseUri, latestReleasePath, cancellationToken);
+            if (latestReleasePayload is null && latestReleaseStatusCode == 404)
             {
-                return (null, $"GitHub release lookup failed with HTTP {(int)response.StatusCode}.");
+                var releasesPath = $"/repos/{Uri.EscapeDataString(_options.Owner)}/{Uri.EscapeDataString(_options.Repository)}/releases?per_page=20";
+                var (allReleasesPayload, allReleasesStatusCode) = await TryGetReleaseListPayloadAsync(baseUri, releasesPath, cancellationToken);
+                if (allReleasesPayload is null)
+                {
+                    return (null, $"GitHub release lookup failed with HTTP {allReleasesStatusCode}.");
+                }
+
+                latestReleasePayload = ResolveLatestSupportedRelease(allReleasesPayload);
+                if (latestReleasePayload is null)
+                {
+                    return (null, _options.IncludePrerelease
+                        ? "GitHub release lookup did not return any non-draft releases."
+                        : "GitHub release lookup did not return any non-draft, non-prerelease releases.");
+                }
             }
 
-            await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            var payload = await JsonSerializer.DeserializeAsync<GitHubLatestReleaseResponse>(responseStream, SerializerOptions, cancellationToken);
-            if (payload is null || string.IsNullOrWhiteSpace(payload.TagName))
+            if (latestReleasePayload is null)
+            {
+                return (null, $"GitHub release lookup failed with HTTP {latestReleaseStatusCode}.");
+            }
+
+            if (string.IsNullOrWhiteSpace(latestReleasePayload.TagName))
             {
                 return (null, "GitHub release response did not include a valid tag.");
             }
 
-            if (payload.Draft)
+            if (latestReleasePayload.Draft)
             {
                 return (null, "GitHub latest release lookup returned a draft release, which is unsupported.");
             }
 
-            if (payload.Prerelease && !_options.IncludePrerelease)
+            if (latestReleasePayload.Prerelease && !_options.IncludePrerelease)
             {
                 return (null, "GitHub latest release is marked prerelease and prerelease checks are disabled.");
             }
 
             return (new ApplicationReleaseMetadata
             {
-                TagName = payload.TagName.Trim(),
-                Name = payload.Name?.Trim() ?? string.Empty,
-                PublishedAtUtc = payload.PublishedAt,
-                IsPrerelease = payload.Prerelease,
-                HtmlUrl = payload.HtmlUrl?.Trim() ?? string.Empty
+                TagName = latestReleasePayload.TagName.Trim(),
+                Name = latestReleasePayload.Name?.Trim() ?? string.Empty,
+                PublishedAtUtc = latestReleasePayload.PublishedAt,
+                IsPrerelease = latestReleasePayload.Prerelease,
+                HtmlUrl = latestReleasePayload.HtmlUrl?.Trim() ?? string.Empty
             }, null);
         }
         catch (OperationCanceledException)
@@ -85,6 +98,64 @@ public sealed class ApplicationUpdateReleaseLookupService : IApplicationUpdateRe
         {
             return (null, "GitHub release lookup failed due to a network or parsing error.");
         }
+    }
+
+    private async Task<(GitHubLatestReleaseResponse? Payload, int StatusCode)> TryGetReleasePayloadAsync(
+        Uri baseUri,
+        string relativePath,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUri, relativePath));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return (null, (int)response.StatusCode);
+        }
+
+        await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<GitHubLatestReleaseResponse>(responseStream, SerializerOptions, cancellationToken);
+        return (payload, (int)response.StatusCode);
+    }
+
+    private async Task<(IReadOnlyList<GitHubLatestReleaseResponse>? Payload, int StatusCode)> TryGetReleaseListPayloadAsync(
+        Uri baseUri,
+        string relativePath,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUri, relativePath));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return (null, (int)response.StatusCode);
+        }
+
+        await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<List<GitHubLatestReleaseResponse>>(responseStream, SerializerOptions, cancellationToken);
+        return (payload, (int)response.StatusCode);
+    }
+
+    private GitHubLatestReleaseResponse? ResolveLatestSupportedRelease(IReadOnlyList<GitHubLatestReleaseResponse> releases)
+    {
+        foreach (var release in releases)
+        {
+            if (release.Draft)
+            {
+                continue;
+            }
+
+            if (release.Prerelease && !_options.IncludePrerelease)
+            {
+                continue;
+            }
+
+            return release;
+        }
+
+        return null;
     }
 
     private sealed class GitHubLatestReleaseResponse
