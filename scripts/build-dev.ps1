@@ -107,14 +107,18 @@ if (-not $dotnetCommand) {
 $gitCommand = Get-Command git -ErrorAction SilentlyContinue
 $commitHash = $null
 if ($gitCommand) {
-    $gitStatus = & $gitCommand.Source status --porcelain
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($gitStatus -join ''))) {
-        Write-Warning 'Git working tree is not clean. Dev artifacts will include uncommitted changes.'
-    }
+    & $gitCommand.Source rev-parse --is-inside-work-tree *> $null
+    $isGitWorkTree = $LASTEXITCODE -eq 0
+    if ($isGitWorkTree) {
+        $gitStatus = & $gitCommand.Source status --porcelain
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($gitStatus -join ''))) {
+            Write-Warning 'Git working tree is not clean. Dev artifacts will include uncommitted changes.'
+        }
 
-    $resolvedCommitHash = & $gitCommand.Source rev-parse --short=12 HEAD
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($resolvedCommitHash)) {
-        $commitHash = $resolvedCommitHash.Trim()
+        $resolvedCommitHash = & $gitCommand.Source rev-parse --short=12 HEAD
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($resolvedCommitHash)) {
+            $commitHash = $resolvedCommitHash.Trim()
+        }
     }
 }
 
