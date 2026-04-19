@@ -1,7 +1,3 @@
-using System.Net;
-using System.Net.Http;
-using System.Text;
-using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.ApplicationMetadata;
 using PingMonitor.Web.Services.ApplicationUpdater;
@@ -40,12 +36,14 @@ public sealed class ApplicationUpdaterTests
     {
         var service = BuildService(
             "V0.1.0",
-            """
-            [
-              { "tag_name": "V0.2.0", "name": "Preview", "draft": false, "prerelease": true, "published_at": "2026-04-15T00:00:00Z", "html_url": "https://example/pre" },
-              { "tag_name": "V0.1.1", "name": "Stable", "draft": false, "prerelease": false, "published_at": "2026-04-10T00:00:00Z", "html_url": "https://example/stable" }
-            ]
-            """);
+            new GitHubReleaseSummary
+            {
+                TagName = "V0.1.1",
+                Name = "Stable",
+                IsPrerelease = false,
+                PublishedAtUtc = DateTimeOffset.Parse("2026-04-10T00:00:00Z"),
+                HtmlUrl = "https://example/stable"
+            });
 
         var result = await service.CheckForUpdatesAsync(allowPreviewReleases: false, CancellationToken.None);
 
@@ -55,34 +53,18 @@ public sealed class ApplicationUpdaterTests
     }
 
     [Fact]
-    public async Task CheckForUpdatesAsync_UsesPrerelease_WhenPreviewEnabled()
-    {
-        var service = BuildService(
-            "V0.1.0",
-            """
-            [
-              { "tag_name": "V0.2.0", "name": "Preview", "draft": false, "prerelease": true, "published_at": "2026-04-15T00:00:00Z", "html_url": "https://example/pre" },
-              { "tag_name": "V0.1.1", "name": "Stable", "draft": false, "prerelease": false, "published_at": "2026-04-10T00:00:00Z", "html_url": "https://example/stable" }
-            ]
-            """);
-
-        var result = await service.CheckForUpdatesAsync(allowPreviewReleases: true, CancellationToken.None);
-
-        Assert.Equal(ApplicationUpdateCheckState.UpdateAvailable, result.State);
-        Assert.Equal("V0.2.0", result.LatestApplicableRelease?.TagName);
-        Assert.True(result.LatestApplicableRelease?.IsPrerelease);
-    }
-
-    [Fact]
     public async Task CheckForUpdatesAsync_SkipsComparison_ForDevBuild()
     {
         var service = BuildService(
             "DEV-05.04.26-18:42",
-            """
-            [
-              { "tag_name": "V0.1.1", "name": "Stable", "draft": false, "prerelease": false, "published_at": "2026-04-10T00:00:00Z", "html_url": "https://example/stable" }
-            ]
-            """);
+            new GitHubReleaseSummary
+            {
+                TagName = "V0.1.1",
+                Name = "Stable",
+                IsPrerelease = false,
+                PublishedAtUtc = DateTimeOffset.Parse("2026-04-10T00:00:00Z"),
+                HtmlUrl = "https://example/stable"
+            });
 
         var result = await service.CheckForUpdatesAsync(allowPreviewReleases: false, CancellationToken.None);
 
@@ -95,18 +77,21 @@ public sealed class ApplicationUpdaterTests
     {
         var service = BuildService(
             "V0.1.0",
-            """
-            [
-              { "tag_name": "release-foo", "name": "Bad", "draft": false, "prerelease": false, "published_at": "2026-04-10T00:00:00Z", "html_url": "https://example/bad" }
-            ]
-            """);
+            new GitHubReleaseSummary
+            {
+                TagName = "release-foo",
+                Name = "Bad",
+                IsPrerelease = false,
+                PublishedAtUtc = DateTimeOffset.Parse("2026-04-10T00:00:00Z"),
+                HtmlUrl = "https://example/bad"
+            });
 
         var result = await service.CheckForUpdatesAsync(allowPreviewReleases: false, CancellationToken.None);
 
         Assert.Equal(ApplicationUpdateCheckState.LatestVersionUnknown, result.State);
     }
 
-    private static ApplicationUpdateDetectionService BuildService(string currentVersion, string responseBody)
+    private static ApplicationUpdateDetectionService BuildService(string currentVersion, GitHubReleaseSummary? release)
     {
         var metadataProvider = new FakeMetadataProvider(currentVersion);
         var options = Microsoft.Extensions.Options.Options.Create(new ApplicationUpdaterOptions
@@ -118,13 +103,7 @@ public sealed class ApplicationUpdaterTests
             AllowPreviewReleases = false
         });
 
-        var handler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
-        });
-
-        var httpClientFactory = new StubHttpClientFactory(new HttpClient(handler));
-        return new ApplicationUpdateDetectionService(metadataProvider, httpClientFactory, options);
+        return new ApplicationUpdateDetectionService(metadataProvider, new FakeReleaseLookupService(release), options);
     }
 
     private sealed class FakeMetadataProvider : IApplicationMetadataProvider
@@ -145,33 +124,18 @@ public sealed class ApplicationUpdaterTests
         }
     }
 
-    private sealed class StubHttpClientFactory : IHttpClientFactory
+    private sealed class FakeReleaseLookupService : IGitHubReleaseLookupService
     {
-        private readonly HttpClient _client;
+        private readonly GitHubReleaseSummary? _release;
 
-        public StubHttpClientFactory(HttpClient client)
+        public FakeReleaseLookupService(GitHubReleaseSummary? release)
         {
-            _client = client;
+            _release = release;
         }
 
-        public HttpClient CreateClient(string name)
+        public Task<GitHubReleaseSummary?> GetLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken)
         {
-            return _client;
-        }
-    }
-
-    private sealed class StubHttpMessageHandler : HttpMessageHandler
-    {
-        private readonly HttpResponseMessage _response;
-
-        public StubHttpMessageHandler(HttpResponseMessage response)
-        {
-            _response = response;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_response);
+            return Task.FromResult(_release);
         }
     }
 }
