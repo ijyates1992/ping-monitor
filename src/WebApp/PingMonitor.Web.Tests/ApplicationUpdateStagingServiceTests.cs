@@ -97,6 +97,124 @@ public sealed class ApplicationUpdateStagingServiceTests
         }
     }
 
+    [Fact]
+    public async Task StageLatestApplicableReleaseAsync_ReusesExistingStage_ForSameRelease()
+    {
+        var tempRoot = CreateTempRoot();
+        try
+        {
+            var zipBytes = Encoding.UTF8.GetBytes("fake-release-zip-content");
+            var checksum = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipBytes));
+            var release = BuildRelease("V1.2.3");
+
+            var handler = new MappingHttpMessageHandler(new Dictionary<string, HttpResponseMessage>
+            {
+                ["https://download/release.zip"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(zipBytes) },
+                ["https://download/SHA256.txt"] = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{checksum}  PingMonitor-V1.2.3-win-x64.zip", Encoding.UTF8, "text/plain")
+                }
+            });
+
+            var service = BuildService(tempRoot, release, handler);
+            var first = await service.StageLatestApplicableReleaseAsync(false, CancellationToken.None);
+            var second = await service.StageLatestApplicableReleaseAsync(false, CancellationToken.None);
+
+            Assert.Equal(ApplicationUpdateStagingStatus.Ready, second.State.Status);
+            Assert.True(second.State.StageOperationWasNoOp);
+            Assert.Equal(first.State.StagedZipPath, second.State.StagedZipPath);
+            Assert.True(File.Exists(second.State.StagedZipPath));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StageLatestApplicableReleaseAsync_ReplacesPreviousStage_ForDifferentRelease()
+    {
+        var tempRoot = CreateTempRoot();
+        try
+        {
+            var releaseA = BuildRelease("V1.2.3");
+            var releaseB = BuildRelease("V1.2.4");
+            var zipA = Encoding.UTF8.GetBytes("zip-a");
+            var zipB = Encoding.UTF8.GetBytes("zip-b");
+            var checksumA = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipA));
+            var checksumB = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipB));
+
+            var handler = new MappingHttpMessageHandler(new Dictionary<string, HttpResponseMessage>
+            {
+                ["https://download/release.zip"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(zipA) },
+                ["https://download/SHA256.txt"] = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{checksumA}  PingMonitor-V1.2.3-win-x64.zip", Encoding.UTF8, "text/plain")
+                }
+            });
+
+            var serviceA = BuildService(tempRoot, releaseA, handler);
+            var first = await serviceA.StageLatestApplicableReleaseAsync(false, CancellationToken.None);
+
+            var handlerB = new MappingHttpMessageHandler(new Dictionary<string, HttpResponseMessage>
+            {
+                ["https://download/release.zip"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(zipB) },
+                ["https://download/SHA256.txt"] = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{checksumB}  PingMonitor-V1.2.4-win-x64.zip", Encoding.UTF8, "text/plain")
+                }
+            });
+
+            var serviceB = BuildService(tempRoot, releaseB, handlerB);
+            var second = await serviceB.StageLatestApplicableReleaseAsync(false, CancellationToken.None);
+
+            Assert.Equal("V1.2.4", second.State.ReleaseTag);
+            Assert.DoesNotContain("V1.2.3", second.State.StagedZipPath!);
+            Assert.False(File.Exists(first.State.StagedZipPath!));
+            Assert.True(File.Exists(second.State.StagedZipPath!));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StageLatestApplicableReleaseAsync_BlocksConcurrentRuns()
+    {
+        var tempRoot = CreateTempRoot();
+        var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var zipBytes = Encoding.UTF8.GetBytes("fake-release-zip-content");
+            var checksum = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipBytes));
+            var release = BuildRelease("V1.2.3");
+            var delayedLookup = new DelayedReleaseLookupService(release, gate.Task);
+            var handler = new MappingHttpMessageHandler(new Dictionary<string, HttpResponseMessage>
+            {
+                ["https://download/release.zip"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(zipBytes) },
+                ["https://download/SHA256.txt"] = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{checksum}  PingMonitor-V1.2.3-win-x64.zip", Encoding.UTF8, "text/plain")
+                }
+            });
+
+            var service = BuildService(tempRoot, delayedLookup, handler);
+            var firstTask = service.StageLatestApplicableReleaseAsync(false, CancellationToken.None);
+            await Task.Delay(50);
+            var second = await service.StageLatestApplicableReleaseAsync(false, CancellationToken.None);
+            gate.SetResult(true);
+            var first = await firstTask;
+
+            Assert.Equal(ApplicationUpdateStagingStatus.StagingBlocked, second.State.Status);
+            Assert.Equal(ApplicationUpdateStagingStatus.Ready, first.State.Status);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static string CreateTempRoot()
     {
         var path = Path.Combine(Path.GetTempPath(), "ping-monitor-stage2-tests", Guid.NewGuid().ToString("N"));
@@ -104,7 +222,29 @@ public sealed class ApplicationUpdateStagingServiceTests
         return path;
     }
 
+    private static GitHubReleaseSummary BuildRelease(string tag)
+    {
+        return new GitHubReleaseSummary
+        {
+            TagName = tag,
+            Name = "Release",
+            IsPrerelease = false,
+            HtmlUrl = "https://example/release",
+            PublishedAtUtc = DateTimeOffset.UtcNow,
+            Assets =
+            [
+                new GitHubReleaseAssetSummary { Name = $"PingMonitor-{tag}-win-x64.zip", BrowserDownloadUrl = "https://download/release.zip" },
+                new GitHubReleaseAssetSummary { Name = "SHA256.txt", BrowserDownloadUrl = "https://download/SHA256.txt" }
+            ]
+        };
+    }
+
     private static ApplicationUpdateStagingService BuildService(string contentRoot, GitHubReleaseSummary release, HttpMessageHandler handler)
+    {
+        return BuildService(contentRoot, new FakeReleaseLookupService(release), handler);
+    }
+
+    private static ApplicationUpdateStagingService BuildService(string contentRoot, IGitHubReleaseLookupService releaseLookupService, HttpMessageHandler handler)
     {
         var options = Microsoft.Extensions.Options.Options.Create(new ApplicationUpdaterOptions
         {
@@ -125,10 +265,28 @@ public sealed class ApplicationUpdateStagingServiceTests
         var httpClientFactory = new StubHttpClientFactory(new HttpClient(handler));
 
         return new ApplicationUpdateStagingService(
-            new FakeReleaseLookupService(release),
+            releaseLookupService,
             stateStore,
             httpClientFactory,
             options);
+    }
+
+    private sealed class DelayedReleaseLookupService : IGitHubReleaseLookupService
+    {
+        private readonly GitHubReleaseSummary _release;
+        private readonly Task _delayTask;
+
+        public DelayedReleaseLookupService(GitHubReleaseSummary release, Task delayTask)
+        {
+            _release = release;
+            _delayTask = delayTask;
+        }
+
+        public async Task<GitHubReleaseSummary?> GetLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken)
+        {
+            await _delayTask.WaitAsync(cancellationToken);
+            return _release;
+        }
     }
 
     private sealed class FakeReleaseLookupService : IGitHubReleaseLookupService
