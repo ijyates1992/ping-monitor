@@ -9,4 +9,8 @@ public sealed class ApplicationUpdaterOptions
     public string GitHubRepository { get; set; } = "ping-monitor";
     public string GitHubApiBaseUrl { get; set; } = "https://api.github.com";
     public bool AllowPreviewReleases { get; set; }
+    public string ReleasePackagePrefix { get; set; } = "PingMonitor";
+    public string RuntimeIdentifier { get; set; } = "win-x64";
+    public string ChecksumAssetName { get; set; } = "SHA256.txt";
+    public string StagingStoragePath { get; set; } = "App_Data/Updater";
 }

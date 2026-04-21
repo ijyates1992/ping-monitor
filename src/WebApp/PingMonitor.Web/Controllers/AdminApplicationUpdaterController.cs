@@ -15,27 +15,34 @@ public sealed class AdminApplicationUpdaterController : Controller
 {
     private readonly IApplicationMetadataProvider _applicationMetadataProvider;
     private readonly IApplicationUpdateDetectionService _applicationUpdateDetectionService;
+    private readonly IApplicationUpdateStagingService _applicationUpdateStagingService;
+    private readonly IApplicationUpdateStagingStateStore _applicationUpdateStagingStateStore;
     private readonly ApplicationUpdaterOptions _updaterOptions;
 
     public AdminApplicationUpdaterController(
         IApplicationMetadataProvider applicationMetadataProvider,
         IApplicationUpdateDetectionService applicationUpdateDetectionService,
+        IApplicationUpdateStagingService applicationUpdateStagingService,
+        IApplicationUpdateStagingStateStore applicationUpdateStagingStateStore,
         IOptions<ApplicationUpdaterOptions> updaterOptions)
     {
         _applicationMetadataProvider = applicationMetadataProvider;
         _applicationUpdateDetectionService = applicationUpdateDetectionService;
+        _applicationUpdateStagingService = applicationUpdateStagingService;
+        _applicationUpdateStagingStateStore = applicationUpdateStagingStateStore;
         _updaterOptions = updaterOptions.Value;
     }
 
     [HttpGet]
-    public IActionResult Index()
+    public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var currentVersion = _applicationMetadataProvider.GetSnapshot().Version;
         var result = _updaterOptions.UpdateChecksEnabled
             ? ApplicationUpdateCheckResult.NotPerformed(currentVersion, _updaterOptions.AllowPreviewReleases)
             : ApplicationUpdateCheckResult.Disabled(currentVersion, _updaterOptions.AllowPreviewReleases);
 
-        return View("Index", ToViewModel(result));
+        var staged = await _applicationUpdateStagingStateStore.ReadAsync(cancellationToken);
+        return View("Index", ToViewModel(result, staged));
     }
 
     [HttpPost("check")]
@@ -43,11 +50,24 @@ public sealed class AdminApplicationUpdaterController : Controller
     public async Task<IActionResult> Check([FromForm] bool allowPreviewReleases, CancellationToken cancellationToken)
     {
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
-        return View("Index", ToViewModel(result));
+        var staged = await _applicationUpdateStagingStateStore.ReadAsync(cancellationToken);
+        return View("Index", ToViewModel(result, staged));
     }
 
-    private ApplicationUpdaterPageViewModel ToViewModel(ApplicationUpdateCheckResult result)
+    [HttpPost("stage")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Stage([FromForm] bool allowPreviewReleases, CancellationToken cancellationToken)
     {
+        await _applicationUpdateStagingService.StageLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
+        var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
+        var staged = await _applicationUpdateStagingStateStore.ReadAsync(cancellationToken);
+        return View("Index", ToViewModel(result, staged));
+    }
+
+    private ApplicationUpdaterPageViewModel ToViewModel(ApplicationUpdateCheckResult result, ApplicationUpdateStagingState? staged)
+    {
+        var decoratedStaged = ApplyLatestComparison(staged, result.LatestApplicableRelease?.TagName);
+
         return new ApplicationUpdaterPageViewModel
         {
             CurrentVersion = result.CurrentVersion,
@@ -61,7 +81,51 @@ public sealed class AdminApplicationUpdaterController : Controller
             LatestReleaseName = result.LatestApplicableRelease?.Name,
             LatestIsPrerelease = result.LatestApplicableRelease?.IsPrerelease,
             LatestReleaseUrl = result.LatestApplicableRelease?.HtmlUrl,
-            LatestPublishedAtUtc = result.LatestApplicableRelease?.PublishedAtUtc
+            LatestPublishedAtUtc = result.LatestApplicableRelease?.PublishedAtUtc,
+            StagedUpdate = decoratedStaged
+        };
+    }
+
+    private static ApplicationUpdateStagingState? ApplyLatestComparison(ApplicationUpdateStagingState? staged, string? latestTag)
+    {
+        if (staged is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(latestTag) || string.IsNullOrWhiteSpace(staged.ReleaseTag))
+        {
+            return staged;
+        }
+
+        var isCurrentLatest = string.Equals(staged.ReleaseTag, latestTag, StringComparison.OrdinalIgnoreCase);
+        return new ApplicationUpdateStagingState
+        {
+            SourceRepository = staged.SourceRepository,
+            AllowPreviewReleases = staged.AllowPreviewReleases,
+            ReleaseTag = staged.ReleaseTag,
+            ReleaseTitle = staged.ReleaseTitle,
+            ReleaseIsPrerelease = staged.ReleaseIsPrerelease,
+            ReleasePublishedAtUtc = staged.ReleasePublishedAtUtc,
+            ReleaseUrl = staged.ReleaseUrl,
+            SelectedAssetName = staged.SelectedAssetName,
+            SelectedChecksumAssetName = staged.SelectedChecksumAssetName,
+            StagedZipPath = staged.StagedZipPath,
+            StagedChecksumPath = staged.StagedChecksumPath,
+            ExpectedSha256 = staged.ExpectedSha256,
+            ActualSha256 = staged.ActualSha256,
+            ChecksumVerified = staged.ChecksumVerified,
+            StagedAtUtc = staged.StagedAtUtc,
+            StagingInProgress = staged.StagingInProgress,
+            StageOperationWasNoOp = staged.StageOperationWasNoOp,
+            StageOperationMessage = staged.StageOperationMessage,
+            LastStageAttemptAtUtc = staged.LastStageAttemptAtUtc,
+            LatestApplicableReleaseTag = latestTag,
+            IsCurrentLatest = isCurrentLatest,
+            IsOutdated = !isCurrentLatest,
+            Status = staged.Status,
+            FailureMessage = staged.FailureMessage,
+            LastUpdatedAtUtc = staged.LastUpdatedAtUtc
         };
     }
 }

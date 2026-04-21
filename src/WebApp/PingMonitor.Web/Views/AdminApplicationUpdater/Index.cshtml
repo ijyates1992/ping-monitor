@@ -15,7 +15,7 @@
         .muted{color:var(--muted);} .status{border-radius:10px;padding:.8rem;border:1px solid var(--border);}
         .status-ok{background:var(--ok-bg);color:var(--ok-text);border-color:#c2f0c2;} .status-warn{background:var(--warn-bg);color:var(--warn-text);border-color:#f7d9a8;} .status-error{background:var(--error-bg);color:var(--error-text);border-color:#fda29b;}
         .field{display:grid;gap:.5rem;} .checkbox-row{display:flex;gap:.75rem;align-items:flex-start;}
-        input[type=checkbox]{width:20px;height:20px;margin-top:.2rem;} dl{margin:0;display:grid;gap:.6rem;} dt{font-weight:700;} dd{margin:0;}
+        input[type=checkbox]{width:20px;height:20px;margin-top:.2rem;} dl{margin:0;display:grid;gap:.6rem;} dt{font-weight:700;} dd{margin:0;word-break:break-word;}
     </style>
 </head>
 <body>
@@ -23,8 +23,8 @@
 <main>
     <div class="stack">
         <section class="card">
-            <h1>Application updater (Stage 1)</h1>
-            <p class="muted">Read-only release detection and version comparison for administrators. This page does not download or apply updates.</p>
+            <h1>Application updater (Stage 2)</h1>
+            <p class="muted">Manual admin flow for release detection and conservative staging. This page downloads, verifies, and stages artifacts only. It does not apply updates.</p>
             <div class="button-row">
                 <a class="button-secondary" href="/admin">Back to Admin settings</a>
             </div>
@@ -107,6 +107,74 @@
                             <dd><a href="@Model.LatestReleaseUrl" rel="noopener noreferrer" target="_blank">@Model.LatestReleaseUrl</a></dd>
                         </div>
                     }
+                </dl>
+            }
+        </section>
+
+        <form class="stack" method="post" action="/admin/application-updater/stage">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
+            <section class="card field">
+                <h2>Stage latest applicable release</h2>
+                <p class="muted">Downloads the selected zip and checksum, verifies SHA256, and stores artifacts under app-controlled updater storage.</p>
+                <div class="button-row">
+                    <button class="button" type="submit" @((Model.UpdateChecksEnabled && Model.StagedUpdate?.StagingInProgress != true) ? null : "disabled")>Download, verify, and stage</button>
+                </div>
+                @if (Model.StagedUpdate?.StagingInProgress == true)
+                {
+                    <p class="muted">A staging operation is currently active. Additional requests are blocked until it completes.</p>
+                }
+            </section>
+        </form>
+
+        <section class="card">
+            <h2>Staged update status</h2>
+            @if (Model.StagedUpdate is null)
+            {
+                <div class="status status-warn" role="status">No staging attempt has been recorded yet.</div>
+            }
+            else
+            {
+                var stagedStatusClass = Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready
+                    ? "status-ok"
+                    : Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingInProgress
+                        or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingBlocked
+                        ? "status-warn"
+                        : "status-error";
+
+                <div class="status @stagedStatusClass" role="status">
+                    Status: @Model.StagedUpdate.Status
+                    @if (Model.StagedUpdate.ChecksumVerified)
+                    {
+                        <span> — checksum verified</span>
+                    }
+                </div>
+
+                <dl style="margin-top:1rem;">
+                    <div><dt>Last updated</dt><dd>@Model.StagedUpdate.LastUpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
+                    <div><dt>Last stage attempt</dt><dd>@(Model.StagedUpdate.LastStageAttemptAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                    <div><dt>Release tag</dt><dd>@(Model.StagedUpdate.ReleaseTag ?? "(none)")</dd></div>
+                    <div><dt>Latest applicable release tag</dt><dd>@(Model.StagedUpdate.LatestApplicableReleaseTag ?? "(unknown)")</dd></div>
+                    <div><dt>Staged release freshness</dt>
+                        <dd>
+                            @(Model.StagedUpdate.IsOutdated == true
+                                ? "Outdated — a newer applicable release is available."
+                                : Model.StagedUpdate.IsCurrentLatest == true
+                                    ? "Current — staged release matches latest applicable release."
+                                    : "Unknown")
+                        </dd>
+                    </div>
+                    <div><dt>Staging in progress</dt><dd>@(Model.StagedUpdate.StagingInProgress ? "Yes" : "No")</dd></div>
+                    <div><dt>No-op restage</dt><dd>@(Model.StagedUpdate.StageOperationWasNoOp ? "Yes" : "No")</dd></div>
+                    <div><dt>Stage message</dt><dd>@(Model.StagedUpdate.StageOperationMessage ?? "(none)")</dd></div>
+                    <div><dt>Release title</dt><dd>@(Model.StagedUpdate.ReleaseTitle ?? "(none)")</dd></div>
+                    <div><dt>Selected archive</dt><dd>@(Model.StagedUpdate.SelectedAssetName ?? "(none)")</dd></div>
+                    <div><dt>Staged zip path</dt><dd>@(Model.StagedUpdate.StagedZipPath ?? "(none)")</dd></div>
+                    <div><dt>Checksum file path</dt><dd>@(Model.StagedUpdate.StagedChecksumPath ?? "(none)")</dd></div>
+                    <div><dt>Expected SHA256</dt><dd>@(Model.StagedUpdate.ExpectedSha256 ?? "(none)")</dd></div>
+                    <div><dt>Actual SHA256</dt><dd>@(Model.StagedUpdate.ActualSha256 ?? "(none)")</dd></div>
+                    <div><dt>Staged at</dt><dd>@(Model.StagedUpdate.StagedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(not staged)")</dd></div>
+                    <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
                 </dl>
             }
         </section>

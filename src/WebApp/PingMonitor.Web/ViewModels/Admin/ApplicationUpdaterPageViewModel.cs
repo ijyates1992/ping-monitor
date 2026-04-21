@@ -16,4 +16,5 @@ public sealed class ApplicationUpdaterPageViewModel
     public bool? LatestIsPrerelease { get; init; }
     public string? LatestReleaseUrl { get; init; }
     public DateTimeOffset? LatestPublishedAtUtc { get; init; }
+    public ApplicationUpdateStagingState? StagedUpdate { get; init; }
 }

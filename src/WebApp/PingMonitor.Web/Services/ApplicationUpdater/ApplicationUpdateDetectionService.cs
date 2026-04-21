@@ -1,7 +1,3 @@
-using System.Globalization;
-using System.Net.Http.Headers;
-using System.Text.Json;
-using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.ApplicationMetadata;
 
@@ -15,16 +11,16 @@ public interface IApplicationUpdateDetectionService
 internal sealed class ApplicationUpdateDetectionService : IApplicationUpdateDetectionService
 {
     private readonly IApplicationMetadataProvider _applicationMetadataProvider;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IGitHubReleaseLookupService _gitHubReleaseLookupService;
     private readonly ApplicationUpdaterOptions _options;
 
     public ApplicationUpdateDetectionService(
         IApplicationMetadataProvider applicationMetadataProvider,
-        IHttpClientFactory httpClientFactory,
-        IOptions<ApplicationUpdaterOptions> options)
+        IGitHubReleaseLookupService gitHubReleaseLookupService,
+        Microsoft.Extensions.Options.IOptions<ApplicationUpdaterOptions> options)
     {
         _applicationMetadataProvider = applicationMetadataProvider;
-        _httpClientFactory = httpClientFactory;
+        _gitHubReleaseLookupService = gitHubReleaseLookupService;
         _options = options.Value;
     }
 
@@ -51,7 +47,7 @@ internal sealed class ApplicationUpdateDetectionService : IApplicationUpdateDete
         GitHubReleaseSummary? latestRelease;
         try
         {
-            latestRelease = await GetLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
+            latestRelease = await _gitHubReleaseLookupService.GetLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -88,99 +84,6 @@ internal sealed class ApplicationUpdateDetectionService : IApplicationUpdateDete
         }
 
         return ApplicationUpdateCheckResult.UpToDate(snapshot.Version, allowPreviewReleases, latestRelease);
-    }
-
-    private async Task<GitHubReleaseSummary?> GetLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken)
-    {
-        var client = _httpClientFactory.CreateClient(nameof(ApplicationUpdateDetectionService));
-
-        var baseUri = _options.GitHubApiBaseUrl.TrimEnd('/');
-        var owner = _options.GitHubOwner.Trim();
-        var repository = _options.GitHubRepository.Trim();
-
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"{baseUri}/repos/{owner}/{repository}/releases?per_page=30");
-
-        request.Headers.Accept.Clear();
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        request.Headers.UserAgent.ParseAdd("PingMonitor-UpdateCheck/1.0");
-
-        using var response = await client.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            var reason = response.ReasonPhrase ?? "Unknown error";
-            throw new InvalidOperationException(
-                $"GitHub API returned {(int)response.StatusCode} ({reason}).");
-        }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-        if (document.RootElement.ValueKind != JsonValueKind.Array)
-        {
-            throw new InvalidOperationException("GitHub API response did not return an array of releases.");
-        }
-
-        foreach (var release in document.RootElement.EnumerateArray())
-        {
-            var isDraft = GetBoolean(release, "draft");
-            var isPrerelease = GetBoolean(release, "prerelease");
-            if (isDraft)
-            {
-                continue;
-            }
-
-            if (isPrerelease && !allowPreviewReleases)
-            {
-                continue;
-            }
-
-            var tagName = GetString(release, "tag_name");
-            if (string.IsNullOrWhiteSpace(tagName))
-            {
-                continue;
-            }
-
-            return new GitHubReleaseSummary
-            {
-                TagName = tagName.Trim(),
-                Name = GetString(release, "name")?.Trim(),
-                IsPrerelease = isPrerelease,
-                HtmlUrl = GetString(release, "html_url")?.Trim(),
-                PublishedAtUtc = TryGetDateTimeOffset(release, "published_at")
-            };
-        }
-
-        return null;
-    }
-
-    private static bool GetBoolean(JsonElement parent, string propertyName)
-    {
-        return parent.TryGetProperty(propertyName, out var value)
-               && value.ValueKind is JsonValueKind.True or JsonValueKind.False
-               && value.GetBoolean();
-    }
-
-    private static string? GetString(JsonElement parent, string propertyName)
-    {
-        return parent.TryGetProperty(propertyName, out var value)
-               && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
-    }
-
-    private static DateTimeOffset? TryGetDateTimeOffset(JsonElement parent, string propertyName)
-    {
-        var text = GetString(parent, propertyName);
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed)
-            ? parsed.ToUniversalTime()
-            : null;
     }
 }
 
@@ -321,4 +224,13 @@ public sealed class GitHubReleaseSummary
     public bool IsPrerelease { get; init; }
     public string? HtmlUrl { get; init; }
     public DateTimeOffset? PublishedAtUtc { get; init; }
+    public string? AssetsApiUrl { get; init; }
+    public IReadOnlyList<GitHubReleaseAssetSummary> Assets { get; init; } = [];
+}
+
+public sealed class GitHubReleaseAssetSummary
+{
+    public string Name { get; init; } = string.Empty;
+    public string? BrowserDownloadUrl { get; init; }
+    public long? SizeBytes { get; init; }
 }
