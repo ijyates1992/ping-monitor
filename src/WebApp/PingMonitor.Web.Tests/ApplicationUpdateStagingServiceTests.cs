@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -205,9 +206,12 @@ public sealed class ApplicationUpdateStagingServiceTests
             var second = await service.StageLatestApplicableReleaseAsync(false, CancellationToken.None);
             gate.SetResult(true);
             var first = await firstTask;
+            var persisted = await ReadPersistedStateAsync(tempRoot, CancellationToken.None);
 
             Assert.Equal(ApplicationUpdateStagingStatus.StagingBlocked, second.State.Status);
             Assert.Equal(ApplicationUpdateStagingStatus.Ready, first.State.Status);
+            Assert.NotNull(persisted);
+            Assert.Equal(ApplicationUpdateStagingStatus.Ready, persisted!.Status);
         }
         finally
         {
@@ -269,6 +273,18 @@ public sealed class ApplicationUpdateStagingServiceTests
             stateStore,
             httpClientFactory,
             options);
+    }
+
+    private static async Task<ApplicationUpdateStagingState?> ReadPersistedStateAsync(string contentRoot, CancellationToken cancellationToken)
+    {
+        var statePath = Path.Combine(contentRoot, "App_Data", "Updater", "state", "staged-update.json");
+        if (!File.Exists(statePath))
+        {
+            return null;
+        }
+
+        await using var stream = File.OpenRead(statePath);
+        return await JsonSerializer.DeserializeAsync<ApplicationUpdateStagingState>(stream, cancellationToken: cancellationToken);
     }
 
     private sealed class DelayedReleaseLookupService : IGitHubReleaseLookupService

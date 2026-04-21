@@ -44,13 +44,13 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
         var lockHandle = TryAcquireStageLock(lockPath);
         if (lockHandle is null)
         {
-            return await WriteAndReturnAsync(BuildState(
+            return ReturnWithoutWrite(BuildState(
                 repository,
                 allowPreviewReleases,
                 ApplicationUpdateStagingStatus.StagingBlocked,
                 "A staging operation is already running. Please wait for it to complete and try again.",
                 now,
-                currentState), cancellationToken);
+                currentState));
         }
 
         await using var _ = lockHandle;
@@ -304,6 +304,11 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
     private async Task<ApplicationUpdateStagingResult> WriteAndReturnAsync(ApplicationUpdateStagingState state, CancellationToken cancellationToken)
     {
         await _stagingStateStore.WriteAsync(state, cancellationToken);
+        return new ApplicationUpdateStagingResult { State = state };
+    }
+
+    private static ApplicationUpdateStagingResult ReturnWithoutWrite(ApplicationUpdateStagingState state)
+    {
         return new ApplicationUpdateStagingResult { State = state };
     }
 
