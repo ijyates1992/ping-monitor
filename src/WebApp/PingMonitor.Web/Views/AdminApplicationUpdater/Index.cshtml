@@ -118,8 +118,12 @@
                 <h2>Stage latest applicable release</h2>
                 <p class="muted">Downloads the selected zip and checksum, verifies SHA256, and stores artifacts under app-controlled updater storage.</p>
                 <div class="button-row">
-                    <button class="button" type="submit" @(Model.UpdateChecksEnabled ? null : "disabled")>Download, verify, and stage</button>
+                    <button class="button" type="submit" @((Model.UpdateChecksEnabled && Model.StagedUpdate?.StagingInProgress != true) ? null : "disabled")>Download, verify, and stage</button>
                 </div>
+                @if (Model.StagedUpdate?.StagingInProgress == true)
+                {
+                    <p class="muted">A staging operation is currently active. Additional requests are blocked until it completes.</p>
+                }
             </section>
         </form>
 
@@ -133,7 +137,10 @@
             {
                 var stagedStatusClass = Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready
                     ? "status-ok"
-                    : "status-error";
+                    : Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingInProgress
+                        or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingBlocked
+                        ? "status-warn"
+                        : "status-error";
 
                 <div class="status @stagedStatusClass" role="status">
                     Status: @Model.StagedUpdate.Status
@@ -145,7 +152,21 @@
 
                 <dl style="margin-top:1rem;">
                     <div><dt>Last updated</dt><dd>@Model.StagedUpdate.LastUpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
+                    <div><dt>Last stage attempt</dt><dd>@(Model.StagedUpdate.LastStageAttemptAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
                     <div><dt>Release tag</dt><dd>@(Model.StagedUpdate.ReleaseTag ?? "(none)")</dd></div>
+                    <div><dt>Latest applicable release tag</dt><dd>@(Model.StagedUpdate.LatestApplicableReleaseTag ?? "(unknown)")</dd></div>
+                    <div><dt>Staged release freshness</dt>
+                        <dd>
+                            @(Model.StagedUpdate.IsOutdated == true
+                                ? "Outdated — a newer applicable release is available."
+                                : Model.StagedUpdate.IsCurrentLatest == true
+                                    ? "Current — staged release matches latest applicable release."
+                                    : "Unknown")
+                        </dd>
+                    </div>
+                    <div><dt>Staging in progress</dt><dd>@(Model.StagedUpdate.StagingInProgress ? "Yes" : "No")</dd></div>
+                    <div><dt>No-op restage</dt><dd>@(Model.StagedUpdate.StageOperationWasNoOp ? "Yes" : "No")</dd></div>
+                    <div><dt>Stage message</dt><dd>@(Model.StagedUpdate.StageOperationMessage ?? "(none)")</dd></div>
                     <div><dt>Release title</dt><dd>@(Model.StagedUpdate.ReleaseTitle ?? "(none)")</dd></div>
                     <div><dt>Selected archive</dt><dd>@(Model.StagedUpdate.SelectedAssetName ?? "(none)")</dd></div>
                     <div><dt>Staged zip path</dt><dd>@(Model.StagedUpdate.StagedZipPath ?? "(none)")</dd></div>

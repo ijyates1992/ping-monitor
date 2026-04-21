@@ -10,7 +10,9 @@ public enum ApplicationUpdateStagingStatus
     ChecksumVerificationFailed = 3,
     AssetResolutionFailed = 4,
     NoApplicableRelease = 5,
-    StagingFailed = 6
+    StagingFailed = 6,
+    StagingInProgress = 7,
+    StagingBlocked = 8
 }
 
 public sealed class ApplicationUpdateStagingState
@@ -30,6 +32,13 @@ public sealed class ApplicationUpdateStagingState
     public string? ActualSha256 { get; init; }
     public bool ChecksumVerified { get; init; }
     public DateTimeOffset? StagedAtUtc { get; init; }
+    public bool StagingInProgress { get; init; }
+    public bool StageOperationWasNoOp { get; init; }
+    public string? StageOperationMessage { get; init; }
+    public DateTimeOffset? LastStageAttemptAtUtc { get; init; }
+    public string? LatestApplicableReleaseTag { get; init; }
+    public bool? IsCurrentLatest { get; init; }
+    public bool? IsOutdated { get; init; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public ApplicationUpdateStagingStatus Status { get; init; }
     public string? FailureMessage { get; init; }
