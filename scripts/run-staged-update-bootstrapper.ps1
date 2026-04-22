@@ -65,6 +65,8 @@ $script:effectivePreservePatterns = @()
 # 2) Release-owned payload files are replaced from staged package contents.
 # 3) Mixed-ownership files (for example appsettings.json) are preserved, then patched with release-owned metadata.
 $mandatoryRuntimePreservePatterns = @(
+    # Startup Gate persists DB reconnection state in App_Data/StartupGate (dbsettings.json + dbpassword.bin).
+    # This directory is machine/runtime-owned and must survive payload replacement unchanged.
     'App_Data/StartupGate',
     'App_Data/Backups',
     'App_Data/DbBackups',
@@ -233,9 +235,11 @@ function Test-IsPreserved {
         [Parameter(Mandatory = $true)][string[]]$Patterns
     )
 
-    $normalizedRelative = $RelativePath.Replace('\\', '/').TrimStart('./').TrimStart('/')
+    $normalizedRelative = $RelativePath -replace '[\\/]+', '/'
+    $normalizedRelative = $normalizedRelative.TrimStart('./').TrimStart('/')
     foreach ($pattern in $Patterns) {
-        $normalizedPattern = $pattern.Replace('\\', '/').TrimStart('./').TrimStart('/')
+        $normalizedPattern = $pattern -replace '[\\/]+', '/'
+        $normalizedPattern = $normalizedPattern.TrimStart('./').TrimStart('/')
         if ($normalizedRelative -like $normalizedPattern) {
             return $true
         }
@@ -254,13 +258,15 @@ function Test-HasPreservedDescendant {
         [Parameter(Mandatory = $true)][string[]]$Patterns
     )
 
-    $normalizedRelative = $RelativePath.Replace('\', '/').TrimStart('./').TrimStart('/')
+    $normalizedRelative = $RelativePath -replace '[\\/]+', '/'
+    $normalizedRelative = $normalizedRelative.TrimStart('./').TrimStart('/')
     if ([string]::IsNullOrWhiteSpace($normalizedRelative)) {
         return $false
     }
 
     foreach ($pattern in $Patterns) {
-        $normalizedPattern = $pattern.Replace('\', '/').TrimStart('./').TrimStart('/')
+        $normalizedPattern = $pattern -replace '[\\/]+', '/'
+        $normalizedPattern = $normalizedPattern.TrimStart('./').TrimStart('/')
         if ($normalizedPattern.StartsWith("$normalizedRelative/", [System.StringComparison]::OrdinalIgnoreCase)) {
             return $true
         }
@@ -282,7 +288,7 @@ function Get-EffectivePreservePatterns {
             continue
         }
 
-        $normalized = $pattern.Replace('\\', '/').Trim()
+        $normalized = ($pattern -replace '[\\/]+', '/').Trim()
         if (-not $result.Contains($normalized)) {
             $result.Add($normalized)
         }
