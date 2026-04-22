@@ -248,6 +248,27 @@ function Test-IsPreserved {
     return $false
 }
 
+function Test-HasPreservedDescendant {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string[]]$Patterns
+    )
+
+    $normalizedRelative = $RelativePath.Replace('\', '/').TrimStart('./').TrimStart('/')
+    if ([string]::IsNullOrWhiteSpace($normalizedRelative)) {
+        return $false
+    }
+
+    foreach ($pattern in $Patterns) {
+        $normalizedPattern = $pattern.Replace('\', '/').TrimStart('./').TrimStart('/')
+        if ($normalizedPattern.StartsWith("$normalizedRelative/", [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Get-EffectivePreservePatterns {
     param([Parameter(Mandatory = $true)][string[]]$RequestedPatterns)
 
@@ -386,6 +407,10 @@ function Remove-IfStale {
     Get-ChildItem -LiteralPath $DestinationRoot -Recurse -Force | Sort-Object -Property FullName -Descending | ForEach-Object {
         $relative = Get-RelativePath -BasePath $DestinationRoot -FullPath $_.FullName
         if (Test-IsPreserved -RelativePath $relative -Patterns $PreservePatterns) {
+            return
+        }
+
+        if ($_.PSIsContainer -and (Test-HasPreservedDescendant -RelativePath $relative -Patterns $PreservePatterns)) {
             return
         }
 
