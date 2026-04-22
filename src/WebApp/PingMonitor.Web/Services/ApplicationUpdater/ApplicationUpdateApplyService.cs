@@ -22,6 +22,8 @@ public interface IExternalUpdaterProcessLauncher
         string bootstrapperScriptPath,
         string stagedMetadataPath,
         string installRootPath,
+        string siteName,
+        string appPoolName,
         string statusJsonPath,
         string logPath,
         string? expectedReleaseTag,
@@ -88,6 +90,8 @@ internal sealed class ExternalUpdaterProcessLauncher : IExternalUpdaterProcessLa
         string bootstrapperScriptPath,
         string stagedMetadataPath,
         string installRootPath,
+        string siteName,
+        string appPoolName,
         string statusJsonPath,
         string logPath,
         string? expectedReleaseTag,
@@ -114,6 +118,10 @@ internal sealed class ExternalUpdaterProcessLauncher : IExternalUpdaterProcessLa
             startInfo.ArgumentList.Add(stagedMetadataPath);
             startInfo.ArgumentList.Add("-InstallRootPath");
             startInfo.ArgumentList.Add(installRootPath);
+            startInfo.ArgumentList.Add("-SiteName");
+            startInfo.ArgumentList.Add(siteName);
+            startInfo.ArgumentList.Add("-AppPoolName");
+            startInfo.ArgumentList.Add(appPoolName);
             startInfo.ArgumentList.Add("-StatusJsonPath");
             startInfo.ArgumentList.Add(statusJsonPath);
             startInfo.ArgumentList.Add("-LogPath");
@@ -209,6 +217,14 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
 
         var externalStatusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
         var externalLogPath = Path.Combine(stagingRoot, "state", "external-updater.log");
+        var siteName = ResolveRequiredIisIdentityValue(
+            _options.IisSiteName,
+            nameof(ApplicationUpdaterOptions.IisSiteName),
+            "ApplicationUpdater:IisSiteName");
+        var appPoolName = ResolveRequiredIisIdentityValue(
+            _options.IisAppPoolName,
+            nameof(ApplicationUpdaterOptions.IisAppPoolName),
+            "ApplicationUpdater:IisAppPoolName");
 
         ValidateApplyPrerequisites(current, stagedMetadataPath, bootstrapperPath);
 
@@ -260,6 +276,8 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             bootstrapperPath,
             stagedMetadataPath,
             installRootPath,
+            siteName,
+            appPoolName,
             externalStatusPath,
             externalLogPath,
             current.ReleaseTag,
@@ -419,6 +437,17 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         return Path.IsPathRooted(configuredPath)
             ? Path.GetFullPath(configuredPath)
             : Path.GetFullPath(configuredPath, _environment.ContentRootPath);
+    }
+
+    private static string ResolveRequiredIisIdentityValue(string configuredValue, string optionName, string configurationKey)
+    {
+        if (string.IsNullOrWhiteSpace(configuredValue))
+        {
+            throw new InvalidOperationException(
+                $"Application updater cannot launch because required IIS identity value '{optionName}' is not configured. Set '{configurationKey}' to a non-empty value.");
+        }
+
+        return configuredValue.Trim();
     }
 
     private static ApplicationUpdateStagingState CloneState(
