@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -284,7 +285,11 @@ public sealed class ApplicationUpdateStagingServiceTests
         }
 
         await using var stream = File.OpenRead(statePath);
-        return await JsonSerializer.DeserializeAsync<ApplicationUpdateStagingState>(stream, cancellationToken: cancellationToken);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            Converters = { new JsonStringEnumConverter() }
+        };
+        return await JsonSerializer.DeserializeAsync<ApplicationUpdateStagingState>(stream, options, cancellationToken);
     }
 
     private sealed class DelayedReleaseLookupService : IGitHubReleaseLookupService

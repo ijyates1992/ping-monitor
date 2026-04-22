@@ -29,4 +29,12 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\..\scripts\run-staged-update-bootstrapper.ps1">
+      <Link>Updater\run-staged-update-bootstrapper.ps1</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

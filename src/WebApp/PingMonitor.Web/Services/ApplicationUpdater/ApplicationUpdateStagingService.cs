@@ -377,6 +377,17 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 : null,
             Status = status,
             FailureMessage = status == ApplicationUpdateStagingStatus.Ready ? null : operationMessage,
+            BootstrapperScriptPath = previous?.BootstrapperScriptPath,
+            StagedMetadataPath = previous?.StagedMetadataPath,
+            ExternalUpdaterStatusPath = previous?.ExternalUpdaterStatusPath,
+            ExternalUpdaterLogPath = previous?.ExternalUpdaterLogPath,
+            LastApplyRequestedByUserId = previous?.LastApplyRequestedByUserId,
+            ApplyRequestedAtUtc = previous?.ApplyRequestedAtUtc,
+            ApplyHandoffStartedAtUtc = previous?.ApplyHandoffStartedAtUtc,
+            ApplyCompletedAtUtc = previous?.ApplyCompletedAtUtc,
+            ApplyOperationMessage = previous?.ApplyOperationMessage,
+            LastKnownUpdaterStage = previous?.LastKnownUpdaterStage,
+            LastKnownUpdaterResultCode = previous?.LastKnownUpdaterResultCode,
             LastUpdatedAtUtc = now
         };
     }

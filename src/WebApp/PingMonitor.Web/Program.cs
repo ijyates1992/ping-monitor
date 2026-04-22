@@ -198,6 +198,8 @@ builder.Services.AddScoped<IGitHubReleaseLookupService, GitHubReleaseLookupServi
 builder.Services.AddScoped<IApplicationUpdateDetectionService, ApplicationUpdateDetectionService>();
 builder.Services.AddSingleton<IApplicationUpdateStagingStateStore, ApplicationUpdateStagingStateStore>();
 builder.Services.AddScoped<IApplicationUpdateStagingService, ApplicationUpdateStagingService>();
+builder.Services.AddSingleton<IExternalUpdaterProcessLauncher, ExternalUpdaterProcessLauncher>();
+builder.Services.AddScoped<IApplicationUpdateApplyService, ApplicationUpdateApplyService>();
 builder.Services.AddScoped<IDatabaseStatusQueryService, DatabaseStatusQueryService>();
 builder.Services.AddScoped<IDatabaseMaintenanceService, DatabaseMaintenanceService>();
 builder.Services.AddSingleton<IDatabaseMaintenanceProgressTracker, DatabaseMaintenanceProgressTracker>();
