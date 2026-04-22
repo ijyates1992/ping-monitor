@@ -50,8 +50,16 @@ public sealed class ApplicationUpdateStagingState
     public string? FailureMessage { get; init; }
     public string? BootstrapperScriptPath { get; init; }
     public string? StagedMetadataPath { get; init; }
+    public string? LaunchPowerShellExecutablePath { get; init; }
+    public string? LaunchInstallRootPath { get; init; }
+    public string? LaunchWorkingDirectory { get; init; }
+    public string? LaunchResolvedSiteName { get; init; }
+    public string? LaunchResolvedAppPoolName { get; init; }
+    public string? LaunchExpectedReleaseTag { get; init; }
     public string? ExternalUpdaterStatusPath { get; init; }
     public string? ExternalUpdaterLogPath { get; init; }
+    public int? BootstrapperProcessId { get; init; }
+    public DateTimeOffset? BootstrapperStartedAtUtc { get; init; }
     public string? LastApplyRequestedByUserId { get; init; }
     public DateTimeOffset? ApplyRequestedAtUtc { get; init; }
     public DateTimeOffset? ApplyHandoffStartedAtUtc { get; init; }

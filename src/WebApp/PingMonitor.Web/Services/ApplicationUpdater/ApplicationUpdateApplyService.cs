@@ -29,6 +29,7 @@ public interface IExternalUpdaterProcessLauncher
         string statusJsonPath,
         string logPath,
         string? expectedReleaseTag,
+        out int? processId,
         out string? launchErrorMessage);
 }
 
@@ -97,8 +98,10 @@ internal sealed class ExternalUpdaterProcessLauncher : IExternalUpdaterProcessLa
         string statusJsonPath,
         string logPath,
         string? expectedReleaseTag,
+        out int? processId,
         out string? launchErrorMessage)
     {
+        processId = null;
         launchErrorMessage = null;
 
         try
@@ -142,6 +145,7 @@ internal sealed class ExternalUpdaterProcessLauncher : IExternalUpdaterProcessLa
                 return false;
             }
 
+            processId = process.Id;
             return true;
         }
         catch (Exception ex)
@@ -378,26 +382,10 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         var stagedMetadataPath = Path.Combine(stagingRoot, "state", "staged-update.json");
         var bootstrapperPath = ResolveBootstrapperPath();
         var installRootPath = Path.GetFullPath(_environment.ContentRootPath);
-        if (!_launcher.TryResolveExecutablePath(_options.PowerShellExecutablePath, out var powerShellExecutablePath, out var powerShellResolutionError))
-        {
-            throw new InvalidOperationException(
-                $"Unable to resolve the configured PowerShell host '{_options.PowerShellExecutablePath}'. {powerShellResolutionError}");
-        }
-
         var externalStatusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
         var externalLogPath = Path.Combine(stagingRoot, "state", "external-updater.log");
-        _logger.LogInformation("Attempting IIS identity resolution for application updater launch.");
-        var appPoolName = ResolveAppPoolName();
-        var siteName = ResolveSiteName(installRootPath, appPoolName);
-        if (string.IsNullOrWhiteSpace(siteName) && string.IsNullOrWhiteSpace(appPoolName))
-        {
-            throw new InvalidOperationException(
-                "Application updater cannot launch because IIS identity resolution failed. " +
-                "Attempted strategies: APP_POOL_ID, ApplicationUpdater:IisSiteName, WEBSITE_SITE_NAME, IIS site lookup by physical path, IIS site lookup by app pool. " +
-                "Configure ApplicationUpdater:IisSiteName and ApplicationUpdater:IisAppPoolName manually in appsettings when automatic detection is unavailable.");
-        }
 
-        ValidateApplyPrerequisites(current, stagedMetadataPath, bootstrapperPath);
+        ValidateApplyPrerequisites(current, stagedMetadataPath);
 
         var now = DateTimeOffset.UtcNow;
         var requestedState = new ApplicationUpdateStagingState
@@ -428,19 +416,111 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             FailureMessage = null,
             BootstrapperScriptPath = bootstrapperPath,
             StagedMetadataPath = stagedMetadataPath,
+            LaunchPowerShellExecutablePath = null,
+            LaunchInstallRootPath = installRootPath,
+            LaunchWorkingDirectory = installRootPath,
+            LaunchResolvedSiteName = null,
+            LaunchResolvedAppPoolName = null,
+            LaunchExpectedReleaseTag = current.ReleaseTag,
             ExternalUpdaterStatusPath = externalStatusPath,
             ExternalUpdaterLogPath = externalLogPath,
+            BootstrapperProcessId = null,
+            BootstrapperStartedAtUtc = null,
             LastApplyRequestedByUserId = requestedByUserId,
             ApplyRequestedAtUtc = now,
             ApplyHandoffStartedAtUtc = null,
             ApplyCompletedAtUtc = null,
             ApplyOperationMessage = "Apply requested. Starting external updater handoff.",
-            LastKnownUpdaterStage = current.LastKnownUpdaterStage,
-            LastKnownUpdaterResultCode = current.LastKnownUpdaterResultCode,
+            LastKnownUpdaterStage = "apply_requested",
+            LastKnownUpdaterResultCode = "in_progress",
             LastUpdatedAtUtc = now
         };
 
         await _stagingStateStore.WriteAsync(requestedState, cancellationToken);
+
+        var resolvingAt = DateTimeOffset.UtcNow;
+        var resolvingState = CloneState(
+            requestedState,
+            ApplicationUpdateStagingStatus.ApplyRequested,
+            "Resolving IIS identity for bootstrapper launch.",
+            resolvingAt,
+            lastKnownUpdaterStage: "resolving_iis_identity",
+            lastKnownUpdaterResultCode: "in_progress");
+        await _stagingStateStore.WriteAsync(resolvingState, cancellationToken);
+
+        _logger.LogInformation("Attempting IIS identity resolution for application updater launch.");
+        var appPoolName = ResolveAppPoolName();
+        var siteName = ResolveSiteName(installRootPath, appPoolName);
+        if (string.IsNullOrWhiteSpace(siteName) && string.IsNullOrWhiteSpace(appPoolName))
+        {
+            var resolutionFailureMessage =
+                "Application updater cannot launch because IIS identity resolution failed. " +
+                "Attempted strategies: APP_POOL_ID, ApplicationUpdater:IisSiteName, WEBSITE_SITE_NAME, IIS site lookup by physical path, IIS site lookup by app pool. " +
+                "Configure ApplicationUpdater:IisSiteName and ApplicationUpdater:IisAppPoolName manually in appsettings when automatic detection is unavailable.";
+            await PersistLaunchFailureAsync(resolvingState, resolutionFailureMessage, cancellationToken);
+            throw new InvalidOperationException(resolutionFailureMessage);
+        }
+
+        if (!_launcher.TryResolveExecutablePath(_options.PowerShellExecutablePath, out var powerShellExecutablePath, out var powerShellResolutionError))
+        {
+            var resolutionFailureMessage =
+                $"Unable to resolve the configured PowerShell host '{_options.PowerShellExecutablePath}'. {powerShellResolutionError}";
+            await PersistLaunchFailureAsync(
+                CloneState(
+                    resolvingState,
+                    ApplicationUpdateStagingStatus.ApplyRequested,
+                    resolvingState.ApplyOperationMessage,
+                    DateTimeOffset.UtcNow,
+                    launchResolvedSiteName: siteName,
+                    launchResolvedAppPoolName: appPoolName),
+                resolutionFailureMessage,
+                cancellationToken);
+            throw new InvalidOperationException(resolutionFailureMessage);
+        }
+
+        var launchInputValidationError = ValidateLaunchInputs(bootstrapperPath, stagedMetadataPath, installRootPath, powerShellExecutablePath!);
+        if (!string.IsNullOrWhiteSpace(launchInputValidationError))
+        {
+            await PersistLaunchFailureAsync(
+                CloneState(
+                    resolvingState,
+                    ApplicationUpdateStagingStatus.ApplyRequested,
+                    resolvingState.ApplyOperationMessage,
+                    DateTimeOffset.UtcNow,
+                    launchPowerShellExecutablePath: powerShellExecutablePath,
+                    launchResolvedSiteName: siteName,
+                    launchResolvedAppPoolName: appPoolName),
+                launchInputValidationError,
+                cancellationToken);
+            throw new InvalidOperationException(launchInputValidationError);
+        }
+
+        var launchingAt = DateTimeOffset.UtcNow;
+        var launchingState = CloneState(
+            resolvingState,
+            ApplicationUpdateStagingStatus.ApplyRequested,
+            "Launching external updater bootstrapper.",
+            launchingAt,
+            launchPowerShellExecutablePath: powerShellExecutablePath,
+            launchResolvedSiteName: siteName,
+            launchResolvedAppPoolName: appPoolName,
+            launchExpectedReleaseTag: current.ReleaseTag,
+            lastKnownUpdaterStage: "launching_bootstrapper",
+            lastKnownUpdaterResultCode: "in_progress");
+        await _stagingStateStore.WriteAsync(launchingState, cancellationToken);
+
+        _logger.LogInformation(
+            "Launching updater bootstrapper with PowerShell '{PowerShellExecutablePath}', script '{BootstrapperScriptPath}', metadata '{StagedMetadataPath}', install root '{InstallRootPath}', working directory '{WorkingDirectory}', site '{SiteName}', app pool '{AppPoolName}', expected tag '{ExpectedReleaseTag}', status '{StatusPath}', log '{LogPath}'.",
+            powerShellExecutablePath,
+            bootstrapperPath,
+            stagedMetadataPath,
+            installRootPath,
+            installRootPath,
+            siteName,
+            appPoolName,
+            current.ReleaseTag ?? "(none)",
+            externalStatusPath,
+            externalLogPath);
 
         var launched = _launcher.TryLaunch(
             powerShellExecutablePath!,
@@ -452,30 +532,28 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             externalStatusPath,
             externalLogPath,
             current.ReleaseTag,
+            out var processId,
             out var launchErrorMessage);
 
         if (!launched)
         {
-            var failedAt = DateTimeOffset.UtcNow;
-            var failedState = CloneState(
-                requestedState,
-                ApplicationUpdateStagingStatus.ApplyFailed,
-                $"Failed to launch external updater process: {launchErrorMessage}",
-                failedAt,
-                applyCompletedAtUtc: failedAt,
-                failureMessage: $"Failed to launch external updater process: {launchErrorMessage}");
-            await _stagingStateStore.WriteAsync(failedState, cancellationToken);
-            throw new InvalidOperationException(failedState.FailureMessage);
+            var launchFailureMessage = $"Failed to launch external updater process: {launchErrorMessage}";
+            await PersistLaunchFailureAsync(launchingState, launchFailureMessage, cancellationToken);
+            throw new InvalidOperationException(launchFailureMessage);
         }
 
         var handoffAt = DateTimeOffset.UtcNow;
         var handoffState = CloneState(
-            requestedState,
+            launchingState,
             ApplicationUpdateStagingStatus.ApplyHandoffStarted,
-            "External updater launched. The application may restart during update application.",
+            processId.HasValue
+                ? $"External updater launched (PID {processId.Value}). The application may restart during update application."
+                : "External updater launched. The application may restart during update application.",
             handoffAt,
             applyHandoffStartedAtUtc: handoffAt,
-            lastKnownUpdaterStage: "handoff_started",
+            bootstrapperProcessId: processId,
+            bootstrapperStartedAtUtc: handoffAt,
+            lastKnownUpdaterStage: "bootstrapper_started",
             lastKnownUpdaterResultCode: "in_progress");
         await _stagingStateStore.WriteAsync(handoffState, cancellationToken);
 
@@ -574,7 +652,7 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         return updated;
     }
 
-    private static void ValidateApplyPrerequisites(ApplicationUpdateStagingState state, string stagedMetadataPath, string bootstrapperPath)
+    private static void ValidateApplyPrerequisites(ApplicationUpdateStagingState state, string stagedMetadataPath)
     {
         if (state.Status != ApplicationUpdateStagingStatus.Ready)
         {
@@ -596,10 +674,6 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             throw new InvalidOperationException($"Staged metadata file was not found at '{stagedMetadataPath}'.");
         }
 
-        if (!File.Exists(bootstrapperPath))
-        {
-            throw new InvalidOperationException($"Bundled updater bootstrapper was not found at '{bootstrapperPath}'.");
-        }
     }
 
     private string ResolveBootstrapperPath()
@@ -736,6 +810,14 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         DateTimeOffset? applyHandoffStartedAtUtc = null,
         DateTimeOffset? applyCompletedAtUtc = null,
         string? failureMessage = null,
+        string? launchPowerShellExecutablePath = null,
+        string? launchInstallRootPath = null,
+        string? launchWorkingDirectory = null,
+        string? launchResolvedSiteName = null,
+        string? launchResolvedAppPoolName = null,
+        string? launchExpectedReleaseTag = null,
+        int? bootstrapperProcessId = null,
+        DateTimeOffset? bootstrapperStartedAtUtc = null,
         string? lastKnownUpdaterStage = null,
         string? lastKnownUpdaterResultCode = null)
     {
@@ -767,8 +849,16 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             FailureMessage = failureMessage,
             BootstrapperScriptPath = source.BootstrapperScriptPath,
             StagedMetadataPath = source.StagedMetadataPath,
+            LaunchPowerShellExecutablePath = launchPowerShellExecutablePath ?? source.LaunchPowerShellExecutablePath,
+            LaunchInstallRootPath = launchInstallRootPath ?? source.LaunchInstallRootPath,
+            LaunchWorkingDirectory = launchWorkingDirectory ?? source.LaunchWorkingDirectory,
+            LaunchResolvedSiteName = launchResolvedSiteName ?? source.LaunchResolvedSiteName,
+            LaunchResolvedAppPoolName = launchResolvedAppPoolName ?? source.LaunchResolvedAppPoolName,
+            LaunchExpectedReleaseTag = launchExpectedReleaseTag ?? source.LaunchExpectedReleaseTag,
             ExternalUpdaterStatusPath = source.ExternalUpdaterStatusPath,
             ExternalUpdaterLogPath = source.ExternalUpdaterLogPath,
+            BootstrapperProcessId = bootstrapperProcessId ?? source.BootstrapperProcessId,
+            BootstrapperStartedAtUtc = bootstrapperStartedAtUtc ?? source.BootstrapperStartedAtUtc,
             LastApplyRequestedByUserId = source.LastApplyRequestedByUserId,
             ApplyRequestedAtUtc = source.ApplyRequestedAtUtc,
             ApplyHandoffStartedAtUtc = applyHandoffStartedAtUtc ?? source.ApplyHandoffStartedAtUtc,
@@ -778,6 +868,47 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             LastKnownUpdaterResultCode = lastKnownUpdaterResultCode ?? source.LastKnownUpdaterResultCode,
             LastUpdatedAtUtc = now
         };
+    }
+
+    private async Task PersistLaunchFailureAsync(ApplicationUpdateStagingState sourceState, string failureDetail, CancellationToken cancellationToken)
+    {
+        var failedAt = DateTimeOffset.UtcNow;
+        var operatorMessage = $"Bootstrapper launch failed: {failureDetail}";
+        var failedState = CloneState(
+            sourceState,
+            ApplicationUpdateStagingStatus.ApplyFailed,
+            operatorMessage,
+            failedAt,
+            applyCompletedAtUtc: failedAt,
+            failureMessage: operatorMessage,
+            lastKnownUpdaterStage: "bootstrapper_launch_failed",
+            lastKnownUpdaterResultCode: "failed");
+        await _stagingStateStore.WriteAsync(failedState, cancellationToken);
+    }
+
+    private static string? ValidateLaunchInputs(string bootstrapperPath, string stagedMetadataPath, string installRootPath, string powerShellExecutablePath)
+    {
+        if (string.IsNullOrWhiteSpace(powerShellExecutablePath))
+        {
+            return $"PowerShell executable was not found at '{powerShellExecutablePath}'.";
+        }
+
+        if (string.IsNullOrWhiteSpace(bootstrapperPath) || !File.Exists(bootstrapperPath))
+        {
+            return $"Bundled updater bootstrapper was not found at '{bootstrapperPath}'.";
+        }
+
+        if (string.IsNullOrWhiteSpace(stagedMetadataPath) || !File.Exists(stagedMetadataPath))
+        {
+            return $"Staged metadata file was not found at '{stagedMetadataPath}'.";
+        }
+
+        if (string.IsNullOrWhiteSpace(installRootPath) || !Directory.Exists(installRootPath))
+        {
+            return $"Bootstrapper working directory was not found at '{installRootPath}'.";
+        }
+
+        return null;
     }
 
     private sealed class ExternalUpdaterStatusSnapshot
