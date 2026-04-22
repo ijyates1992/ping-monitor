@@ -57,6 +57,8 @@ public sealed class ApplicationUpdateApplyServiceTests
             Assert.Equal(Path.Combine(stagingRoot, "state", "external-updater-status.json"), launcher.StatusJsonPath);
             Assert.Equal(Path.Combine(stagingRoot, "state", "external-updater.log"), launcher.LogPath);
             Assert.Equal("C:\\Program Files\\PowerShell\\7\\pwsh.exe", launcher.PowerShellExecutablePath);
+            Assert.Equal("PingMonitor", launcher.SiteName);
+            Assert.Equal("PingMonitorPool", launcher.AppPoolName);
         }
         finally
         {
@@ -161,18 +163,65 @@ public sealed class ApplicationUpdateApplyServiceTests
         }
     }
 
+    [Fact]
+    public async Task RequestApplyAsync_ThrowsWhenIisIdentityValuesAreMissing()
+    {
+        var contentRoot = CreateTempRoot();
+        try
+        {
+            var stagingRoot = Path.Combine(contentRoot, "App_Data", "Updater");
+            Directory.CreateDirectory(Path.Combine(stagingRoot, "state"));
+            Directory.CreateDirectory(Path.Combine(contentRoot, "Updater"));
+
+            var bootstrapperPath = Path.Combine(contentRoot, "Updater", "run-staged-update-bootstrapper.ps1");
+            await File.WriteAllTextAsync(bootstrapperPath, "# bootstrapper");
+
+            var zipPath = Path.Combine(stagingRoot, "staged", "current", "pkg.zip");
+            Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
+            await File.WriteAllTextAsync(zipPath, "zip");
+
+            var metadataPath = Path.Combine(stagingRoot, "state", "staged-update.json");
+            await File.WriteAllTextAsync(metadataPath, "{}");
+
+            var store = BuildStateStore(contentRoot);
+            await store.WriteAsync(new ApplicationUpdateStagingState
+            {
+                SourceRepository = "ijyates1992/ping-monitor",
+                ReleaseTag = "V1.2.3",
+                StagedZipPath = zipPath,
+                ChecksumVerified = true,
+                Status = ApplicationUpdateStagingStatus.Ready,
+                LastUpdatedAtUtc = DateTimeOffset.UtcNow
+            }, CancellationToken.None);
+
+            var launcher = new RecordingLauncher();
+            var service = BuildService(contentRoot, store, launcher, iisSiteName: "", iisAppPoolName: "");
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RequestApplyAsync("admin-user", CancellationToken.None));
+            Assert.Contains("ApplicationUpdater:IisSiteName", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
     private static ApplicationUpdateApplyService BuildService(
         string contentRoot,
         IApplicationUpdateStagingStateStore store,
         IExternalUpdaterProcessLauncher launcher,
         string currentVersion = "V1.0.0",
-        StartupMode startupMode = StartupMode.Normal)
+        StartupMode startupMode = StartupMode.Normal,
+        string iisSiteName = "PingMonitor",
+        string iisAppPoolName = "PingMonitorPool")
     {
         var options = Microsoft.Extensions.Options.Options.Create(new ApplicationUpdaterOptions
         {
             StagingStoragePath = "App_Data/Updater",
             BootstrapperRelativePath = "Updater/run-staged-update-bootstrapper.ps1",
-            PowerShellExecutablePath = "pwsh.exe"
+            PowerShellExecutablePath = "pwsh.exe",
+            IisSiteName = iisSiteName,
+            IisAppPoolName = iisAppPoolName
         });
 
         return new ApplicationUpdateApplyService(
@@ -208,6 +257,8 @@ public sealed class ApplicationUpdateApplyServiceTests
         public string? InstallRootPath { get; private set; }
         public string? StatusJsonPath { get; private set; }
         public string? LogPath { get; private set; }
+        public string? SiteName { get; private set; }
+        public string? AppPoolName { get; private set; }
 
         public bool TryResolveExecutablePath(string configuredExecutablePath, out string? resolvedExecutablePath, out string? resolutionErrorMessage)
         {
@@ -216,12 +267,14 @@ public sealed class ApplicationUpdateApplyServiceTests
             return ResolveExecutablePathResult;
         }
 
-        public bool TryLaunch(string powerShellExecutablePath, string bootstrapperScriptPath, string stagedMetadataPath, string installRootPath, string statusJsonPath, string logPath, string? expectedReleaseTag, out string? launchErrorMessage)
+        public bool TryLaunch(string powerShellExecutablePath, string bootstrapperScriptPath, string stagedMetadataPath, string installRootPath, string siteName, string appPoolName, string statusJsonPath, string logPath, string? expectedReleaseTag, out string? launchErrorMessage)
         {
             PowerShellExecutablePath = powerShellExecutablePath;
             BootstrapperScriptPath = bootstrapperScriptPath;
             StagedMetadataPath = stagedMetadataPath;
             InstallRootPath = installRootPath;
+            SiteName = siteName;
+            AppPoolName = appPoolName;
             StatusJsonPath = statusJsonPath;
             LogPath = logPath;
             launchErrorMessage = null;
