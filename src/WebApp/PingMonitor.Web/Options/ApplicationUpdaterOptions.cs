@@ -14,5 +14,5 @@ public sealed class ApplicationUpdaterOptions
     public string ChecksumAssetName { get; set; } = "SHA256.txt";
     public string StagingStoragePath { get; set; } = "App_Data/Updater";
     public string BootstrapperRelativePath { get; set; } = "Updater/run-staged-update-bootstrapper.ps1";
-    public string PowerShellExecutablePath { get; set; } = "powershell.exe";
+    public string PowerShellExecutablePath { get; set; } = "pwsh.exe";
 }

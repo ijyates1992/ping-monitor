@@ -303,7 +303,28 @@ function Get-RelativePath {
         [Parameter(Mandatory = $true)][string]$FullPath
     )
 
-    return [System.IO.Path]::GetRelativePath($BasePath, $FullPath)
+    $resolvedBasePath = [System.IO.Path]::GetFullPath($BasePath)
+    $resolvedFullPath = [System.IO.Path]::GetFullPath($FullPath)
+
+    if ($resolvedBasePath.Equals($resolvedFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return '.'
+    }
+
+    $baseWithSeparator = $resolvedBasePath.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    $baseUri = [System.Uri]::new($baseWithSeparator)
+    $fullUri = [System.Uri]::new($resolvedFullPath)
+    $relativeUri = $baseUri.MakeRelativeUri($fullUri)
+
+    if ($relativeUri.IsAbsoluteUri) {
+        return $resolvedFullPath
+    }
+
+    $relativePath = [System.Uri]::UnescapeDataString($relativeUri.ToString()) -replace '/', [System.IO.Path]::DirectorySeparatorChar
+    if ([string]::IsNullOrWhiteSpace($relativePath)) {
+        return '.'
+    }
+
+    return $relativePath
 }
 
 function Update-PreservedAppSettingsVersion {
