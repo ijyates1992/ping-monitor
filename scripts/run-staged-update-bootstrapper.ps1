@@ -256,6 +256,67 @@ function Copy-NewPayload {
     }
 }
 
+function Resolve-PayloadRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExtractRoot
+    )
+
+    $directPayloadRoot = Join-Path $ExtractRoot 'app'
+    if (Test-Path -LiteralPath $directPayloadRoot -PathType Container) {
+        Write-Log "Detected payload layout A at '$directPayloadRoot'."
+        return [ordered]@{
+            payloadRoot = $directPayloadRoot
+            packageRoot = $ExtractRoot
+            layout = 'extract-root/app'
+        }
+    }
+
+    $topLevelDirectories = @(Get-ChildItem -LiteralPath $ExtractRoot -Directory -Force)
+    if ($topLevelDirectories.Count -eq 1) {
+        $nestedPackageRoot = $topLevelDirectories[0].FullName
+        $nestedPayloadRoot = Join-Path $nestedPackageRoot 'app'
+        if (Test-Path -LiteralPath $nestedPayloadRoot -PathType Container) {
+            Write-Log "Detected payload layout B at '$nestedPayloadRoot'."
+            return [ordered]@{
+                payloadRoot = $nestedPayloadRoot
+                packageRoot = $nestedPackageRoot
+                layout = 'extract-root/<single-package-folder>/app'
+            }
+        }
+    }
+
+    $topLevelEntries = @(Get-ChildItem -LiteralPath $ExtractRoot -Force | ForEach-Object {
+            if ($_.PSIsContainer) { "[D] $($_.Name)" } else { "[F] $($_.Name)" }
+        })
+    $topLevelSummary = if ($topLevelEntries.Count -gt 0) { $topLevelEntries -join ', ' } else { '(none)' }
+
+    $attemptedLayouts = @(
+        "A: '$directPayloadRoot'",
+        "B: '<extract-root>/<single-top-level-dir>/app'"
+    ) -join '; '
+
+    throw "Unable to detect staged ZIP payload root. Extract root: '$ExtractRoot'. Top-level entries: $topLevelSummary. Attempted layouts: $attemptedLayouts."
+}
+
+function Test-PackageStructure {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageRoot
+    )
+
+    $payloadRoot = Join-Path $PackageRoot 'app'
+    if (-not (Test-Path -LiteralPath $payloadRoot -PathType Container)) {
+        throw "Detected package root '$PackageRoot' is missing required 'app' folder."
+    }
+
+    $manifestPath = Join-Path $PackageRoot 'manifest.json'
+    if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+        Write-Log "Package structure validation: found manifest at '$manifestPath'."
+    }
+    else {
+        Write-Log "Package structure validation: manifest.json not found at '$manifestPath' (continuing)."
+    }
+}
+
 function Finalize-Success {
     $status.succeeded = $true
     $status.resultCode = 'success'
@@ -335,10 +396,11 @@ try {
     try {
         Expand-Archive -LiteralPath $zipPathResolved -DestinationPath $extractPath -Force
 
-        $payloadRoot = Join-Path $extractPath 'app'
-        if (-not (Test-Path -LiteralPath $payloadRoot -PathType Container)) {
-            throw "Staged ZIP did not contain expected 'app' payload folder at '$payloadRoot'."
-        }
+        $resolvedPayload = Resolve-PayloadRoot -ExtractRoot $extractPath
+        $payloadRoot = $resolvedPayload.payloadRoot
+        $packageRoot = $resolvedPayload.packageRoot
+        Write-Log "Using payload root '$payloadRoot' (layout: $($resolvedPayload.layout))."
+        Test-PackageStructure -PackageRoot $packageRoot
 
         $status.appOfflinePath = Join-Path $script:installRootResolved 'app_offline.htm'
 

@@ -59,9 +59,12 @@ By default it preserves these existing paths in install root:
 
 The replacement process:
 1. Extract ZIP to temp path.
-2. Validate extracted `app/` payload root.
-3. Remove stale files/folders from install root **excluding preserved paths**.
-4. Copy payload files into install root **excluding preserved paths**.
+2. Detect payload root using one of the supported layouts:
+   - `<extract-root>/app`
+   - `<extract-root>/<single-package-folder>/app`
+3. Validate detected package structure (`app/` required, `manifest.json` logged if present).
+4. Remove stale files/folders from install root **excluding preserved paths**.
+5. Copy payload files into install root **excluding preserved paths**.
 
 ## Startup Gate compatibility
 
