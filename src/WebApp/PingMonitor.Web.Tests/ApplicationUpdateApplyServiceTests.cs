@@ -436,6 +436,59 @@ public sealed class ApplicationUpdateApplyServiceTests
         }
     }
 
+    [Fact]
+    public async Task RequestApplyAsync_DoesNotOverwriteStateWhenApplyPrerequisitesFail()
+    {
+        var contentRoot = CreateTempRoot();
+        try
+        {
+            var stagingRoot = Path.Combine(contentRoot, "App_Data", "Updater");
+            Directory.CreateDirectory(Path.Combine(stagingRoot, "state"));
+            Directory.CreateDirectory(Path.Combine(contentRoot, "Updater"));
+
+            var bootstrapperPath = Path.Combine(contentRoot, "Updater", "run-staged-update-bootstrapper.ps1");
+            await File.WriteAllTextAsync(bootstrapperPath, "# bootstrapper");
+
+            var metadataPath = Path.Combine(stagingRoot, "state", "staged-update.json");
+            await File.WriteAllTextAsync(metadataPath, "{}");
+
+            var store = BuildStateStore(contentRoot);
+            var previousState = new ApplicationUpdateStagingState
+            {
+                SourceRepository = "ijyates1992/ping-monitor",
+                ReleaseTag = "V1.2.3",
+                StagedZipPath = Path.Combine(stagingRoot, "staged", "current", "missing.zip"),
+                ChecksumVerified = true,
+                Status = ApplicationUpdateStagingStatus.ApplyFailed,
+                FailureMessage = "Previous failure context",
+                LastKnownUpdaterStage = "bootstrapper_launch_failed",
+                LastKnownUpdaterResultCode = "error",
+                LastApplyRequestedByUserId = "existing-user",
+                ApplyRequestedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-3),
+                LastUpdatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1)
+            };
+            await store.WriteAsync(previousState, CancellationToken.None);
+
+            var service = BuildService(contentRoot, store, new RecordingLauncher());
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RequestApplyAsync("admin-user", CancellationToken.None));
+            Assert.Contains("A staged update is not ready for apply.", exception.Message);
+
+            var afterFailure = await store.ReadAsync(CancellationToken.None);
+            Assert.NotNull(afterFailure);
+            Assert.Equal(previousState.Status, afterFailure!.Status);
+            Assert.Equal(previousState.FailureMessage, afterFailure.FailureMessage);
+            Assert.Equal(previousState.LastKnownUpdaterStage, afterFailure.LastKnownUpdaterStage);
+            Assert.Equal(previousState.LastKnownUpdaterResultCode, afterFailure.LastKnownUpdaterResultCode);
+            Assert.Equal(previousState.LastApplyRequestedByUserId, afterFailure.LastApplyRequestedByUserId);
+            Assert.Equal(previousState.ApplyRequestedAtUtc, afterFailure.ApplyRequestedAtUtc);
+        }
+        finally
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
     private static ApplicationUpdateApplyService BuildService(
         string contentRoot,
         IApplicationUpdateStagingStateStore store,

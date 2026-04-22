@@ -385,6 +385,8 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         var externalStatusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
         var externalLogPath = Path.Combine(stagingRoot, "state", "external-updater.log");
 
+        ValidateApplyPrerequisites(current, stagedMetadataPath);
+
         var now = DateTimeOffset.UtcNow;
         var requestedState = new ApplicationUpdateStagingState
         {
@@ -435,8 +437,6 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         };
 
         await _stagingStateStore.WriteAsync(requestedState, cancellationToken);
-
-        ValidateApplyPrerequisites(current, stagedMetadataPath);
 
         var resolvingAt = DateTimeOffset.UtcNow;
         var resolvingState = CloneState(
