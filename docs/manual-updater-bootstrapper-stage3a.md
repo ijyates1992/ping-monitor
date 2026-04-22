@@ -58,6 +58,7 @@ By default it preserves these existing paths in install root:
 - `appsettings.*.json`
 
 Additionally, these runtime-owned paths are always preserved even if the caller passes a narrower custom `-PreserveRelativePaths` list:
+- `App_Data/**` (preserves the container folder so mandatory Startup Gate/data subpaths are never removed as stale)
 - `App_Data/StartupGate/**` (includes Startup Gate DB configuration files such as `dbsettings.json` and `dbpassword.bin`)
 - `App_Data/Backups/**`
 - `App_Data/DbBackups/**`
