@@ -15,6 +15,8 @@ public interface IApplicationUpdateApplyService
 
 public interface IExternalUpdaterProcessLauncher
 {
+    bool TryResolveExecutablePath(string configuredExecutablePath, out string? resolvedExecutablePath, out string? resolutionErrorMessage);
+
     bool TryLaunch(
         string powerShellExecutablePath,
         string bootstrapperScriptPath,
@@ -28,6 +30,59 @@ public interface IExternalUpdaterProcessLauncher
 
 internal sealed class ExternalUpdaterProcessLauncher : IExternalUpdaterProcessLauncher
 {
+    public bool TryResolveExecutablePath(string configuredExecutablePath, out string? resolvedExecutablePath, out string? resolutionErrorMessage)
+    {
+        resolvedExecutablePath = null;
+        resolutionErrorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(configuredExecutablePath))
+        {
+            resolutionErrorMessage = "PowerShell executable path is not configured.";
+            return false;
+        }
+
+        var configured = configuredExecutablePath.Trim();
+        if (Path.IsPathRooted(configured))
+        {
+            var absolutePath = Path.GetFullPath(configured);
+            if (!File.Exists(absolutePath))
+            {
+                resolutionErrorMessage = $"Configured PowerShell executable was not found at '{absolutePath}'.";
+                return false;
+            }
+
+            resolvedExecutablePath = absolutePath;
+            return true;
+        }
+
+        var candidateNames = BuildExecutableCandidates(configured);
+        var pathValue = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        var directories = pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var directory in directories)
+        {
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                continue;
+            }
+
+            foreach (var candidateName in candidateNames)
+            {
+                var candidatePath = Path.Combine(directory, candidateName);
+                if (!File.Exists(candidatePath))
+                {
+                    continue;
+                }
+
+                resolvedExecutablePath = Path.GetFullPath(candidatePath);
+                return true;
+            }
+        }
+
+        resolutionErrorMessage = $"Configured PowerShell executable '{configuredExecutablePath}' was not found on PATH.";
+        return false;
+    }
+
     public bool TryLaunch(
         string powerShellExecutablePath,
         string bootstrapperScriptPath,
@@ -85,6 +140,23 @@ internal sealed class ExternalUpdaterProcessLauncher : IExternalUpdaterProcessLa
             return false;
         }
     }
+
+    private static string[] BuildExecutableCandidates(string configuredExecutablePath)
+    {
+        var names = new List<string>();
+        var configured = configuredExecutablePath.Trim();
+        names.Add(configured);
+
+        if (Path.GetExtension(configured).Length == 0 &&
+            OperatingSystem.IsWindows())
+        {
+            names.Add($"{configured}.exe");
+            names.Add($"{configured}.cmd");
+            names.Add($"{configured}.bat");
+        }
+
+        return names.ToArray();
+    }
 }
 
 internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplyService
@@ -129,6 +201,12 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         var stagedMetadataPath = Path.Combine(stagingRoot, "state", "staged-update.json");
         var bootstrapperPath = ResolveBootstrapperPath();
         var installRootPath = Path.GetFullPath(_environment.ContentRootPath);
+        if (!_launcher.TryResolveExecutablePath(_options.PowerShellExecutablePath, out var powerShellExecutablePath, out var powerShellResolutionError))
+        {
+            throw new InvalidOperationException(
+                $"Unable to resolve the configured PowerShell host '{_options.PowerShellExecutablePath}'. {powerShellResolutionError}");
+        }
+
         var externalStatusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
         var externalLogPath = Path.Combine(stagingRoot, "state", "external-updater.log");
 
@@ -178,7 +256,7 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         await _stagingStateStore.WriteAsync(requestedState, cancellationToken);
 
         var launched = _launcher.TryLaunch(
-            _options.PowerShellExecutablePath,
+            powerShellExecutablePath!,
             bootstrapperPath,
             stagedMetadataPath,
             installRootPath,
