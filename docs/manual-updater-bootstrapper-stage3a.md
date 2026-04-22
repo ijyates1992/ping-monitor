@@ -40,7 +40,7 @@ Optional parameters:
 - `-ExpectedReleaseTag` (safety assertion)
 - `-StatusJsonPath` (optional; runtime-safe location is enforced if this path is under install root)
 - `-LogPath` (optional; runtime-safe location is enforced if this path is under install root)
-- `-PreserveRelativePaths` (defaults to `App_Data`, `appsettings.json`, `appsettings.*.json`)
+- `-PreserveRelativePaths` (defaults to `App_Data`, `appsettings.json`, `appsettings.*.json`; runtime-critical Startup Gate/data paths are always preserved)
 - `-DryRun` (validation + extraction + plan reporting without stop/swap/start)
 
 Stage 2 metadata fields required by this script:
@@ -57,6 +57,25 @@ By default it preserves these existing paths in install root:
 - `appsettings.json`
 - `appsettings.*.json`
 
+Additionally, these runtime-owned paths are always preserved even if the caller passes a narrower custom `-PreserveRelativePaths` list:
+- `App_Data/StartupGate/**` (includes Startup Gate DB configuration files such as `dbsettings.json` and `dbpassword.bin`)
+- `App_Data/Backups/**`
+- `App_Data/DbBackups/**`
+- `App_Data/Updater/**`
+
+### Preserve / replace / merge categories
+
+The updater now treats files in explicit ownership categories:
+
+1. **Runtime/environment-owned (preserve)**  
+   Local operational state and credentials/configuration persisted by the running app.
+
+2. **Release-owned (replace)**  
+   Binaries/static payload files from the staged `app/` release folder.
+
+3. **Mixed-ownership (merge)**  
+   `appsettings.json` is preserved for environment values, then patched with release-owned `ApplicationMetadata.Version` from the staged package so About/Startup Gate version reflects the newly installed release.
+
 The replacement process:
 1. Extract ZIP to temp path.
 2. Detect payload root using one of the supported layouts:
@@ -65,6 +84,7 @@ The replacement process:
 3. Validate detected package structure (`app/` required, `manifest.json` logged if present).
 4. Remove stale files/folders from install root **excluding preserved paths**.
 5. Copy payload files into install root **excluding preserved paths**.
+6. Patch preserved `appsettings.json` with `ApplicationMetadata.Version` from staged release `appsettings.json`.
 
 ## Startup Gate compatibility
 

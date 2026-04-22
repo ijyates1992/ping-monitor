@@ -58,6 +58,18 @@ $script:logPathResolved = $null
 $script:installRootResolved = $null
 $script:runtimeStateRootResolved = $null
 $script:statusMirrorPathResolved = $null
+$script:effectivePreservePatterns = @()
+
+# Release/package ownership model:
+# 1) Runtime/environment-owned paths MUST survive file replacement.
+# 2) Release-owned payload files are replaced from staged package contents.
+# 3) Mixed-ownership files (for example appsettings.json) are preserved, then patched with release-owned metadata.
+$mandatoryRuntimePreservePatterns = @(
+    'App_Data/StartupGate',
+    'App_Data/Backups',
+    'App_Data/DbBackups',
+    'App_Data/Updater'
+)
 
 function Ensure-Directory {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -236,6 +248,49 @@ function Test-IsPreserved {
     return $false
 }
 
+function Test-HasPreservedDescendant {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string[]]$Patterns
+    )
+
+    $normalizedRelative = $RelativePath.Replace('\', '/').TrimStart('./').TrimStart('/')
+    if ([string]::IsNullOrWhiteSpace($normalizedRelative)) {
+        return $false
+    }
+
+    foreach ($pattern in $Patterns) {
+        $normalizedPattern = $pattern.Replace('\', '/').TrimStart('./').TrimStart('/')
+        if ($normalizedPattern.StartsWith("$normalizedRelative/", [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-EffectivePreservePatterns {
+    param([Parameter(Mandatory = $true)][string[]]$RequestedPatterns)
+
+    $allPatterns = @()
+    $allPatterns += $mandatoryRuntimePreservePatterns
+    $allPatterns += $RequestedPatterns
+
+    $result = New-Object System.Collections.Generic.List[string]
+    foreach ($pattern in $allPatterns) {
+        if ([string]::IsNullOrWhiteSpace($pattern)) {
+            continue
+        }
+
+        $normalized = $pattern.Replace('\\', '/').Trim()
+        if (-not $result.Contains($normalized)) {
+            $result.Add($normalized)
+        }
+    }
+
+    return $result.ToArray()
+}
+
 function Get-RelativePath {
     param(
         [Parameter(Mandatory = $true)][string]$BasePath,
@@ -243,6 +298,59 @@ function Get-RelativePath {
     )
 
     return [System.IO.Path]::GetRelativePath($BasePath, $FullPath)
+}
+
+function Update-PreservedAppSettingsVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot
+    )
+
+    $sourceAppSettingsPath = Join-Path $SourceRoot 'appsettings.json'
+    $destinationAppSettingsPath = Join-Path $DestinationRoot 'appsettings.json'
+
+    if (-not (Test-Path -LiteralPath $sourceAppSettingsPath -PathType Leaf)) {
+        Write-Log "Mixed-ownership merge skipped: staged payload appsettings.json not found at '$sourceAppSettingsPath'."
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $destinationAppSettingsPath -PathType Leaf)) {
+        Write-Log "Mixed-ownership merge skipped: existing appsettings.json not found at '$destinationAppSettingsPath'."
+        return
+    }
+
+    $sourceSettings = Get-Content -LiteralPath $sourceAppSettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $destinationSettings = Get-Content -LiteralPath $destinationAppSettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+    if (-not $sourceSettings -or -not $destinationSettings) {
+        throw 'Unable to parse appsettings.json for mixed-ownership merge.'
+    }
+
+    $sourceVersion = $sourceSettings.ApplicationMetadata.Version
+    if ([string]::IsNullOrWhiteSpace($sourceVersion)) {
+        Write-Log 'Mixed-ownership merge skipped: staged appsettings.json does not define ApplicationMetadata.Version.'
+        return
+    }
+
+    if (-not $destinationSettings.ApplicationMetadata) {
+        $destinationSettings | Add-Member -NotePropertyName 'ApplicationMetadata' -NotePropertyValue ([PSCustomObject]@{})
+    }
+
+    if (-not ($destinationSettings.ApplicationMetadata.PSObject.Properties.Name -contains 'Version')) {
+        $destinationSettings.ApplicationMetadata | Add-Member -NotePropertyName 'Version' -NotePropertyValue $sourceVersion
+    }
+    else {
+        $destinationSettings.ApplicationMetadata.Version = $sourceVersion
+    }
+
+    if ($DryRun) {
+        Write-Log "DryRun: would merge staged ApplicationMetadata.Version '$sourceVersion' into preserved appsettings.json."
+        return
+    }
+
+    $mergedJson = $destinationSettings | ConvertTo-Json -Depth 32
+    Set-Content -LiteralPath $destinationAppSettingsPath -Value $mergedJson -Encoding UTF8
+    Write-Log "Merged staged ApplicationMetadata.Version '$sourceVersion' into preserved appsettings.json."
 }
 
 function Stop-IisRuntime {
@@ -299,6 +407,10 @@ function Remove-IfStale {
     Get-ChildItem -LiteralPath $DestinationRoot -Recurse -Force | Sort-Object -Property FullName -Descending | ForEach-Object {
         $relative = Get-RelativePath -BasePath $DestinationRoot -FullPath $_.FullName
         if (Test-IsPreserved -RelativePath $relative -Patterns $PreservePatterns) {
+            return
+        }
+
+        if ($_.PSIsContainer -and (Test-HasPreservedDescendant -RelativePath $relative -Patterns $PreservePatterns)) {
             return
         }
 
@@ -505,6 +617,8 @@ try {
         Test-PackageStructure -PackageRoot $packageRoot
 
         $status.appOfflinePath = Join-Path $script:installRootResolved 'app_offline.htm'
+        $script:effectivePreservePatterns = Get-EffectivePreservePatterns -RequestedPatterns $PreserveRelativePaths
+        Write-Log "Effective preserve patterns: $($script:effectivePreservePatterns -join ', ')."
 
         Write-Status -Stage 'entering_maintenance' -Message 'Creating app_offline marker and stopping IIS runtime.'
         if ($DryRun) {
@@ -525,8 +639,11 @@ try {
         Stop-IisRuntime
 
         Write-Status -Stage 'replacing_payload' -Message 'Replacing IIS payload while preserving configured local paths.'
-        Remove-IfStale -DestinationRoot $script:installRootResolved -SourceRoot $payloadRoot -PreservePatterns $PreserveRelativePaths
-        Copy-NewPayload -SourceRoot $payloadRoot -DestinationRoot $script:installRootResolved -PreservePatterns $PreserveRelativePaths
+        Remove-IfStale -DestinationRoot $script:installRootResolved -SourceRoot $payloadRoot -PreservePatterns $script:effectivePreservePatterns
+        Copy-NewPayload -SourceRoot $payloadRoot -DestinationRoot $script:installRootResolved -PreservePatterns $script:effectivePreservePatterns
+
+        Write-Status -Stage 'merging_mixed_ownership_configuration' -Message 'Merging release-owned version metadata into preserved runtime configuration.'
+        Update-PreservedAppSettingsVersion -SourceRoot $payloadRoot -DestinationRoot $script:installRootResolved
 
         Write-Status -Stage 'starting_iis_runtime' -Message 'Starting IIS runtime after payload replacement.'
         Start-IisRuntime
