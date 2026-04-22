@@ -65,6 +65,7 @@ $script:effectivePreservePatterns = @()
 # 2) Release-owned payload files are replaced from staged package contents.
 # 3) Mixed-ownership files (for example appsettings.json) are preserved, then patched with release-owned metadata.
 $mandatoryRuntimePreservePatterns = @(
+    'App_Data',
     'App_Data/StartupGate',
     'App_Data/Backups',
     'App_Data/DbBackups',
