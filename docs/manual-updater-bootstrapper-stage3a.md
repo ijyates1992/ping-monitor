@@ -38,8 +38,8 @@ Optional parameters:
 - `-SiteName` (IIS website name)
 - `-AppPoolName` (IIS application pool name)
 - `-ExpectedReleaseTag` (safety assertion)
-- `-StatusJsonPath` (defaults beside staged metadata)
-- `-LogPath` (defaults beside staged metadata)
+- `-StatusJsonPath` (optional; runtime-safe location is enforced if this path is under install root)
+- `-LogPath` (optional; runtime-safe location is enforced if this path is under install root)
 - `-PreserveRelativePaths` (defaults to `App_Data`, `appsettings.json`, `appsettings.*.json`)
 - `-DryRun` (validation + extraction + plan reporting without stop/swap/start)
 
@@ -99,9 +99,15 @@ pwsh ./scripts/run-staged-update-bootstrapper.ps1 \
 
 ## Output artifacts
 
-By default (unless overridden), outputs are written beside the staged metadata file:
+By default the bootstrapper evaluates configured output paths against `InstallRootPath`:
+- if a configured/default output path is **outside** install root, it is used directly
+- if a configured/default output path is **inside** install root (replaceable during swap), runtime writes are redirected to a per-run temp session folder under `%TEMP%`
+
+Runtime artifacts:
 - `external-updater.log`
 - `external-updater-status.json`
+
+When runtime redirection is active, final status is mirrored back to the originally requested status path after execution (best effort).
 
 `external-updater-status.json` includes:
 - start/completion timestamps

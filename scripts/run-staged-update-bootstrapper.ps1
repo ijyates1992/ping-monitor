@@ -56,6 +56,8 @@ $script:appOfflineCreated = $false
 $script:statusPathResolved = $null
 $script:logPathResolved = $null
 $script:installRootResolved = $null
+$script:runtimeStateRootResolved = $null
+$script:statusMirrorPathResolved = $null
 
 function Ensure-Directory {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -75,22 +77,98 @@ function Resolve-FullPath {
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Path))
 }
 
+
+function Test-PathWithinRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$CandidatePath,
+        [Parameter(Mandatory = $true)][string]$RootPath
+    )
+
+    $candidateFull = [System.IO.Path]::GetFullPath($CandidatePath).TrimEnd('\', '/')
+    $rootFull = [System.IO.Path]::GetFullPath($RootPath).TrimEnd('\', '/')
+
+    if ([string]::Equals($candidateFull, $rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    $rootWithSeparator = $rootFull + [System.IO.Path]::DirectorySeparatorChar
+    return $candidateFull.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function New-RuntimeStateRoot {
+    $sessionName = "ping-monitor-external-updater-" + [System.Guid]::NewGuid().ToString('N')
+    return Join-Path ([System.IO.Path]::GetTempPath()) $sessionName
+}
+
+function Try-WriteTextFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    try {
+        $parentDirectory = Split-Path -Path $Path -Parent
+        if (-not [string]::IsNullOrWhiteSpace($parentDirectory)) {
+            Ensure-Directory -Path $parentDirectory
+        }
+
+        Set-Content -LiteralPath $Path -Value $Content -Encoding UTF8
+        return $true
+    }
+    catch {
+        Write-Warning "Failed to write $Description at '$Path': $($_.Exception.Message)"
+        return $false
+    }
+}
+
 function Initialize-Outputs {
     $metadataResolved = Resolve-FullPath -Path $StagedMetadataPath
     $metadataDirectory = Split-Path -Path $metadataResolved -Parent
 
-    if ([string]::IsNullOrWhiteSpace($StatusJsonPath)) {
-        $script:statusPathResolved = Join-Path $metadataDirectory 'external-updater-status.json'
+    $script:installRootResolved = Resolve-FullPath -Path $InstallRootPath
+
+    $fallbackRuntimeRoot = New-RuntimeStateRoot
+    $fallbackStatusPath = Join-Path $fallbackRuntimeRoot 'external-updater-status.json'
+    $fallbackLogPath = Join-Path $fallbackRuntimeRoot 'external-updater.log'
+
+    $statusPathCandidate = if ([string]::IsNullOrWhiteSpace($StatusJsonPath)) {
+        Join-Path $metadataDirectory 'external-updater-status.json'
     }
     else {
-        $script:statusPathResolved = Resolve-FullPath -Path $StatusJsonPath
+        Resolve-FullPath -Path $StatusJsonPath
     }
 
-    if ([string]::IsNullOrWhiteSpace($LogPath)) {
-        $script:logPathResolved = Join-Path $metadataDirectory 'external-updater.log'
+    $logPathCandidate = if ([string]::IsNullOrWhiteSpace($LogPath)) {
+        Join-Path $metadataDirectory 'external-updater.log'
     }
     else {
-        $script:logPathResolved = Resolve-FullPath -Path $LogPath
+        Resolve-FullPath -Path $LogPath
+    }
+
+    $statusPathWithinInstallRoot = Test-PathWithinRoot -CandidatePath $statusPathCandidate -RootPath $script:installRootResolved
+    $logPathWithinInstallRoot = Test-PathWithinRoot -CandidatePath $logPathCandidate -RootPath $script:installRootResolved
+
+    if ($statusPathWithinInstallRoot -or $logPathWithinInstallRoot) {
+        $script:runtimeStateRootResolved = $fallbackRuntimeRoot
+        $script:statusPathResolved = $fallbackStatusPath
+        $script:logPathResolved = $fallbackLogPath
+
+        $script:statusMirrorPathResolved = $statusPathCandidate
+
+        Write-Warning "Bootstrapper runtime log/status paths are inside the replaceable install root. Using external runtime state path '$script:runtimeStateRootResolved' for live writes."
+    }
+    else {
+        $script:statusPathResolved = $statusPathCandidate
+        $script:logPathResolved = $logPathCandidate
+
+        $statusDirectory = Split-Path -Path $script:statusPathResolved -Parent
+        $script:runtimeStateRootResolved = if (-not [string]::IsNullOrWhiteSpace($statusDirectory)) {
+            $statusDirectory
+        }
+        else {
+            New-RuntimeStateRoot
+        }
     }
 
     Ensure-Directory -Path (Split-Path -Path $script:statusPathResolved -Parent)
@@ -113,14 +191,27 @@ function Write-Status {
         atUtc = (Get-Date).ToUniversalTime().ToString('o')
     }
 
-    $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $script:statusPathResolved -Encoding UTF8
+    $statusJson = $status | ConvertTo-Json -Depth 8
+    [void](Try-WriteTextFile -Path $script:statusPathResolved -Content $statusJson -Description 'status JSON')
 }
 
 function Write-Log {
     param([Parameter(Mandatory = $true)][string]$Message)
 
     $line = "$(Get-Date -Format o) $Message"
-    Add-Content -LiteralPath $script:logPathResolved -Value $line -Encoding UTF8
+
+    try {
+        $parentDirectory = Split-Path -Path $script:logPathResolved -Parent
+        if (-not [string]::IsNullOrWhiteSpace($parentDirectory)) {
+            Ensure-Directory -Path $parentDirectory
+        }
+
+        Add-Content -LiteralPath $script:logPathResolved -Value $line -Encoding UTF8
+    }
+    catch {
+        Write-Warning "Failed to append updater log at '$script:logPathResolved': $($_.Exception.Message)"
+    }
+
     Write-Host $line
 }
 
@@ -322,7 +413,12 @@ function Finalize-Success {
     $status.resultCode = 'success'
     $status.completedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     $status.stage = 'completed'
-    $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $script:statusPathResolved -Encoding UTF8
+    $statusJson = $status | ConvertTo-Json -Depth 8
+    [void](Try-WriteTextFile -Path $script:statusPathResolved -Content $statusJson -Description 'status JSON')
+
+    if (-not [string]::IsNullOrWhiteSpace($script:statusMirrorPathResolved)) {
+        [void](Try-WriteTextFile -Path $script:statusMirrorPathResolved -Content $statusJson -Description 'mirrored status JSON')
+    }
 }
 
 function Finalize-Failure {
@@ -332,7 +428,12 @@ function Finalize-Failure {
     $status.resultCode = 'failed'
     $status.completedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     $status.error = $ErrorMessage
-    $status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $script:statusPathResolved -Encoding UTF8
+    $statusJson = $status | ConvertTo-Json -Depth 8
+    [void](Try-WriteTextFile -Path $script:statusPathResolved -Content $statusJson -Description 'status JSON')
+
+    if (-not [string]::IsNullOrWhiteSpace($script:statusMirrorPathResolved)) {
+        [void](Try-WriteTextFile -Path $script:statusMirrorPathResolved -Content $statusJson -Description 'mirrored status JSON')
+    }
 }
 
 try {
@@ -388,6 +489,7 @@ try {
     Write-Log "Staged release tag: $($metadata.ReleaseTag)."
     Write-Log "Staged ZIP path: $zipPathResolved."
     Write-Log "Install root path: $script:installRootResolved."
+    Write-Log "Runtime updater state path (non-replaceable): $script:runtimeStateRootResolved."
 
     $workRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ping-monitor-updater-" + [System.Guid]::NewGuid().ToString('N'))
     $extractPath = Join-Path $workRoot 'extract'
