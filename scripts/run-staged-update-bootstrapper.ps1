@@ -259,7 +259,7 @@ function Invoke-WithRetry {
                 throw
             }
 
-            Write-Log "$Description failed on attempt $attempt of $MaxAttempts: $($_.Exception.Message). Retrying after ${DelayMilliseconds}ms."
+            Write-Log (("{0} failed on attempt {1} of {2}: {3}. Retrying after {4}ms." -f $Description, $attempt, $MaxAttempts, $_.Exception.Message, $DelayMilliseconds))
             Start-Sleep -Milliseconds $DelayMilliseconds
         }
     }

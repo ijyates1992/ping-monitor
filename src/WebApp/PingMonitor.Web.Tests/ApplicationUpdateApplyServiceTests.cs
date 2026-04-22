@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,6 +14,107 @@ namespace PingMonitor.Web.Tests;
 
 public sealed class ApplicationUpdateApplyServiceTests
 {
+    [Fact]
+    public void ExternalUpdaterProcessLauncher_TryLaunch_UsesExecutionPolicyBypassAndFile_WithArgumentList()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var tempRoot = CreateTempRoot();
+        try
+        {
+            var argsCapturePath = Path.Combine(tempRoot, "captured-args.json");
+            var executablePath = Path.Combine(tempRoot, "record-args");
+            var bootstrapperPath = Path.Combine(tempRoot, "Updater", "run-staged-update-bootstrapper.ps1");
+            var installRootPath = Path.Combine(tempRoot, "install root");
+            Directory.CreateDirectory(installRootPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(bootstrapperPath)!);
+            File.WriteAllText(bootstrapperPath, "# bootstrapper");
+
+            var recorderScript = """
+                #!/usr/bin/env python3
+                import json
+                import pathlib
+                import sys
+                output = pathlib.Path(r'__ARGS_CAPTURE_PATH__')
+                output.write_text(json.dumps(sys.argv[1:]))
+                """;
+            File.WriteAllText(executablePath, recorderScript.Replace("__ARGS_CAPTURE_PATH__", argsCapturePath.Replace("\\", "\\\\")));
+            File.SetUnixFileMode(
+                executablePath,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+            var launcher = new ExternalUpdaterProcessLauncher();
+            var launched = launcher.TryLaunch(
+                powerShellExecutablePath: executablePath,
+                bootstrapperScriptPath: bootstrapperPath,
+                stagedMetadataPath: Path.Combine(tempRoot, "state folder", "staged update.json"),
+                installRootPath: installRootPath,
+                siteName: "Ping Monitor Site",
+                appPoolName: "Ping Monitor Pool",
+                statusJsonPath: argsCapturePath,
+                logPath: Path.Combine(tempRoot, "logs", "external updater.log"),
+                expectedReleaseTag: "V1.2.3",
+                out var processId,
+                out var launchErrorMessage);
+
+            Assert.True(launched);
+            Assert.Null(launchErrorMessage);
+            Assert.NotNull(processId);
+
+            var timeoutUtc = DateTimeOffset.UtcNow.AddSeconds(5);
+            while (!File.Exists(argsCapturePath) && DateTimeOffset.UtcNow < timeoutUtc)
+            {
+                Thread.Sleep(50);
+            }
+
+            Assert.True(File.Exists(argsCapturePath), "Argument capture file was not written by recorder process.");
+
+            var capturedArgs = JsonSerializer.Deserialize<string[]>(File.ReadAllText(argsCapturePath));
+            Assert.NotNull(capturedArgs);
+            Assert.Equal("-NoProfile", capturedArgs![0]);
+            Assert.Equal("-ExecutionPolicy", capturedArgs[1]);
+            Assert.Equal("Bypass", capturedArgs[2]);
+            Assert.Equal("-File", capturedArgs[3]);
+            Assert.Equal(bootstrapperPath, capturedArgs[4]);
+            Assert.Equal("-StagedMetadataPath", capturedArgs[5]);
+            Assert.Equal(Path.Combine(tempRoot, "state folder", "staged update.json"), capturedArgs[6]);
+            Assert.Equal("-InstallRootPath", capturedArgs[7]);
+            Assert.Equal(installRootPath, capturedArgs[8]);
+            Assert.Equal("-SiteName", capturedArgs[9]);
+            Assert.Equal("Ping Monitor Site", capturedArgs[10]);
+            Assert.Equal("-AppPoolName", capturedArgs[11]);
+            Assert.Equal("Ping Monitor Pool", capturedArgs[12]);
+            Assert.Equal("-StatusJsonPath", capturedArgs[13]);
+            Assert.Equal(argsCapturePath, capturedArgs[14]);
+            Assert.Equal("-LogPath", capturedArgs[15]);
+            Assert.Equal(Path.Combine(tempRoot, "logs", "external updater.log"), capturedArgs[16]);
+            Assert.Equal("-ExpectedReleaseTag", capturedArgs[17]);
+            Assert.Equal("V1.2.3", capturedArgs[18]);
+
+            if (processId is int launchedProcessId)
+            {
+                try
+                {
+                    using var process = Process.GetProcessById(launchedProcessId);
+                    process.WaitForExit(5000);
+                }
+                catch (ArgumentException)
+                {
+                    // Process may already have exited between capture and lookup.
+                }
+            }
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task RequestApplyAsync_UsesExplicitResolvedPaths_AndWritesHandoffState()
     {
