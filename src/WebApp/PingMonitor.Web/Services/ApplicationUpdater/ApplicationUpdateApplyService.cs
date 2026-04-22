@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.ApplicationMetadata;
@@ -167,6 +169,167 @@ internal sealed class ExternalUpdaterProcessLauncher : IExternalUpdaterProcessLa
     }
 }
 
+internal interface IIisMetadataReader
+{
+    bool TryResolveSiteNameFromPhysicalPath(string normalizedInstallRootPath, out string? siteName, out string? errorMessage);
+    bool TryResolveSiteNameFromAppPool(string appPoolName, out string? siteName, out string? errorMessage);
+}
+
+internal sealed class IisMetadataReader : IIisMetadataReader
+{
+    public bool TryResolveSiteNameFromPhysicalPath(string normalizedInstallRootPath, out string? siteName, out string? errorMessage)
+    {
+        return TryResolveSiteName(
+            site =>
+            {
+                var physicalPath = GetRootPhysicalPath(site);
+                if (string.IsNullOrWhiteSpace(physicalPath))
+                {
+                    return false;
+                }
+
+                return string.Equals(
+                    NormalizePath(physicalPath),
+                    normalizedInstallRootPath,
+                    StringComparison.OrdinalIgnoreCase);
+            },
+            out siteName,
+            out errorMessage);
+    }
+
+    public bool TryResolveSiteNameFromAppPool(string appPoolName, out string? siteName, out string? errorMessage)
+    {
+        return TryResolveSiteName(
+            site => string.Equals(GetRootApplicationPoolName(site), appPoolName, StringComparison.OrdinalIgnoreCase),
+            out siteName,
+            out errorMessage);
+    }
+
+    private static bool TryResolveSiteName(Func<object, bool> matcher, out string? siteName, out string? errorMessage)
+    {
+        siteName = null;
+        errorMessage = null;
+
+        if (!OperatingSystem.IsWindows())
+        {
+            errorMessage = "IIS metadata lookup is only supported on Windows hosts.";
+            return false;
+        }
+
+        try
+        {
+            var serverManagerType = Type.GetType("Microsoft.Web.Administration.ServerManager, Microsoft.Web.Administration");
+            if (serverManagerType is null)
+            {
+                errorMessage = "Microsoft.Web.Administration assembly is not available.";
+                return false;
+            }
+
+            using var serverManager = Activator.CreateInstance(serverManagerType) as IDisposable;
+            if (serverManager is null)
+            {
+                errorMessage = "Failed to construct Microsoft.Web.Administration.ServerManager.";
+                return false;
+            }
+
+            var sitesProperty = serverManagerType.GetProperty("Sites", BindingFlags.Public | BindingFlags.Instance);
+            var sites = sitesProperty?.GetValue(serverManager);
+            if (sites is not System.Collections.IEnumerable enumerableSites)
+            {
+                errorMessage = "Could not enumerate IIS sites from ServerManager.";
+                return false;
+            }
+
+            foreach (var site in enumerableSites)
+            {
+                if (site is null || !matcher(site))
+                {
+                    continue;
+                }
+
+                var name = site.GetType().GetProperty("Name", BindingFlags.Public | BindingFlags.Instance)?.GetValue(site) as string;
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    siteName = name;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
+    }
+
+    private static object? GetRootApplication(object site)
+    {
+        var applications = site.GetType().GetProperty("Applications", BindingFlags.Public | BindingFlags.Instance)?.GetValue(site);
+        if (applications is null)
+        {
+            return null;
+        }
+
+        var indexer = applications.GetType()
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(property =>
+            {
+                var indexes = property.GetIndexParameters();
+                return indexes.Length == 1 && indexes[0].ParameterType == typeof(string);
+            });
+
+        return indexer?.GetValue(applications, ["/"]);
+    }
+
+    private static string? GetRootApplicationPoolName(object site)
+    {
+        var rootApplication = GetRootApplication(site);
+        return rootApplication?.GetType().GetProperty("ApplicationPoolName", BindingFlags.Public | BindingFlags.Instance)
+            ?.GetValue(rootApplication) as string;
+    }
+
+    private static string? GetRootPhysicalPath(object site)
+    {
+        var rootApplication = GetRootApplication(site);
+        if (rootApplication is null)
+        {
+            return null;
+        }
+
+        var virtualDirectories = rootApplication.GetType().GetProperty("VirtualDirectories", BindingFlags.Public | BindingFlags.Instance)
+            ?.GetValue(rootApplication);
+        if (virtualDirectories is null)
+        {
+            return null;
+        }
+
+        var indexer = virtualDirectories.GetType()
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(property =>
+            {
+                var indexes = property.GetIndexParameters();
+                return indexes.Length == 1 && indexes[0].ParameterType == typeof(string);
+            });
+
+        var rootVirtualDirectory = indexer?.GetValue(virtualDirectories, ["/"]);
+        return rootVirtualDirectory?.GetType().GetProperty("PhysicalPath", BindingFlags.Public | BindingFlags.Instance)
+            ?.GetValue(rootVirtualDirectory) as string;
+    }
+
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return fullPath.Length == 0 ? Path.DirectorySeparatorChar.ToString() : fullPath;
+    }
+}
+
 internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplyService
 {
     private static readonly JsonSerializerOptions ExternalStatusSerializerOptions = new()
@@ -178,8 +341,10 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
     private readonly IApplicationMetadataProvider _applicationMetadataProvider;
     private readonly IStartupGateRuntimeState _startupGateRuntimeState;
     private readonly IExternalUpdaterProcessLauncher _launcher;
+    private readonly IIisMetadataReader _iisMetadataReader;
     private readonly IWebHostEnvironment _environment;
     private readonly ApplicationUpdaterOptions _options;
+    private readonly ILogger<ApplicationUpdateApplyService> _logger;
 
     public ApplicationUpdateApplyService(
         IApplicationUpdateStagingStateStore stagingStateStore,
@@ -187,7 +352,9 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         IStartupGateRuntimeState startupGateRuntimeState,
         IExternalUpdaterProcessLauncher launcher,
         IWebHostEnvironment environment,
-        IOptions<ApplicationUpdaterOptions> options)
+        IOptions<ApplicationUpdaterOptions> options,
+        ILogger<ApplicationUpdateApplyService> logger,
+        IIisMetadataReader? iisMetadataReader = null)
     {
         _stagingStateStore = stagingStateStore;
         _applicationMetadataProvider = applicationMetadataProvider;
@@ -195,6 +362,8 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         _launcher = launcher;
         _environment = environment;
         _options = options.Value;
+        _logger = logger;
+        _iisMetadataReader = iisMetadataReader ?? new IisMetadataReader();
     }
 
     public async Task<ApplicationUpdateStagingState?> RequestApplyAsync(string requestedByUserId, CancellationToken cancellationToken)
@@ -217,14 +386,16 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
 
         var externalStatusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
         var externalLogPath = Path.Combine(stagingRoot, "state", "external-updater.log");
-        var siteName = ResolveRequiredIisIdentityValue(
-            _options.IisSiteName,
-            nameof(ApplicationUpdaterOptions.IisSiteName),
-            "ApplicationUpdater:IisSiteName");
-        var appPoolName = ResolveRequiredIisIdentityValue(
-            _options.IisAppPoolName,
-            nameof(ApplicationUpdaterOptions.IisAppPoolName),
-            "ApplicationUpdater:IisAppPoolName");
+        _logger.LogInformation("Attempting IIS identity resolution for application updater launch.");
+        var appPoolName = ResolveAppPoolName();
+        var siteName = ResolveSiteName(installRootPath, appPoolName);
+        if (string.IsNullOrWhiteSpace(siteName) && string.IsNullOrWhiteSpace(appPoolName))
+        {
+            throw new InvalidOperationException(
+                "Application updater cannot launch because IIS identity resolution failed. " +
+                "Attempted strategies: APP_POOL_ID, ApplicationUpdater:IisSiteName, WEBSITE_SITE_NAME, IIS site lookup by physical path, IIS site lookup by app pool. " +
+                "Configure ApplicationUpdater:IisSiteName and ApplicationUpdater:IisAppPoolName manually in appsettings when automatic detection is unavailable.");
+        }
 
         ValidateApplyPrerequisites(current, stagedMetadataPath, bootstrapperPath);
 
@@ -276,8 +447,8 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             bootstrapperPath,
             stagedMetadataPath,
             installRootPath,
-            siteName,
-            appPoolName,
+            siteName!,
+            appPoolName!,
             externalStatusPath,
             externalLogPath,
             current.ReleaseTag,
@@ -439,15 +610,122 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             : Path.GetFullPath(configuredPath, _environment.ContentRootPath);
     }
 
-    private static string ResolveRequiredIisIdentityValue(string configuredValue, string optionName, string configurationKey)
+    private string ResolveAppPoolName()
     {
-        if (string.IsNullOrWhiteSpace(configuredValue))
+        if (!string.IsNullOrWhiteSpace(_options.IisAppPoolName))
         {
-            throw new InvalidOperationException(
-                $"Application updater cannot launch because required IIS identity value '{optionName}' is not configured. Set '{configurationKey}' to a non-empty value.");
+            var configured = _options.IisAppPoolName.Trim();
+            _logger.LogInformation("Using configured IIS app pool name '{AppPoolName}' from ApplicationUpdater:IisAppPoolName.", configured);
+            return configured;
         }
 
-        return configuredValue.Trim();
+        var appPoolId = Environment.GetEnvironmentVariable("APP_POOL_ID");
+        if (string.IsNullOrWhiteSpace(appPoolId))
+        {
+            _logger.LogWarning("APP_POOL_ID environment variable is not available; app pool identity remains unresolved.");
+            return string.Empty;
+        }
+
+        var resolved = appPoolId.Trim();
+        _logger.LogInformation("Found APP_POOL_ID = '{AppPoolName}'.", resolved);
+        return resolved;
+    }
+
+    private string ResolveSiteName(string installRootPath, string appPoolName)
+    {
+        if (!string.IsNullOrWhiteSpace(_options.IisSiteName))
+        {
+            var configured = _options.IisSiteName.Trim();
+            _logger.LogInformation("Using configured IIS site name '{SiteName}' from ApplicationUpdater:IisSiteName.", configured);
+            return configured;
+        }
+
+        var websiteSiteName = Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME");
+        if (!string.IsNullOrWhiteSpace(websiteSiteName))
+        {
+            var resolvedFromEnvironment = websiteSiteName.Trim();
+            _logger.LogInformation("Resolved IIS site name from WEBSITE_SITE_NAME = '{SiteName}'.", resolvedFromEnvironment);
+            return resolvedFromEnvironment;
+        }
+
+        _logger.LogInformation("Attempting site resolution via physical path lookup.");
+        var resolvedFromPath = ResolveSiteFromPhysicalPath(installRootPath);
+        if (!string.IsNullOrWhiteSpace(resolvedFromPath))
+        {
+            return resolvedFromPath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(appPoolName))
+        {
+            _logger.LogInformation("Attempting site resolution via IIS app-pool mapping.");
+            var resolvedFromAppPool = ResolveSiteFromAppPool(appPoolName);
+            if (!string.IsNullOrWhiteSpace(resolvedFromAppPool))
+            {
+                return resolvedFromAppPool;
+            }
+
+            _logger.LogWarning(
+                "IIS site name could not be determined; using app pool name '{AppPoolName}' as fallback.",
+                appPoolName);
+            return appPoolName;
+        }
+
+        _logger.LogWarning("Could not resolve IIS site name from configuration, environment, or IIS metadata.");
+        return string.Empty;
+    }
+
+    private string ResolveSiteFromPhysicalPath(string installRootPath)
+    {
+        var normalizedInstallRootPath = NormalizePath(installRootPath);
+        if (_iisMetadataReader.TryResolveSiteNameFromPhysicalPath(normalizedInstallRootPath, out var siteName, out var errorMessage) &&
+            !string.IsNullOrWhiteSpace(siteName))
+        {
+            _logger.LogInformation("Matched IIS site '{SiteName}' via physical path.", siteName);
+            return siteName.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(errorMessage))
+        {
+            _logger.LogWarning("Could not resolve site via IIS physical-path lookup.");
+        }
+        else
+        {
+            _logger.LogWarning("Could not resolve site via IIS physical-path lookup: {ErrorMessage}", errorMessage);
+        }
+
+        return string.Empty;
+    }
+
+    private string ResolveSiteFromAppPool(string appPoolName)
+    {
+        if (_iisMetadataReader.TryResolveSiteNameFromAppPool(appPoolName, out var siteName, out var errorMessage) &&
+            !string.IsNullOrWhiteSpace(siteName))
+        {
+            _logger.LogInformation("Matched IIS site '{SiteName}' via app pool '{AppPoolName}'.", siteName, appPoolName);
+            return siteName.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(errorMessage))
+        {
+            _logger.LogWarning("Could not resolve site via IIS app-pool lookup for '{AppPoolName}'.", appPoolName);
+        }
+        else
+        {
+            _logger.LogWarning("Could not resolve site via IIS app-pool lookup for '{AppPoolName}': {ErrorMessage}", appPoolName, errorMessage);
+        }
+
+        return string.Empty;
+    }
+
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return fullPath.Length == 0 ? Path.DirectorySeparatorChar.ToString() : fullPath;
     }
 
     private static ApplicationUpdateStagingState CloneState(
