@@ -224,10 +224,19 @@
                     <div><dt>Apply completed at</dt><dd>@(Model.StagedUpdate.ApplyCompletedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
                     <div><dt>Bootstrapper path</dt><dd>@(Model.StagedUpdate.BootstrapperScriptPath ?? "(none)")</dd></div>
                     <div><dt>Staged metadata path</dt><dd>@(Model.StagedUpdate.StagedMetadataPath ?? "(none)")</dd></div>
+                    <div><dt>PowerShell executable path</dt><dd>@(Model.StagedUpdate.LaunchPowerShellExecutablePath ?? "(none)")</dd></div>
+                    <div><dt>Install root path</dt><dd>@(Model.StagedUpdate.LaunchInstallRootPath ?? "(none)")</dd></div>
+                    <div><dt>Working directory</dt><dd>@(Model.StagedUpdate.LaunchWorkingDirectory ?? "(none)")</dd></div>
+                    <div><dt>Resolved site name</dt><dd>@(Model.StagedUpdate.LaunchResolvedSiteName ?? "(none)")</dd></div>
+                    <div><dt>Resolved app pool name</dt><dd>@(Model.StagedUpdate.LaunchResolvedAppPoolName ?? "(none)")</dd></div>
+                    <div><dt>Expected release tag</dt><dd>@(Model.StagedUpdate.LaunchExpectedReleaseTag ?? "(none)")</dd></div>
                     <div><dt>External updater status path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterStatusPath ?? "(none)")</dd></div>
                     <div><dt>External updater log path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterLogPath ?? "(none)")</dd></div>
+                    <div><dt>Bootstrapper process id</dt><dd>@(Model.StagedUpdate.BootstrapperProcessId?.ToString() ?? "(none)")</dd></div>
+                    <div><dt>Bootstrapper started at</dt><dd>@(Model.StagedUpdate.BootstrapperStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
                     <div><dt>Last known updater stage</dt><dd>@(Model.StagedUpdate.LastKnownUpdaterStage ?? "(none)")</dd></div>
                     <div><dt>Last known updater result code</dt><dd>@(Model.StagedUpdate.LastKnownUpdaterResultCode ?? "(none)")</dd></div>
+                    <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
                 </dl>
             }
         </section>
