@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.ApplicationMetadata;
@@ -164,7 +165,7 @@ public sealed class ApplicationUpdateApplyServiceTests
     }
 
     [Fact]
-    public async Task RequestApplyAsync_ThrowsWhenIisIdentityValuesAreMissing()
+    public async Task RequestApplyAsync_UsesAppPoolFallbackForSiteWhenIisLookupsDoNotResolveSite()
     {
         var contentRoot = CreateTempRoot();
         try
@@ -195,10 +196,171 @@ public sealed class ApplicationUpdateApplyServiceTests
             }, CancellationToken.None);
 
             var launcher = new RecordingLauncher();
-            var service = BuildService(contentRoot, store, launcher, iisSiteName: "", iisAppPoolName: "");
+            var iisReader = new StubIisMetadataReader
+            {
+                SiteNameFromPhysicalPath = null,
+                SiteNameFromAppPool = null
+            };
 
+            Environment.SetEnvironmentVariable("APP_POOL_ID", "DetectedPool");
+            var service = BuildService(contentRoot, store, launcher, iisSiteName: "", iisAppPoolName: "", iisMetadataReader: iisReader);
+
+            var result = await service.RequestApplyAsync("admin-user", CancellationToken.None);
+            Assert.NotNull(result);
+            Assert.Equal("DetectedPool", launcher.AppPoolName);
+            Assert.Equal("DetectedPool", launcher.SiteName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("APP_POOL_ID", null);
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RequestApplyAsync_UsesCustomSiteMappedFromAppPool()
+    {
+        var contentRoot = CreateTempRoot();
+        try
+        {
+            var stagingRoot = Path.Combine(contentRoot, "App_Data", "Updater");
+            Directory.CreateDirectory(Path.Combine(stagingRoot, "state"));
+            Directory.CreateDirectory(Path.Combine(contentRoot, "Updater"));
+
+            var bootstrapperPath = Path.Combine(contentRoot, "Updater", "run-staged-update-bootstrapper.ps1");
+            await File.WriteAllTextAsync(bootstrapperPath, "# bootstrapper");
+
+            var zipPath = Path.Combine(stagingRoot, "staged", "current", "pkg.zip");
+            Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
+            await File.WriteAllTextAsync(zipPath, "zip");
+
+            var metadataPath = Path.Combine(stagingRoot, "state", "staged-update.json");
+            await File.WriteAllTextAsync(metadataPath, "{}");
+
+            var store = BuildStateStore(contentRoot);
+            await store.WriteAsync(new ApplicationUpdateStagingState
+            {
+                SourceRepository = "ijyates1992/ping-monitor",
+                ReleaseTag = "V1.2.3",
+                StagedZipPath = zipPath,
+                ChecksumVerified = true,
+                Status = ApplicationUpdateStagingStatus.Ready,
+                LastUpdatedAtUtc = DateTimeOffset.UtcNow
+            }, CancellationToken.None);
+
+            var launcher = new RecordingLauncher();
+            var iisReader = new StubIisMetadataReader { SiteNameFromAppPool = "CustomSiteName" };
+
+            Environment.SetEnvironmentVariable("APP_POOL_ID", "CustomPoolName");
+            var service = BuildService(contentRoot, store, launcher, iisSiteName: "", iisAppPoolName: "", iisMetadataReader: iisReader);
+
+            var result = await service.RequestApplyAsync("admin-user", CancellationToken.None);
+            Assert.NotNull(result);
+            Assert.Equal("CustomPoolName", launcher.AppPoolName);
+            Assert.Equal("CustomSiteName", launcher.SiteName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("APP_POOL_ID", null);
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RequestApplyAsync_ResolvesStandardIisInstallIdentityWhenConfigMissing()
+    {
+        var contentRoot = CreateTempRoot();
+        try
+        {
+            var stagingRoot = Path.Combine(contentRoot, "App_Data", "Updater");
+            Directory.CreateDirectory(Path.Combine(stagingRoot, "state"));
+            Directory.CreateDirectory(Path.Combine(contentRoot, "Updater"));
+
+            var bootstrapperPath = Path.Combine(contentRoot, "Updater", "run-staged-update-bootstrapper.ps1");
+            await File.WriteAllTextAsync(bootstrapperPath, "# bootstrapper");
+
+            var zipPath = Path.Combine(stagingRoot, "staged", "current", "pkg.zip");
+            Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
+            await File.WriteAllTextAsync(zipPath, "zip");
+
+            var metadataPath = Path.Combine(stagingRoot, "state", "staged-update.json");
+            await File.WriteAllTextAsync(metadataPath, "{}");
+
+            var store = BuildStateStore(contentRoot);
+            await store.WriteAsync(new ApplicationUpdateStagingState
+            {
+                SourceRepository = "ijyates1992/ping-monitor",
+                ReleaseTag = "V1.2.3",
+                StagedZipPath = zipPath,
+                ChecksumVerified = true,
+                Status = ApplicationUpdateStagingStatus.Ready,
+                LastUpdatedAtUtc = DateTimeOffset.UtcNow
+            }, CancellationToken.None);
+
+            var launcher = new RecordingLauncher();
+            var iisReader = new StubIisMetadataReader { SiteNameFromPhysicalPath = "PingMonitor" };
+            Environment.SetEnvironmentVariable("APP_POOL_ID", "PingMonitor");
+
+            var service = BuildService(contentRoot, store, launcher, iisSiteName: "", iisAppPoolName: "", iisMetadataReader: iisReader);
+            var result = await service.RequestApplyAsync("admin-user", CancellationToken.None);
+            Assert.NotNull(result);
+            Assert.Equal("PingMonitor", launcher.SiteName);
+            Assert.Equal("PingMonitor", launcher.AppPoolName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("APP_POOL_ID", null);
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RequestApplyAsync_ThrowsWhenIisIdentityCannotBeResolvedInNonIisContext()
+    {
+        var contentRoot = CreateTempRoot();
+        try
+        {
+            var stagingRoot = Path.Combine(contentRoot, "App_Data", "Updater");
+            Directory.CreateDirectory(Path.Combine(stagingRoot, "state"));
+            Directory.CreateDirectory(Path.Combine(contentRoot, "Updater"));
+
+            var bootstrapperPath = Path.Combine(contentRoot, "Updater", "run-staged-update-bootstrapper.ps1");
+            await File.WriteAllTextAsync(bootstrapperPath, "# bootstrapper");
+
+            var zipPath = Path.Combine(stagingRoot, "staged", "current", "pkg.zip");
+            Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
+            await File.WriteAllTextAsync(zipPath, "zip");
+
+            var metadataPath = Path.Combine(stagingRoot, "state", "staged-update.json");
+            await File.WriteAllTextAsync(metadataPath, "{}");
+
+            var store = BuildStateStore(contentRoot);
+            await store.WriteAsync(new ApplicationUpdateStagingState
+            {
+                SourceRepository = "ijyates1992/ping-monitor",
+                ReleaseTag = "V1.2.3",
+                StagedZipPath = zipPath,
+                ChecksumVerified = true,
+                Status = ApplicationUpdateStagingStatus.Ready,
+                LastUpdatedAtUtc = DateTimeOffset.UtcNow
+            }, CancellationToken.None);
+
+            var launcher = new RecordingLauncher();
+            var iisReader = new StubIisMetadataReader
+            {
+                SiteNameFromPhysicalPath = null,
+                SiteNameFromAppPool = null,
+                Error = "No IIS runtime context."
+            };
+
+            Environment.SetEnvironmentVariable("APP_POOL_ID", null);
+            Environment.SetEnvironmentVariable("WEBSITE_SITE_NAME", null);
+
+            var service = BuildService(contentRoot, store, launcher, iisSiteName: "", iisAppPoolName: "", iisMetadataReader: iisReader);
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RequestApplyAsync("admin-user", CancellationToken.None));
+            Assert.Contains("IIS identity resolution failed", exception.Message);
             Assert.Contains("ApplicationUpdater:IisSiteName", exception.Message);
+            Assert.Contains("ApplicationUpdater:IisAppPoolName", exception.Message);
         }
         finally
         {
@@ -213,7 +375,8 @@ public sealed class ApplicationUpdateApplyServiceTests
         string currentVersion = "V1.0.0",
         StartupMode startupMode = StartupMode.Normal,
         string iisSiteName = "PingMonitor",
-        string iisAppPoolName = "PingMonitorPool")
+        string iisAppPoolName = "PingMonitorPool",
+        IIisMetadataReader? iisMetadataReader = null)
     {
         var options = Microsoft.Extensions.Options.Options.Create(new ApplicationUpdaterOptions
         {
@@ -230,7 +393,30 @@ public sealed class ApplicationUpdateApplyServiceTests
             new StubStartupGateRuntimeState(startupMode),
             launcher,
             new StubWebHostEnvironment(contentRoot),
-            options);
+            options,
+            NullLogger<ApplicationUpdateApplyService>.Instance,
+            iisMetadataReader);
+    }
+
+    private sealed class StubIisMetadataReader : IIisMetadataReader
+    {
+        public string? SiteNameFromPhysicalPath { get; set; }
+        public string? SiteNameFromAppPool { get; set; }
+        public string? Error { get; set; }
+
+        public bool TryResolveSiteNameFromPhysicalPath(string normalizedInstallRootPath, out string? siteName, out string? errorMessage)
+        {
+            siteName = SiteNameFromPhysicalPath;
+            errorMessage = Error;
+            return !string.IsNullOrWhiteSpace(siteName);
+        }
+
+        public bool TryResolveSiteNameFromAppPool(string appPoolName, out string? siteName, out string? errorMessage)
+        {
+            siteName = SiteNameFromAppPool;
+            errorMessage = Error;
+            return !string.IsNullOrWhiteSpace(siteName);
+        }
     }
 
     private static ApplicationUpdateStagingStateStore BuildStateStore(string contentRoot)
