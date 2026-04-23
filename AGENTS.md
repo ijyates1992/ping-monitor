@@ -33,6 +33,31 @@ Correctness, safety, and predictability take priority over elegance.
 
 ---
 
+## Database Schema Versioning & Release Metadata (Critical)
+
+- Every release **MUST** declare its required database schema version.
+- The required schema version **MUST** be included in structured release/package metadata (for example `manifest.json`).
+- The required schema version **SHOULD** also be visible in release notes for operator visibility.
+- Any database schema change **MUST** increment the schema version. There are no exceptions for “minor” schema changes.
+- Schema changes that require a version bump include, at minimum:
+  - adding or removing columns
+  - changing column types
+  - adding or removing tables
+  - adding or removing indexes or constraints
+  - modifying defaults or nullability
+- The schema version declared by a release represents the minimum schema required for that release to run correctly.
+- Application code **MUST** assume the database schema is at least the declared required version.
+- Upgrades **MUST** be forward-compatible via schema migration (handled by startup gate).
+- Downgrades are **NOT** guaranteed to be safe after the database schema has been upgraded beyond what a selected release expects.
+- The updater **MAY** warn or block downgrade attempts when schema version mismatches are detected.
+- The schema version used by application code (including migrations/startup gate) **MUST** match the schema version declared in release metadata.
+- Any mismatch between code schema version and published metadata is a release-blocking issue.
+- A release **MUST NOT** be published when it introduces schema changes without a schema version bump.
+- A release **MUST NOT** be published without declaring the required schema version in release metadata.
+- Missing schema version bumps or missing schema version metadata are critical release validation failures.
+
+---
+
 ## Core Principles
 
 - Do not optimise or refactor behaviour unless explicitly instructed
