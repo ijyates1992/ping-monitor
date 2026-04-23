@@ -10,6 +10,9 @@ public sealed class ApplicationUpdaterPageViewModel
     public bool UpdateChecksEnabled { get; init; }
     public bool EnableAutomaticUpdateChecks { get; set; }
     public bool AutomaticallyDownloadAndStageUpdates { get; set; }
+    public bool AllowDevBuildAutoStageWithoutVersionComparison { get; set; }
+    public bool IsCurrentBuildDev { get; init; }
+    public bool SemanticComparisonPerformed { get; init; }
 
     [Range(1, 1440, ErrorMessage = "Automatic check interval must be between 1 and 1440 minutes.")]
     public int AutomaticUpdateCheckIntervalMinutes { get; set; }

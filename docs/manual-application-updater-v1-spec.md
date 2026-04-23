@@ -430,6 +430,7 @@ Configuration knobs:
 - `EnableAutomaticUpdateChecks`
 - `AutomaticUpdateCheckIntervalMinutes`
 - `AutomaticallyDownloadAndStageUpdates`
+- `AllowDevBuildAutoStageWithoutVersionComparison`
 - `AllowPreviewReleases`
 
 Behavior:
@@ -437,6 +438,7 @@ Behavior:
 - Automatic checks run on a background schedule only when Startup Gate is in operational mode.
 - New applicable release detection writes updater events (change-based, no per-loop spam).
 - If `AutomaticallyDownloadAndStageUpdates` is enabled, newly detected releases are downloaded, checksum-verified, and staged automatically.
+- DEV builds still discover latest applicable release, but semantic version comparison is skipped; by default auto-stage is suppressed unless `AllowDevBuildAutoStageWithoutVersionComparison` is explicitly enabled.
 - Automatic staging is bounded to avoid repeated re-attempt loops for the same unchanged release tag.
 - Automatic apply/install is not performed.
 

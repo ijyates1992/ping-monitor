@@ -90,6 +90,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "EnableAutomaticUpdateChecks",
         "AutomaticUpdateCheckIntervalMinutes",
         "AutomaticallyDownloadAndStageUpdates",
+        "AllowDevBuildAutoStageWithoutVersionComparison",
         "AllowPreviewReleases",
         "UpdaterOperationalSettingsInitializedAtUtc",
         "UpdatedAtUtc"
@@ -423,6 +424,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `EnableAutomaticUpdateChecks` tinyint(1) NOT NULL DEFAULT 1,
                 `AutomaticUpdateCheckIntervalMinutes` int NOT NULL DEFAULT 15,
                 `AutomaticallyDownloadAndStageUpdates` tinyint(1) NOT NULL DEFAULT 0,
+                `AllowDevBuildAutoStageWithoutVersionComparison` tinyint(1) NOT NULL DEFAULT 0,
                 `AllowPreviewReleases` tinyint(1) NOT NULL DEFAULT 0,
                 `UpdaterOperationalSettingsInitializedAtUtc` datetime(6) NULL,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
@@ -1228,6 +1230,16 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """
                 ALTER TABLE `ApplicationSettings`
                 ADD COLUMN `AutomaticallyDownloadAndStageUpdates` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "AllowDevBuildAutoStageWithoutVersionComparison", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `AllowDevBuildAutoStageWithoutVersionComparison` tinyint(1) NOT NULL DEFAULT 0;
                 """,
                 cancellationToken);
         }

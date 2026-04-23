@@ -17,6 +17,14 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
     private readonly ApplicationUpdaterOptions _options;
     private readonly ILogger<ApplicationUpdateBackgroundService> _logger;
 
+    internal enum AutoStagePlan
+    {
+        Skip = 0,
+        StageReleaseBuild = 1,
+        StageDevBuildWithOverride = 2,
+        SuppressDevBuildWithoutOverride = 3
+    }
+
     public ApplicationUpdateBackgroundService(
         IServiceScopeFactory scopeFactory,
         IStartupGateRuntimeState startupGateRuntimeState,
@@ -124,42 +132,127 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
             lastAutomaticCheckFailureMessage: null);
 
         var latestTag = result.LatestApplicableRelease?.TagName;
-        if (result.State == ApplicationUpdateCheckState.UpdateAvailable &&
-            !string.IsNullOrWhiteSpace(latestTag) &&
-            !string.Equals(previousState?.LastDetectedApplicableReleaseTag, latestTag, StringComparison.OrdinalIgnoreCase))
+        var releaseFound = !string.IsNullOrWhiteSpace(latestTag) && result.ReleaseDiscoverySucceeded;
+        var releaseChanged = releaseFound &&
+            !string.Equals(previousState?.LastDetectedApplicableReleaseTag, latestTag, StringComparison.OrdinalIgnoreCase);
+
+        if (releaseChanged)
         {
             nextState = Clone(nextState,
                 lastDetectedApplicableReleaseTag: latestTag,
                 lastDetectedApplicableReleaseAtUtc: now);
 
-            await eventLogService.WriteAsync(new EventLogWriteRequest
+            if (result.State == ApplicationUpdateCheckState.UpdateAvailable)
             {
-                Category = EventCategory.System,
-                EventType = EventType.UpdaterUpdateAvailableDetected,
-                Severity = EventSeverity.Info,
-                Message = $"A new applicable application update was detected: {latestTag}.",
-                DetailsJson = JsonSerializer.Serialize(new
+                await eventLogService.WriteAsync(new EventLogWriteRequest
                 {
-                    latestTag,
-                    result.AllowPreviewReleases,
-                    releaseUrl = result.LatestApplicableRelease?.HtmlUrl
-                }, DetailsJsonOptions)
-            }, cancellationToken);
+                    Category = EventCategory.System,
+                    EventType = EventType.UpdaterUpdateAvailableDetected,
+                    Severity = EventSeverity.Info,
+                    Message = $"A new applicable application update was detected: {latestTag}.",
+                    DetailsJson = JsonSerializer.Serialize(new
+                    {
+                        latestTag,
+                        result.AllowPreviewReleases,
+                        releaseUrl = result.LatestApplicableRelease?.HtmlUrl
+                    }, DetailsJsonOptions)
+                }, cancellationToken);
+            }
+            else if (result.State == ApplicationUpdateCheckState.DevBuildComparisonSkipped)
+            {
+                nextState = Clone(nextState,
+                    lastDevComparisonSkippedReleaseTag: latestTag,
+                    lastDevComparisonSkippedAtUtc: now);
 
-            if (operationalSettings.AutomaticallyDownloadAndStageUpdates)
-            {
-                var alreadyAttempted = string.Equals(previousState?.LastAutoStageAttemptedReleaseTag, latestTag, StringComparison.OrdinalIgnoreCase);
-                if (!alreadyAttempted)
+                await eventLogService.WriteAsync(new EventLogWriteRequest
                 {
-                    nextState = await RunAutoStageAsync(
-                        stagingService,
-                        eventLogService,
-                        nextState,
+                    Category = EventCategory.System,
+                    EventType = EventType.UpdaterDevBuildComparisonSkipped,
+                    Severity = EventSeverity.Warning,
+                    Message = $"Latest applicable release {latestTag} was detected, but this instance is running a DEV build, so semantic comparison was skipped.",
+                    DetailsJson = JsonSerializer.Serialize(new
+                    {
                         latestTag,
                         operationalSettings.AllowPreviewReleases,
-                        now,
-                        cancellationToken);
-                }
+                        devBuild = true,
+                        semanticComparisonSkipped = true
+                    }, DetailsJsonOptions)
+                }, cancellationToken);
+            }
+        }
+
+        var autoStagePlan = DetermineAutoStagePlan(
+            result.State,
+            releaseFound,
+            operationalSettings.AutomaticallyDownloadAndStageUpdates,
+            operationalSettings.AllowDevBuildAutoStageWithoutVersionComparison,
+            previousState?.LastAutoStageAttemptedReleaseTag,
+            latestTag);
+
+        if (releaseFound && autoStagePlan != AutoStagePlan.Skip)
+        {
+            if (autoStagePlan == AutoStagePlan.StageReleaseBuild)
+            {
+                nextState = await RunAutoStageAsync(
+                    stagingService,
+                    eventLogService,
+                    nextState,
+                    latestTag!,
+                    operationalSettings.AllowPreviewReleases,
+                    now,
+                    cancellationToken);
+            }
+            else if (autoStagePlan == AutoStagePlan.StageDevBuildWithOverride)
+            {
+                nextState = Clone(nextState,
+                    lastDevAutoStageOverrideAllowedReleaseTag: latestTag,
+                    lastDevAutoStageOverrideAllowedAtUtc: now);
+
+                await eventLogService.WriteAsync(new EventLogWriteRequest
+                {
+                    Category = EventCategory.System,
+                    EventType = EventType.UpdaterDevBuildAutoStageOverrideAllowed,
+                    Severity = EventSeverity.Warning,
+                    Message = $"DEV-build override enabled: automatic staging is proceeding for {latestTag} without semantic version comparison.",
+                    DetailsJson = JsonSerializer.Serialize(new
+                    {
+                        latestTag,
+                        devBuild = true,
+                        overrideEnabled = true,
+                        semanticComparisonSkipped = true
+                    }, DetailsJsonOptions)
+                }, cancellationToken);
+
+                nextState = await RunAutoStageAsync(
+                    stagingService,
+                    eventLogService,
+                    nextState,
+                    latestTag!,
+                    operationalSettings.AllowPreviewReleases,
+                    now,
+                    cancellationToken);
+            }
+            else if (autoStagePlan == AutoStagePlan.SuppressDevBuildWithoutOverride)
+            {
+                nextState = Clone(nextState,
+                    lastDevAutoStageSuppressedReleaseTag: latestTag,
+                    lastDevAutoStageSuppressedAtUtc: now,
+                    lastAutoStageFailureMessage: "Automatic staging was skipped because this instance is running a DEV build and DEV override is disabled.");
+
+                await eventLogService.WriteAsync(new EventLogWriteRequest
+                {
+                    Category = EventCategory.System,
+                    EventType = EventType.UpdaterDevBuildAutoStageSkipped,
+                    Severity = EventSeverity.Info,
+                    Message = $"Automatic staging was skipped for {latestTag} because this instance is running a DEV build and the DEV override is disabled.",
+                    DetailsJson = JsonSerializer.Serialize(new
+                    {
+                        latestTag,
+                        devBuild = true,
+                        overrideEnabled = false,
+                        semanticComparisonSkipped = true
+                    }, DetailsJsonOptions)
+                }, cancellationToken);
             }
         }
 
@@ -249,6 +342,40 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
         return TimeSpan.FromMinutes(configured);
     }
 
+    internal static AutoStagePlan DetermineAutoStagePlan(
+        ApplicationUpdateCheckState state,
+        bool releaseFound,
+        bool automaticStageEnabled,
+        bool allowDevBuildAutoStageWithoutVersionComparison,
+        string? previousAttemptedTag,
+        string? latestTag)
+    {
+        if (!automaticStageEnabled || !releaseFound || string.IsNullOrWhiteSpace(latestTag))
+        {
+            return AutoStagePlan.Skip;
+        }
+
+        var alreadyAttempted = string.Equals(previousAttemptedTag, latestTag, StringComparison.OrdinalIgnoreCase);
+        if (alreadyAttempted)
+        {
+            return AutoStagePlan.Skip;
+        }
+
+        if (state == ApplicationUpdateCheckState.UpdateAvailable)
+        {
+            return AutoStagePlan.StageReleaseBuild;
+        }
+
+        if (state == ApplicationUpdateCheckState.DevBuildComparisonSkipped)
+        {
+            return allowDevBuildAutoStageWithoutVersionComparison
+                ? AutoStagePlan.StageDevBuildWithOverride
+                : AutoStagePlan.SuppressDevBuildWithoutOverride;
+        }
+
+        return AutoStagePlan.Skip;
+    }
+
     private static ApplicationUpdaterRuntimeState Clone(
         ApplicationUpdaterRuntimeState? state,
         DateTimeOffset? lastAutomaticCheckAtUtc = null,
@@ -261,7 +388,13 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
         DateTimeOffset? lastAutoStageAttemptedAtUtc = null,
         string? lastAutoStageFailureMessage = null,
         string? lastAutoStagedReleaseTag = null,
-        DateTimeOffset? lastAutoStagedAtUtc = null)
+        DateTimeOffset? lastAutoStagedAtUtc = null,
+        string? lastDevComparisonSkippedReleaseTag = null,
+        DateTimeOffset? lastDevComparisonSkippedAtUtc = null,
+        string? lastDevAutoStageSuppressedReleaseTag = null,
+        DateTimeOffset? lastDevAutoStageSuppressedAtUtc = null,
+        string? lastDevAutoStageOverrideAllowedReleaseTag = null,
+        DateTimeOffset? lastDevAutoStageOverrideAllowedAtUtc = null)
     {
         return new ApplicationUpdaterRuntimeState
         {
@@ -276,6 +409,12 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
             LastAutoStageFailureMessage = lastAutoStageFailureMessage ?? state?.LastAutoStageFailureMessage,
             LastAutoStagedReleaseTag = lastAutoStagedReleaseTag ?? state?.LastAutoStagedReleaseTag,
             LastAutoStagedAtUtc = lastAutoStagedAtUtc ?? state?.LastAutoStagedAtUtc,
+            LastDevComparisonSkippedReleaseTag = lastDevComparisonSkippedReleaseTag ?? state?.LastDevComparisonSkippedReleaseTag,
+            LastDevComparisonSkippedAtUtc = lastDevComparisonSkippedAtUtc ?? state?.LastDevComparisonSkippedAtUtc,
+            LastDevAutoStageSuppressedReleaseTag = lastDevAutoStageSuppressedReleaseTag ?? state?.LastDevAutoStageSuppressedReleaseTag,
+            LastDevAutoStageSuppressedAtUtc = lastDevAutoStageSuppressedAtUtc ?? state?.LastDevAutoStageSuppressedAtUtc,
+            LastDevAutoStageOverrideAllowedReleaseTag = lastDevAutoStageOverrideAllowedReleaseTag ?? state?.LastDevAutoStageOverrideAllowedReleaseTag,
+            LastDevAutoStageOverrideAllowedAtUtc = lastDevAutoStageOverrideAllowedAtUtc ?? state?.LastDevAutoStageOverrideAllowedAtUtc,
             LastUpdatedAtUtc = DateTimeOffset.UtcNow
         };
     }
