@@ -35,13 +35,6 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var interval = ResolveInterval();
-            if (!_options.UpdateChecksEnabled || !_options.EnableAutomaticUpdateChecks)
-            {
-                await Task.Delay(interval, stoppingToken);
-                continue;
-            }
-
             if (!_startupGateRuntimeState.IsOperationalMode)
             {
                 if (!wasPausedByStartupGate)
@@ -60,9 +53,20 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
                 wasPausedByStartupGate = false;
             }
 
+            var interval = ResolveInterval(_options.AutomaticUpdateCheckIntervalMinutes);
+
             try
             {
-                await RunAutomaticCheckAsync(stoppingToken);
+                var operationalSettings = await ReadOperationalSettingsAsync(stoppingToken);
+                interval = ResolveInterval(operationalSettings.AutomaticUpdateCheckIntervalMinutes);
+
+                if (!_options.UpdateChecksEnabled || !operationalSettings.EnableAutomaticUpdateChecks)
+                {
+                    await Task.Delay(interval, stoppingToken);
+                    continue;
+                }
+
+                await RunAutomaticCheckAsync(operationalSettings, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -77,7 +81,9 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
         }
     }
 
-    private async Task RunAutomaticCheckAsync(CancellationToken cancellationToken)
+    private async Task RunAutomaticCheckAsync(
+        ApplicationUpdaterOperationalSettingsDto operationalSettings,
+        CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var detectionService = scope.ServiceProvider.GetRequiredService<IApplicationUpdateDetectionService>();
@@ -89,7 +95,7 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
         var previousState = await runtimeStateStore.ReadAsync(cancellationToken);
         var nextState = Clone(previousState, lastAutomaticCheckAtUtc: now);
 
-        var result = await detectionService.CheckForUpdatesAsync(_options.AllowPreviewReleases, cancellationToken);
+        var result = await detectionService.CheckForUpdatesAsync(operationalSettings.AllowPreviewReleases, cancellationToken);
         if (result.State == ApplicationUpdateCheckState.CheckFailed)
         {
             var shouldLogFailureTransition = previousState?.LastAutomaticCheckSucceededAtUtc is not null;
@@ -140,12 +146,19 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
                 }, DetailsJsonOptions)
             }, cancellationToken);
 
-            if (_options.AutomaticallyDownloadAndStageUpdates)
+            if (operationalSettings.AutomaticallyDownloadAndStageUpdates)
             {
                 var alreadyAttempted = string.Equals(previousState?.LastAutoStageAttemptedReleaseTag, latestTag, StringComparison.OrdinalIgnoreCase);
                 if (!alreadyAttempted)
                 {
-                    nextState = await RunAutoStageAsync(stagingService, eventLogService, nextState, latestTag, now, cancellationToken);
+                    nextState = await RunAutoStageAsync(
+                        stagingService,
+                        eventLogService,
+                        nextState,
+                        latestTag,
+                        operationalSettings.AllowPreviewReleases,
+                        now,
+                        cancellationToken);
                 }
             }
         }
@@ -158,6 +171,7 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
         IEventLogService eventLogService,
         ApplicationUpdaterRuntimeState currentState,
         string latestTag,
+        bool allowPreviewReleases,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -175,7 +189,7 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
             DetailsJson = JsonSerializer.Serialize(new { latestTag }, DetailsJsonOptions)
         }, cancellationToken);
 
-        var stageResult = await stagingService.StageLatestApplicableReleaseAsync(_options.AllowPreviewReleases, cancellationToken);
+        var stageResult = await stagingService.StageLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
         if (stageResult.State.Status == ApplicationUpdateStagingStatus.Ready)
         {
             await eventLogService.WriteAsync(new EventLogWriteRequest
@@ -217,9 +231,16 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
             lastAutoStageFailureMessage: stageResult.State.StageOperationMessage ?? stageResult.State.FailureMessage ?? "Automatic staging failed.");
     }
 
-    private TimeSpan ResolveInterval()
+    private async Task<ApplicationUpdaterOperationalSettingsDto> ReadOperationalSettingsAsync(CancellationToken cancellationToken)
     {
-        var configured = _options.AutomaticUpdateCheckIntervalMinutes;
+        using var scope = _scopeFactory.CreateScope();
+        var settingsService = scope.ServiceProvider.GetRequiredService<IApplicationUpdaterOperationalSettingsService>();
+        return await settingsService.GetCurrentAsync(cancellationToken);
+    }
+
+    private static TimeSpan ResolveInterval(int configuredIntervalMinutes)
+    {
+        var configured = configuredIntervalMinutes;
         if (configured < 1)
         {
             configured = 1;

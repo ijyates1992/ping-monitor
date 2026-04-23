@@ -19,6 +19,7 @@ public sealed class AdminApplicationUpdaterController : Controller
     private readonly IApplicationUpdateStagingService _applicationUpdateStagingService;
     private readonly IApplicationUpdateApplyService _applicationUpdateApplyService;
     private readonly IApplicationUpdaterRuntimeStateStore _runtimeStateStore;
+    private readonly IApplicationUpdaterOperationalSettingsService _operationalSettingsService;
     private readonly IPowerShellPrerequisiteDetector _powerShellPrerequisiteDetector;
     private readonly ApplicationUpdaterOptions _updaterOptions;
 
@@ -28,6 +29,7 @@ public sealed class AdminApplicationUpdaterController : Controller
         IApplicationUpdateStagingService applicationUpdateStagingService,
         IApplicationUpdateApplyService applicationUpdateApplyService,
         IApplicationUpdaterRuntimeStateStore runtimeStateStore,
+        IApplicationUpdaterOperationalSettingsService operationalSettingsService,
         IPowerShellPrerequisiteDetector powerShellPrerequisiteDetector,
         IOptions<ApplicationUpdaterOptions> updaterOptions)
     {
@@ -36,6 +38,7 @@ public sealed class AdminApplicationUpdaterController : Controller
         _applicationUpdateStagingService = applicationUpdateStagingService;
         _applicationUpdateApplyService = applicationUpdateApplyService;
         _runtimeStateStore = runtimeStateStore;
+        _operationalSettingsService = operationalSettingsService;
         _powerShellPrerequisiteDetector = powerShellPrerequisiteDetector;
         _updaterOptions = updaterOptions.Value;
     }
@@ -43,14 +46,15 @@ public sealed class AdminApplicationUpdaterController : Controller
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
+        var operationalSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
         var currentVersion = _applicationMetadataProvider.GetSnapshot().Version;
         var result = _updaterOptions.UpdateChecksEnabled
-            ? ApplicationUpdateCheckResult.NotPerformed(currentVersion, _updaterOptions.AllowPreviewReleases)
-            : ApplicationUpdateCheckResult.Disabled(currentVersion, _updaterOptions.AllowPreviewReleases);
+            ? ApplicationUpdateCheckResult.NotPerformed(currentVersion, operationalSettings.AllowPreviewReleases)
+            : ApplicationUpdateCheckResult.Disabled(currentVersion, operationalSettings.AllowPreviewReleases);
 
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged, runtimeState));
+        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, saved: false));
     }
 
     [HttpPost("check")]
@@ -58,9 +62,10 @@ public sealed class AdminApplicationUpdaterController : Controller
     public async Task<IActionResult> Check([FromForm] bool allowPreviewReleases, CancellationToken cancellationToken)
     {
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
+        var operationalSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged, runtimeState));
+        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, saved: false));
     }
 
     [HttpPost("stage")]
@@ -69,9 +74,10 @@ public sealed class AdminApplicationUpdaterController : Controller
     {
         await _applicationUpdateStagingService.StageLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
+        var operationalSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged, runtimeState));
+        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, saved: false));
     }
 
     [HttpPost("apply")]
@@ -81,12 +87,53 @@ public sealed class AdminApplicationUpdaterController : Controller
         var requestedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
         await _applicationUpdateApplyService.RequestApplyAsync(requestedByUserId, cancellationToken);
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
+        var operationalSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged, runtimeState));
+        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, saved: false));
     }
 
-    private ApplicationUpdaterPageViewModel ToViewModel(ApplicationUpdateCheckResult result, ApplicationUpdateStagingState? staged, ApplicationUpdaterRuntimeState? runtimeState)
+    [HttpPost("settings")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Settings([FromForm] ApplicationUpdaterPageViewModel model, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            var currentVersion = _applicationMetadataProvider.GetSnapshot().Version;
+            var result = _updaterOptions.UpdateChecksEnabled
+                ? ApplicationUpdateCheckResult.NotPerformed(currentVersion, model.AllowPreviewReleases)
+                : ApplicationUpdateCheckResult.Disabled(currentVersion, model.AllowPreviewReleases);
+            var stagedState = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
+            var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
+            var currentSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
+            return View("Index", ToViewModel(result, stagedState, runtimeState, currentSettings, saved: false));
+        }
+
+        var updatedSettings = await _operationalSettingsService.UpdateAsync(
+            new UpdateApplicationUpdaterOperationalSettingsCommand
+            {
+                EnableAutomaticUpdateChecks = model.EnableAutomaticUpdateChecks,
+                AutomaticUpdateCheckIntervalMinutes = model.AutomaticUpdateCheckIntervalMinutes,
+                AutomaticallyDownloadAndStageUpdates = model.AutomaticallyDownloadAndStageUpdates,
+                AllowPreviewReleases = model.AllowPreviewReleases
+            },
+            cancellationToken);
+
+        var checkResult = _updaterOptions.UpdateChecksEnabled
+            ? ApplicationUpdateCheckResult.NotPerformed(_applicationMetadataProvider.GetSnapshot().Version, updatedSettings.AllowPreviewReleases)
+            : ApplicationUpdateCheckResult.Disabled(_applicationMetadataProvider.GetSnapshot().Version, updatedSettings.AllowPreviewReleases);
+
+        var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
+        var runtime = await _runtimeStateStore.ReadAsync(cancellationToken);
+        return View("Index", ToViewModel(checkResult, staged, runtime, updatedSettings, saved: true));
+    }
+
+    private ApplicationUpdaterPageViewModel ToViewModel(
+        ApplicationUpdateCheckResult result,
+        ApplicationUpdateStagingState? staged,
+        ApplicationUpdaterRuntimeState? runtimeState,
+        ApplicationUpdaterOperationalSettingsDto operationalSettings,
+        bool saved)
     {
         var decoratedStaged = ApplyLatestComparison(staged, result.LatestApplicableRelease?.TagName);
         var powerShellStatus = _powerShellPrerequisiteDetector.GetStatus();
@@ -96,11 +143,12 @@ public sealed class AdminApplicationUpdaterController : Controller
             CurrentVersion = result.CurrentVersion,
             AllowPreviewReleases = result.AllowPreviewReleases,
             UpdateChecksEnabled = _updaterOptions.UpdateChecksEnabled,
-            EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
-            AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates,
-            AutomaticUpdateCheckIntervalMinutes = _updaterOptions.AutomaticUpdateCheckIntervalMinutes,
+            EnableAutomaticUpdateChecks = operationalSettings.EnableAutomaticUpdateChecks,
+            AutomaticallyDownloadAndStageUpdates = operationalSettings.AutomaticallyDownloadAndStageUpdates,
+            AutomaticUpdateCheckIntervalMinutes = operationalSettings.AutomaticUpdateCheckIntervalMinutes,
             RepositoryOwner = _updaterOptions.GitHubOwner,
             RepositoryName = _updaterOptions.GitHubRepository,
+            SettingsSaved = saved,
             PowerShellPrerequisiteAvailable = powerShellStatus.IsAvailable,
             PowerShellPrerequisiteMessage = powerShellStatus.Message,
             PowerShellResolvedPath = powerShellStatus.ResolvedExecutablePath,
