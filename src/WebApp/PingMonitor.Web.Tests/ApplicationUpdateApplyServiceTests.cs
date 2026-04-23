@@ -251,16 +251,15 @@ public sealed class ApplicationUpdateApplyServiceTests
                 LastUpdatedAtUtc = DateTimeOffset.UtcNow
             }, CancellationToken.None);
 
-            var launcher = new RecordingLauncher
-            {
-                ResolveExecutablePathResult = false,
-                ResolutionErrorMessage = "Configured PowerShell executable 'pwsh.exe' was not found on PATH."
-            };
-
-            var service = BuildService(contentRoot, store, launcher);
+            var launcher = new RecordingLauncher();
+            var service = BuildService(
+                contentRoot,
+                store,
+                launcher,
+                powerShellPrerequisiteDetector: new StubPowerShellPrerequisiteDetector { IsAvailable = false });
 
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RequestApplyAsync("admin-user", CancellationToken.None));
-            Assert.Contains("Unable to resolve the configured PowerShell host", exception.Message);
+            Assert.Contains("PowerShell 7 (`pwsh`) was not found in PATH", exception.Message);
             var failed = await store.ReadAsync(CancellationToken.None);
             Assert.NotNull(failed);
             Assert.Equal(ApplicationUpdateStagingStatus.ApplyFailed, failed!.Status);
@@ -595,6 +594,7 @@ public sealed class ApplicationUpdateApplyServiceTests
         string contentRoot,
         IApplicationUpdateStagingStateStore store,
         IExternalUpdaterProcessLauncher launcher,
+        IPowerShellPrerequisiteDetector? powerShellPrerequisiteDetector = null,
         string currentVersion = "V1.0.0",
         StartupMode startupMode = StartupMode.Normal,
         string iisSiteName = "PingMonitor",
@@ -614,6 +614,7 @@ public sealed class ApplicationUpdateApplyServiceTests
             store,
             new StubMetadataProvider(currentVersion),
             new StubStartupGateRuntimeState(startupMode),
+            powerShellPrerequisiteDetector ?? new StubPowerShellPrerequisiteDetector(),
             launcher,
             new StubWebHostEnvironment(contentRoot),
             options,
@@ -639,6 +640,25 @@ public sealed class ApplicationUpdateApplyServiceTests
             siteName = SiteNameFromAppPool;
             errorMessage = Error;
             return !string.IsNullOrWhiteSpace(siteName);
+        }
+    }
+
+    private sealed class StubPowerShellPrerequisiteDetector : IPowerShellPrerequisiteDetector
+    {
+        public bool IsAvailable { get; set; } = true;
+        public string ResolvedPath { get; set; } = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+
+        public PowerShellPrerequisiteStatus GetStatus()
+        {
+            return new PowerShellPrerequisiteStatus
+            {
+                IsAvailable = IsAvailable,
+                ConfiguredExecutablePath = "pwsh.exe",
+                ResolvedExecutablePath = IsAvailable ? ResolvedPath : null,
+                Message = IsAvailable
+                    ? "PowerShell 7 prerequisite check passed."
+                    : "PowerShell 7 (`pwsh`) was not found in PATH. Update apply operations are unavailable until PowerShell 7 is installed and accessible to the application."
+            };
         }
     }
 

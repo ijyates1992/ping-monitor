@@ -104,6 +104,23 @@ All events are stored in a single table.
 
 ---
 
+### System Updater Events
+
+| Event Type                         | Description |
+|-----------------------------------|------------|
+| updater_update_available_detected | Automatic updater check detected a newly applicable release |
+| updater_auto_stage_started        | Automatic staging started for a newly detected release |
+| updater_auto_stage_succeeded      | Automatic staging succeeded (download + checksum verify + stage ready) |
+| updater_auto_stage_failed         | Automatic staging attempt failed |
+| updater_automatic_check_failed    | Automatic update check failed after prior successful checks |
+| updater_dev_build_comparison_skipped | Latest applicable release found on DEV build; semantic comparison skipped |
+| updater_dev_build_auto_stage_skipped | DEV build auto-stage suppressed because DEV override is disabled |
+| updater_dev_build_auto_stage_override_allowed | DEV override enabled; auto-stage proceeded without semantic comparison |
+
+These events are transition-oriented and intentionally avoid per-poll log spam.
+
+---
+
 ## Message Guidelines
 
 Messages must be:

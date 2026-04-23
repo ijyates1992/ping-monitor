@@ -105,6 +105,10 @@ public sealed class ApplicationUpdateCheckResult
     public ApplicationUpdateCheckState State { get; init; }
     public string CurrentVersion { get; init; } = string.Empty;
     public bool AllowPreviewReleases { get; init; }
+    public bool IsCurrentBuildDev { get; init; }
+    public bool SemanticComparisonPerformed { get; init; }
+    public bool SemanticComparisonSkipped => !SemanticComparisonPerformed;
+    public bool ReleaseDiscoverySucceeded => LatestApplicableRelease is not null;
     public string Message { get; init; } = string.Empty;
     public GitHubReleaseSummary? LatestApplicableRelease { get; init; }
 
@@ -115,6 +119,7 @@ public sealed class ApplicationUpdateCheckResult
             State = ApplicationUpdateCheckState.CheckNotPerformed,
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
+            IsCurrentBuildDev = ReleaseVersionParser.ParseCurrent(currentVersion).IsDevBuild,
             Message = "No update check has been performed yet."
         };
     }
@@ -126,6 +131,7 @@ public sealed class ApplicationUpdateCheckResult
             State = ApplicationUpdateCheckState.UpdateCheckDisabled,
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
+            IsCurrentBuildDev = ReleaseVersionParser.ParseCurrent(currentVersion).IsDevBuild,
             Message = "Update checks are disabled by configuration."
         };
     }
@@ -137,6 +143,7 @@ public sealed class ApplicationUpdateCheckResult
             State = ApplicationUpdateCheckState.CheckFailed,
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
+            IsCurrentBuildDev = ReleaseVersionParser.ParseCurrent(currentVersion).IsDevBuild,
             Message = message,
         };
     }
@@ -152,6 +159,7 @@ public sealed class ApplicationUpdateCheckResult
             State = ApplicationUpdateCheckState.NoApplicableRelease,
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
+            IsCurrentBuildDev = parsedCurrentVersion.IsDevBuild,
             Message = $"No applicable GitHub release was found for the current preview-release filter. {currentVersionDescriptor}"
         };
     }
@@ -163,6 +171,7 @@ public sealed class ApplicationUpdateCheckResult
             State = ApplicationUpdateCheckState.UpdateAvailable,
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
+            SemanticComparisonPerformed = true,
             Message = "A newer release is available.",
             LatestApplicableRelease = latestRelease
         };
@@ -175,6 +184,7 @@ public sealed class ApplicationUpdateCheckResult
             State = ApplicationUpdateCheckState.UpToDate,
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
+            SemanticComparisonPerformed = true,
             Message = "Current version is already up to date.",
             LatestApplicableRelease = latestRelease
         };
@@ -187,8 +197,9 @@ public sealed class ApplicationUpdateCheckResult
             State = ApplicationUpdateCheckState.DevBuildComparisonSkipped,
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
+            IsCurrentBuildDev = true,
             LatestApplicableRelease = latestRelease,
-            Message = "This instance is running a DEV build. Semantic comparison against release tags is skipped; latest GitHub release is shown for operator reference only."
+            Message = $"Latest applicable release {latestRelease.TagName} was detected, but this instance is running a DEV build, so semantic version comparison was skipped."
         };
     }
 
@@ -200,7 +211,7 @@ public sealed class ApplicationUpdateCheckResult
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
             LatestApplicableRelease = latestRelease,
-            Message = "Current version format is not recognized as strict Vx.x.x and is not a DEV build. Comparison could not be performed safely."
+            Message = $"Latest applicable release {latestRelease.TagName} was detected, but current version format is not recognized as strict Vx.x.x and is not a DEV build. Comparison could not be performed safely."
         };
     }
 
@@ -212,7 +223,8 @@ public sealed class ApplicationUpdateCheckResult
             CurrentVersion = currentVersion,
             AllowPreviewReleases = allowPreviewReleases,
             LatestApplicableRelease = latestRelease,
-            Message = "Latest release tag is not a strict Vx.x.x version. Comparison could not be performed safely."
+            SemanticComparisonPerformed = true,
+            Message = $"Latest applicable release {latestRelease.TagName} was detected, but its tag is not a strict Vx.x.x version. Comparison could not be performed safely."
         };
     }
 }

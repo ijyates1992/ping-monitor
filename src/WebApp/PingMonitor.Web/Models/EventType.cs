@@ -33,4 +33,12 @@ public static class EventType
     public const string DatabaseBackupRestoreCompleted = "database_backup_restore_completed";
     public const string DatabaseBackupRestoreFailed = "database_backup_restore_failed";
     public const string DatabaseBackupDeleted = "database_backup_deleted";
+    public const string UpdaterUpdateAvailableDetected = "updater_update_available_detected";
+    public const string UpdaterAutoStageStarted = "updater_auto_stage_started";
+    public const string UpdaterAutoStageSucceeded = "updater_auto_stage_succeeded";
+    public const string UpdaterAutoStageFailed = "updater_auto_stage_failed";
+    public const string UpdaterAutomaticCheckFailed = "updater_automatic_check_failed";
+    public const string UpdaterDevBuildComparisonSkipped = "updater_dev_build_comparison_skipped";
+    public const string UpdaterDevBuildAutoStageSkipped = "updater_dev_build_auto_stage_skipped";
+    public const string UpdaterDevBuildAutoStageOverrideAllowed = "updater_dev_build_auto_stage_override_allowed";
 }

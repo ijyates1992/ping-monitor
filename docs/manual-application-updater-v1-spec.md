@@ -42,10 +42,11 @@ The design is conservative and optimized for live-system safety, clear auditabil
 
 ### Out of scope (v1)
 
-- Automatic/scheduled unattended update
+- Automatic apply/install of updates
 - Release rings/channels (beta/stable/etc.)
 - Full rollback implementation
 - Automatic database rollback
+- Automatic schema migration apply during update cutover
 - Self-overwrite by the running web app process
 - Non-IIS/Linux host support (future notes only)
 - Non-GitHub package sources / general package managers
@@ -411,6 +412,51 @@ Require explicit confirmation before install handoff (typed confirmation recomme
 - SHA-256 verification is mandatory when checksum asset is present.
 - If expected checksum entry missing or parse invalid, fail closed.
 - Do not allow “continue anyway” in v1.
+
+## Runtime prerequisite for apply operations
+
+- `pwsh` (PowerShell 7) is a required prerequisite for any updater operation that launches the external bootstrapper.
+- Update checks and release staging can continue without `pwsh`.
+- Apply/handoff operations must fail closed with an explicit operator-facing message when `pwsh` is unavailable.
+
+---
+
+## Automatic checks and optional auto-stage
+
+v1 supports periodic automatic release checks and optional automatic staging, while keeping install/apply strictly manual.
+
+Configuration knobs:
+
+- `EnableAutomaticUpdateChecks`
+- `AutomaticUpdateCheckIntervalMinutes`
+- `AutomaticallyDownloadAndStageUpdates`
+- `AllowDevBuildAutoStageWithoutVersionComparison`
+- `AllowPreviewReleases`
+
+Behavior:
+
+- Automatic checks run on a background schedule only when Startup Gate is in operational mode.
+- New applicable release detection writes updater events (change-based, no per-loop spam).
+- If `AutomaticallyDownloadAndStageUpdates` is enabled, newly detected releases are downloaded, checksum-verified, and staged automatically.
+- DEV builds still discover latest applicable release, but semantic version comparison is skipped; by default auto-stage is suppressed unless `AllowDevBuildAutoStageWithoutVersionComparison` is explicitly enabled.
+- Automatic staging is bounded to avoid repeated re-attempt loops for the same unchanged release tag.
+- Automatic apply/install is not performed.
+
+---
+
+## Bootstrapper source selection for apply
+
+When applying a staged release:
+
+1. Prefer the bootstrapper script from the staged release ZIP (`app/Updater/run-staged-update-bootstrapper.ps1` by default).
+2. Extract it to an updater apply-session temp folder under updater storage.
+3. Launch that extracted staged bootstrapper.
+4. If staged extraction/use fails in a recoverable way, fall back to the installed bootstrapper path.
+
+The selected source is persisted for operator visibility:
+
+- `staged_release`
+- `installed_fallback`
 
 ## Secret handling
 

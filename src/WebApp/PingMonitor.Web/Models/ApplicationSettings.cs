@@ -18,5 +18,17 @@ public sealed class ApplicationSettings
 
     public int DefaultRecoveryThreshold { get; set; } = 2;
 
+    public bool EnableAutomaticUpdateChecks { get; set; } = true;
+
+    public int AutomaticUpdateCheckIntervalMinutes { get; set; } = 15;
+
+    public bool AutomaticallyDownloadAndStageUpdates { get; set; }
+
+    public bool AllowDevBuildAutoStageWithoutVersionComparison { get; set; }
+
+    public bool AllowPreviewReleases { get; set; }
+
+    public DateTimeOffset? UpdaterOperationalSettingsInitializedAtUtc { get; set; }
+
     public DateTimeOffset UpdatedAtUtc { get; set; }
 }

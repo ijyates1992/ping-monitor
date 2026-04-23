@@ -78,6 +78,23 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SecurityLogAutoPruneEnabled",
         "UpdatedAtUtc"
     ];
+    private static readonly string[] RequiredApplicationSettingsColumns =
+    [
+        "ApplicationSettingsId",
+        "SiteUrl",
+        "DefaultPingIntervalSeconds",
+        "DefaultRetryIntervalSeconds",
+        "DefaultTimeoutMs",
+        "DefaultFailureThreshold",
+        "DefaultRecoveryThreshold",
+        "EnableAutomaticUpdateChecks",
+        "AutomaticUpdateCheckIntervalMinutes",
+        "AutomaticallyDownloadAndStageUpdates",
+        "AllowDevBuildAutoStageWithoutVersionComparison",
+        "AllowPreviewReleases",
+        "UpdaterOperationalSettingsInitializedAtUtc",
+        "UpdatedAtUtc"
+    ];
     private static readonly string[] RequiredNotificationSettingsColumns =
     [
         "NotificationSettingsId",
@@ -256,6 +273,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             status.Diagnostics.Add($"SecuritySettings table is missing required columns: {string.Join(", ", missingSecuritySettingsColumns)}.");
             return status;
         }
+        var missingApplicationSettingsColumns = await GetMissingApplicationSettingsColumnsAsync(connection, cancellationToken);
+        if (missingApplicationSettingsColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"ApplicationSettings table is missing required columns: {string.Join(", ", missingApplicationSettingsColumns)}.");
+            return status;
+        }
         var missingNotificationSettingsColumns = await GetMissingNotificationSettingsColumnsAsync(connection, cancellationToken);
         if (missingNotificationSettingsColumns.Length > 0)
         {
@@ -397,6 +421,12 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `DefaultTimeoutMs` int NOT NULL,
                 `DefaultFailureThreshold` int NOT NULL,
                 `DefaultRecoveryThreshold` int NOT NULL,
+                `EnableAutomaticUpdateChecks` tinyint(1) NOT NULL DEFAULT 1,
+                `AutomaticUpdateCheckIntervalMinutes` int NOT NULL DEFAULT 15,
+                `AutomaticallyDownloadAndStageUpdates` tinyint(1) NOT NULL DEFAULT 0,
+                `AllowDevBuildAutoStageWithoutVersionComparison` tinyint(1) NOT NULL DEFAULT 0,
+                `AllowPreviewReleases` tinyint(1) NOT NULL DEFAULT 0,
+                `UpdaterOperationalSettingsInitializedAtUtc` datetime(6) NULL,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 PRIMARY KEY (`ApplicationSettingsId`)
             );
@@ -723,6 +753,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
         await EnsureEndpointColumnsAsync(dbContext, cancellationToken);
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
+        await EnsureApplicationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
@@ -875,6 +906,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
 
         return RequiredSecuritySettingsColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
+    }
+
+    private static async Task<string[]> GetMissingApplicationSettingsColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'ApplicationSettings';
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return RequiredApplicationSettingsColumns
             .Where(column => !existingColumns.Contains(column))
             .ToArray();
     }
@@ -1138,6 +1191,75 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """
                 ALTER TABLE `SecuritySettings`
                 ADD COLUMN `SecurityLogAutoPruneEnabled` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+    }
+
+    private static async Task EnsureApplicationSettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "EnableAutomaticUpdateChecks", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `EnableAutomaticUpdateChecks` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "AutomaticUpdateCheckIntervalMinutes", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `AutomaticUpdateCheckIntervalMinutes` int NOT NULL DEFAULT 15;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "AutomaticallyDownloadAndStageUpdates", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `AutomaticallyDownloadAndStageUpdates` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "AllowDevBuildAutoStageWithoutVersionComparison", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `AllowDevBuildAutoStageWithoutVersionComparison` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "AllowPreviewReleases", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `AllowPreviewReleases` tinyint(1) NOT NULL DEFAULT 0;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "UpdaterOperationalSettingsInitializedAtUtc", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `UpdaterOperationalSettingsInitializedAtUtc` datetime(6) NULL;
                 """,
                 cancellationToken);
         }
@@ -1707,6 +1829,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
               AND table_name = 'SecuritySettings'
+              AND column_name = @columnName;
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+    private static async Task<bool> HasApplicationSettingsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'ApplicationSettings'
               AND column_name = @columnName;
             """;
         var parameter = command.CreateParameter();
