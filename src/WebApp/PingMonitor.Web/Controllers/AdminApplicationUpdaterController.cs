@@ -21,6 +21,7 @@ public sealed class AdminApplicationUpdaterController : Controller
     private readonly IApplicationUpdaterRuntimeStateStore _runtimeStateStore;
     private readonly IApplicationUpdaterOperationalSettingsService _operationalSettingsService;
     private readonly IPowerShellPrerequisiteDetector _powerShellPrerequisiteDetector;
+    private readonly IGitHubReleaseLookupService _gitHubReleaseLookupService;
     private readonly ApplicationUpdaterOptions _updaterOptions;
 
     public AdminApplicationUpdaterController(
@@ -31,6 +32,7 @@ public sealed class AdminApplicationUpdaterController : Controller
         IApplicationUpdaterRuntimeStateStore runtimeStateStore,
         IApplicationUpdaterOperationalSettingsService operationalSettingsService,
         IPowerShellPrerequisiteDetector powerShellPrerequisiteDetector,
+        IGitHubReleaseLookupService gitHubReleaseLookupService,
         IOptions<ApplicationUpdaterOptions> updaterOptions)
     {
         _applicationMetadataProvider = applicationMetadataProvider;
@@ -40,6 +42,7 @@ public sealed class AdminApplicationUpdaterController : Controller
         _runtimeStateStore = runtimeStateStore;
         _operationalSettingsService = operationalSettingsService;
         _powerShellPrerequisiteDetector = powerShellPrerequisiteDetector;
+        _gitHubReleaseLookupService = gitHubReleaseLookupService;
         _updaterOptions = updaterOptions.Value;
     }
 
@@ -54,35 +57,38 @@ public sealed class AdminApplicationUpdaterController : Controller
 
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, saved: false));
+        var releaseSelection = await ResolveReleaseSelectionAsync(operationalSettings.AllowPreviewReleases, selectedReleaseTag: null, cancellationToken);
+        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, releaseSelection, saved: false));
     }
 
     [HttpPost("check")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Check([FromForm] bool allowPreviewReleases, CancellationToken cancellationToken)
+    public async Task<IActionResult> Check([FromForm] bool allowPreviewReleases, [FromForm] string? selectedReleaseTag, CancellationToken cancellationToken)
     {
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
         var operationalSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, saved: false));
+        var releaseSelection = await ResolveReleaseSelectionAsync(allowPreviewReleases, selectedReleaseTag, cancellationToken);
+        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, releaseSelection, saved: false));
     }
 
     [HttpPost("stage")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Stage([FromForm] bool allowPreviewReleases, CancellationToken cancellationToken)
+    public async Task<IActionResult> Stage([FromForm] bool allowPreviewReleases, [FromForm] string? selectedReleaseTag, CancellationToken cancellationToken)
     {
-        await _applicationUpdateStagingService.StageLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
+        await _applicationUpdateStagingService.StageSelectedApplicableReleaseAsync(allowPreviewReleases, selectedReleaseTag, cancellationToken);
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
         var operationalSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, saved: false));
+        var releaseSelection = await ResolveReleaseSelectionAsync(allowPreviewReleases, selectedReleaseTag, cancellationToken);
+        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, releaseSelection, saved: false));
     }
 
     [HttpPost("apply")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Apply([FromForm] bool allowPreviewReleases, CancellationToken cancellationToken)
+    public async Task<IActionResult> Apply([FromForm] bool allowPreviewReleases, [FromForm] string? selectedReleaseTag, CancellationToken cancellationToken)
     {
         var requestedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
         await _applicationUpdateApplyService.RequestApplyAsync(requestedByUserId, cancellationToken);
@@ -90,7 +96,8 @@ public sealed class AdminApplicationUpdaterController : Controller
         var operationalSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, saved: false));
+        var releaseSelection = await ResolveReleaseSelectionAsync(allowPreviewReleases, selectedReleaseTag, cancellationToken);
+        return View("Index", ToViewModel(result, staged, runtimeState, operationalSettings, releaseSelection, saved: false));
     }
 
     [HttpPost("settings")]
@@ -106,7 +113,8 @@ public sealed class AdminApplicationUpdaterController : Controller
             var stagedState = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
             var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
             var currentSettings = await _operationalSettingsService.GetCurrentAsync(cancellationToken);
-            return View("Index", ToViewModel(result, stagedState, runtimeState, currentSettings, saved: false));
+            var releaseSelection = await ResolveReleaseSelectionAsync(model.AllowPreviewReleases, model.SelectedReleaseTag, cancellationToken);
+            return View("Index", ToViewModel(result, stagedState, runtimeState, currentSettings, releaseSelection, saved: false));
         }
 
         var updatedSettings = await _operationalSettingsService.UpdateAsync(
@@ -126,7 +134,8 @@ public sealed class AdminApplicationUpdaterController : Controller
 
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         var runtime = await _runtimeStateStore.ReadAsync(cancellationToken);
-        return View("Index", ToViewModel(checkResult, staged, runtime, updatedSettings, saved: true));
+        var releaseSelectionForSaved = await ResolveReleaseSelectionAsync(updatedSettings.AllowPreviewReleases, model.SelectedReleaseTag, cancellationToken);
+        return View("Index", ToViewModel(checkResult, staged, runtime, updatedSettings, releaseSelectionForSaved, saved: true));
     }
 
     private ApplicationUpdaterPageViewModel ToViewModel(
@@ -134,9 +143,11 @@ public sealed class AdminApplicationUpdaterController : Controller
         ApplicationUpdateStagingState? staged,
         ApplicationUpdaterRuntimeState? runtimeState,
         ApplicationUpdaterOperationalSettingsDto operationalSettings,
+        ReleaseSelectionResult releaseSelection,
         bool saved)
     {
-        var decoratedStaged = ApplyLatestComparison(staged, result.LatestApplicableRelease?.TagName);
+        var latestApplicableRelease = releaseSelection.LatestRelease ?? result.LatestApplicableRelease;
+        var decoratedStaged = ApplyLatestComparison(staged, latestApplicableRelease?.TagName);
         var powerShellStatus = _powerShellPrerequisiteDetector.GetStatus();
 
         return new ApplicationUpdaterPageViewModel
@@ -158,13 +169,57 @@ public sealed class AdminApplicationUpdaterController : Controller
             Message = result.Message,
             IsCurrentBuildDev = result.IsCurrentBuildDev,
             SemanticComparisonPerformed = result.SemanticComparisonPerformed,
-            LatestVersion = result.LatestApplicableRelease?.TagName,
-            LatestReleaseName = result.LatestApplicableRelease?.Name,
-            LatestIsPrerelease = result.LatestApplicableRelease?.IsPrerelease,
-            LatestReleaseUrl = result.LatestApplicableRelease?.HtmlUrl,
-            LatestPublishedAtUtc = result.LatestApplicableRelease?.PublishedAtUtc,
+            SelectedReleaseTag = releaseSelection.SelectedRelease?.TagName,
+            SelectedRelease = MapRelease(releaseSelection.SelectedRelease),
+            SelectableReleases = releaseSelection.Releases.Select(MapRelease).OfType<ApplicationUpdaterSelectableReleaseViewModel>().ToArray(),
+            LatestVersion = latestApplicableRelease?.TagName,
+            LatestReleaseName = latestApplicableRelease?.Name,
+            LatestIsPrerelease = latestApplicableRelease?.IsPrerelease,
+            LatestReleaseUrl = latestApplicableRelease?.HtmlUrl,
+            LatestPublishedAtUtc = latestApplicableRelease?.PublishedAtUtc,
             RuntimeState = runtimeState,
             StagedUpdate = decoratedStaged
+        };
+    }
+
+    private async Task<ReleaseSelectionResult> ResolveReleaseSelectionAsync(bool allowPreviewReleases, string? selectedReleaseTag, CancellationToken cancellationToken)
+    {
+        if (!_updaterOptions.UpdateChecksEnabled)
+        {
+            return new ReleaseSelectionResult([], null, null);
+        }
+
+        try
+        {
+            var releases = await _gitHubReleaseLookupService.GetApplicableReleasesAsync(allowPreviewReleases, maxResults: 20, cancellationToken);
+            var latest = releases.FirstOrDefault();
+            var selected = string.IsNullOrWhiteSpace(selectedReleaseTag)
+                ? latest
+                : releases.FirstOrDefault(release => string.Equals(release.TagName, selectedReleaseTag, StringComparison.OrdinalIgnoreCase)) ?? latest;
+
+            return new ReleaseSelectionResult(releases, selected, latest);
+        }
+        catch
+        {
+            return new ReleaseSelectionResult([], null, null);
+        }
+    }
+
+    private static ApplicationUpdaterSelectableReleaseViewModel? MapRelease(GitHubReleaseSummary? release)
+    {
+        if (release is null)
+        {
+            return null;
+        }
+
+        return new ApplicationUpdaterSelectableReleaseViewModel
+        {
+            TagName = release.TagName,
+            Name = release.Name,
+            Body = release.Body,
+            IsPrerelease = release.IsPrerelease,
+            HtmlUrl = release.HtmlUrl,
+            PublishedAtUtc = release.PublishedAtUtc
         };
     }
 
@@ -231,4 +286,9 @@ public sealed class AdminApplicationUpdaterController : Controller
             LastUpdatedAtUtc = staged.LastUpdatedAtUtc
         };
     }
+
+    private sealed record ReleaseSelectionResult(
+        IReadOnlyList<GitHubReleaseSummary> Releases,
+        GitHubReleaseSummary? SelectedRelease,
+        GitHubReleaseSummary? LatestRelease);
 }

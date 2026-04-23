@@ -44,6 +44,24 @@ public sealed class GitHubReleaseLookupServiceTests
         Assert.Equal("V0.2.0", result!.TagName);
     }
 
+    [Fact]
+    public async Task GetApplicableReleasesAsync_ReturnsFilteredList_WithReleaseBody()
+    {
+        var service = BuildService(
+            """
+            [
+              { "tag_name": "V0.2.0", "name": "Preview", "body": "Preview notes", "draft": false, "prerelease": true, "published_at": "2026-04-15T00:00:00Z", "html_url": "https://example/pre", "assets": [] },
+              { "tag_name": "V0.1.1", "name": "Stable", "body": "Stable notes", "draft": false, "prerelease": false, "published_at": "2026-04-10T00:00:00Z", "html_url": "https://example/stable", "assets": [] }
+            ]
+            """);
+
+        var result = await service.GetApplicableReleasesAsync(false, maxResults: 10, CancellationToken.None);
+
+        Assert.Single(result);
+        Assert.Equal("V0.1.1", result[0].TagName);
+        Assert.Equal("Stable notes", result[0].Body);
+    }
+
     private static GitHubReleaseLookupService BuildService(string body)
     {
         var handler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)

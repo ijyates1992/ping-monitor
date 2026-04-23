@@ -9,6 +9,7 @@ namespace PingMonitor.Web.Services.ApplicationUpdater;
 public interface IGitHubReleaseLookupService
 {
     Task<GitHubReleaseSummary?> GetLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken);
+    Task<IReadOnlyList<GitHubReleaseSummary>> GetApplicableReleasesAsync(bool allowPreviewReleases, int maxResults, CancellationToken cancellationToken);
 }
 
 internal sealed class GitHubReleaseLookupService : IGitHubReleaseLookupService
@@ -25,6 +26,12 @@ internal sealed class GitHubReleaseLookupService : IGitHubReleaseLookupService
     }
 
     public async Task<GitHubReleaseSummary?> GetLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken)
+    {
+        var releases = await GetApplicableReleasesAsync(allowPreviewReleases, maxResults: 1, cancellationToken);
+        return releases.FirstOrDefault();
+    }
+
+    public async Task<IReadOnlyList<GitHubReleaseSummary>> GetApplicableReleasesAsync(bool allowPreviewReleases, int maxResults, CancellationToken cancellationToken)
     {
         var client = _httpClientFactory.CreateClient(nameof(GitHubReleaseLookupService));
         using var request = new HttpRequestMessage(HttpMethod.Get, BuildReleasesUrl());
@@ -47,6 +54,7 @@ internal sealed class GitHubReleaseLookupService : IGitHubReleaseLookupService
             throw new InvalidOperationException("GitHub API response did not return an array of releases.");
         }
 
+        var results = new List<GitHubReleaseSummary>();
         foreach (var release in document.RootElement.EnumerateArray())
         {
             var isDraft = GetBoolean(release, "draft");
@@ -67,19 +75,25 @@ internal sealed class GitHubReleaseLookupService : IGitHubReleaseLookupService
                 continue;
             }
 
-            return new GitHubReleaseSummary
+            results.Add(new GitHubReleaseSummary
             {
                 TagName = tagName.Trim(),
                 Name = GetString(release, "name")?.Trim(),
                 IsPrerelease = isPrerelease,
                 HtmlUrl = GetString(release, "html_url")?.Trim(),
                 PublishedAtUtc = TryGetDateTimeOffset(release, "published_at"),
+                Body = GetString(release, "body"),
                 AssetsApiUrl = GetString(release, "assets_url")?.Trim(),
                 Assets = ParseAssets(release)
-            };
+            });
+
+            if (maxResults > 0 && results.Count >= maxResults)
+            {
+                break;
+            }
         }
 
-        return null;
+        return results;
     }
 
     private string BuildReleasesUrl()
