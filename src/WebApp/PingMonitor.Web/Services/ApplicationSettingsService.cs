@@ -66,6 +66,7 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
             AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes),
             AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates,
+            AllowDevBuildAutoStageWithoutVersionComparison = _updaterOptions.AllowDevBuildAutoStageWithoutVersionComparison,
             AllowPreviewReleases = _updaterOptions.AllowPreviewReleases,
             UpdaterOperationalSettingsInitializedAtUtc = DateTimeOffset.UtcNow,
             UpdatedAtUtc = DateTimeOffset.UtcNow

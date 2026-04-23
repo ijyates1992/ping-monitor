@@ -24,6 +24,8 @@ public sealed class ApplicationSettings
 
     public bool AutomaticallyDownloadAndStageUpdates { get; set; }
 
+    public bool AllowDevBuildAutoStageWithoutVersionComparison { get; set; }
+
     public bool AllowPreviewReleases { get; set; }
 
     public DateTimeOffset? UpdaterOperationalSettingsInitializedAtUtc { get; set; }

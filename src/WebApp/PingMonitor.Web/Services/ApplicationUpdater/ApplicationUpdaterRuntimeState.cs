@@ -18,6 +18,12 @@ public sealed class ApplicationUpdaterRuntimeState
     public string? LastAutoStageFailureMessage { get; init; }
     public string? LastAutoStagedReleaseTag { get; init; }
     public DateTimeOffset? LastAutoStagedAtUtc { get; init; }
+    public string? LastDevComparisonSkippedReleaseTag { get; init; }
+    public DateTimeOffset? LastDevComparisonSkippedAtUtc { get; init; }
+    public string? LastDevAutoStageSuppressedReleaseTag { get; init; }
+    public DateTimeOffset? LastDevAutoStageSuppressedAtUtc { get; init; }
+    public string? LastDevAutoStageOverrideAllowedReleaseTag { get; init; }
+    public DateTimeOffset? LastDevAutoStageOverrideAllowedAtUtc { get; init; }
     public DateTimeOffset LastUpdatedAtUtc { get; init; }
 }
 

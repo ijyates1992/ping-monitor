@@ -37,6 +37,7 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
         settings.EnableAutomaticUpdateChecks = command.EnableAutomaticUpdateChecks;
         settings.AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(command.AutomaticUpdateCheckIntervalMinutes);
         settings.AutomaticallyDownloadAndStageUpdates = command.AutomaticallyDownloadAndStageUpdates;
+        settings.AllowDevBuildAutoStageWithoutVersionComparison = command.AllowDevBuildAutoStageWithoutVersionComparison;
         settings.AllowPreviewReleases = command.AllowPreviewReleases;
         settings.UpdaterOperationalSettingsInitializedAtUtc ??= DateTimeOffset.UtcNow;
         settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -64,6 +65,7 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
                 EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
                 AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes),
                 AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates,
+                AllowDevBuildAutoStageWithoutVersionComparison = _updaterOptions.AllowDevBuildAutoStageWithoutVersionComparison,
                 AllowPreviewReleases = _updaterOptions.AllowPreviewReleases,
                 UpdaterOperationalSettingsInitializedAtUtc = DateTimeOffset.UtcNow,
                 UpdatedAtUtc = DateTimeOffset.UtcNow
@@ -79,6 +81,7 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
             settings.EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks;
             settings.AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes);
             settings.AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates;
+            settings.AllowDevBuildAutoStageWithoutVersionComparison = _updaterOptions.AllowDevBuildAutoStageWithoutVersionComparison;
             settings.AllowPreviewReleases = _updaterOptions.AllowPreviewReleases;
             settings.UpdaterOperationalSettingsInitializedAtUtc = DateTimeOffset.UtcNow;
             settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -109,6 +112,7 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
             EnableAutomaticUpdateChecks = settings.EnableAutomaticUpdateChecks,
             AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(settings.AutomaticUpdateCheckIntervalMinutes),
             AutomaticallyDownloadAndStageUpdates = settings.AutomaticallyDownloadAndStageUpdates,
+            AllowDevBuildAutoStageWithoutVersionComparison = settings.AllowDevBuildAutoStageWithoutVersionComparison,
             AllowPreviewReleases = settings.AllowPreviewReleases,
             UpdatedAtUtc = settings.UpdatedAtUtc
         };

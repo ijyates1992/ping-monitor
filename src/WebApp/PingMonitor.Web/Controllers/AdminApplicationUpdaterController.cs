@@ -115,6 +115,7 @@ public sealed class AdminApplicationUpdaterController : Controller
                 EnableAutomaticUpdateChecks = model.EnableAutomaticUpdateChecks,
                 AutomaticUpdateCheckIntervalMinutes = model.AutomaticUpdateCheckIntervalMinutes,
                 AutomaticallyDownloadAndStageUpdates = model.AutomaticallyDownloadAndStageUpdates,
+                AllowDevBuildAutoStageWithoutVersionComparison = model.AllowDevBuildAutoStageWithoutVersionComparison,
                 AllowPreviewReleases = model.AllowPreviewReleases
             },
             cancellationToken);
@@ -145,6 +146,7 @@ public sealed class AdminApplicationUpdaterController : Controller
             UpdateChecksEnabled = _updaterOptions.UpdateChecksEnabled,
             EnableAutomaticUpdateChecks = operationalSettings.EnableAutomaticUpdateChecks,
             AutomaticallyDownloadAndStageUpdates = operationalSettings.AutomaticallyDownloadAndStageUpdates,
+            AllowDevBuildAutoStageWithoutVersionComparison = operationalSettings.AllowDevBuildAutoStageWithoutVersionComparison,
             AutomaticUpdateCheckIntervalMinutes = operationalSettings.AutomaticUpdateCheckIntervalMinutes,
             RepositoryOwner = _updaterOptions.GitHubOwner,
             RepositoryName = _updaterOptions.GitHubRepository,
@@ -154,6 +156,8 @@ public sealed class AdminApplicationUpdaterController : Controller
             PowerShellResolvedPath = powerShellStatus.ResolvedExecutablePath,
             State = result.State,
             Message = result.Message,
+            IsCurrentBuildDev = result.IsCurrentBuildDev,
+            SemanticComparisonPerformed = result.SemanticComparisonPerformed,
             LatestVersion = result.LatestApplicableRelease?.TagName,
             LatestReleaseName = result.LatestApplicableRelease?.Name,
             LatestIsPrerelease = result.LatestApplicableRelease?.IsPrerelease,

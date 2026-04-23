@@ -8,6 +8,7 @@ public sealed class ApplicationUpdaterOptions
     public bool EnableAutomaticUpdateChecks { get; set; } = true;
     public int AutomaticUpdateCheckIntervalMinutes { get; set; } = 15;
     public bool AutomaticallyDownloadAndStageUpdates { get; set; }
+    public bool AllowDevBuildAutoStageWithoutVersionComparison { get; set; }
     public string GitHubOwner { get; set; } = "ijyates1992";
     public string GitHubRepository { get; set; } = "ping-monitor";
     public string GitHubApiBaseUrl { get; set; } = "https://api.github.com";

@@ -70,6 +70,10 @@ public sealed class ApplicationUpdaterTests
 
         Assert.Equal(ApplicationUpdateCheckState.DevBuildComparisonSkipped, result.State);
         Assert.Equal("V0.1.1", result.LatestApplicableRelease?.TagName);
+        Assert.True(result.ReleaseDiscoverySucceeded);
+        Assert.True(result.IsCurrentBuildDev);
+        Assert.False(result.SemanticComparisonPerformed);
+        Assert.Contains("Latest applicable release V0.1.1 was detected", result.Message);
     }
 
     [Fact]
@@ -89,6 +93,48 @@ public sealed class ApplicationUpdaterTests
         var result = await service.CheckForUpdatesAsync(allowPreviewReleases: false, CancellationToken.None);
 
         Assert.Equal(ApplicationUpdateCheckState.LatestVersionUnknown, result.State);
+    }
+
+    [Fact]
+    public void DetermineAutoStagePlan_DevBuildWithoutOverride_IsSuppressed()
+    {
+        var plan = ApplicationUpdateBackgroundService.DetermineAutoStagePlan(
+            ApplicationUpdateCheckState.DevBuildComparisonSkipped,
+            releaseFound: true,
+            automaticStageEnabled: true,
+            allowDevBuildAutoStageWithoutVersionComparison: false,
+            previousAttemptedTag: null,
+            latestTag: "V0.2.0-preview");
+
+        Assert.Equal(ApplicationUpdateBackgroundService.AutoStagePlan.SuppressDevBuildWithoutOverride, plan);
+    }
+
+    [Fact]
+    public void DetermineAutoStagePlan_DevBuildWithOverride_AllowsStage()
+    {
+        var plan = ApplicationUpdateBackgroundService.DetermineAutoStagePlan(
+            ApplicationUpdateCheckState.DevBuildComparisonSkipped,
+            releaseFound: true,
+            automaticStageEnabled: true,
+            allowDevBuildAutoStageWithoutVersionComparison: true,
+            previousAttemptedTag: null,
+            latestTag: "V0.2.0-preview");
+
+        Assert.Equal(ApplicationUpdateBackgroundService.AutoStagePlan.StageDevBuildWithOverride, plan);
+    }
+
+    [Fact]
+    public void DetermineAutoStagePlan_ReleaseBuildBehavior_Unchanged()
+    {
+        var plan = ApplicationUpdateBackgroundService.DetermineAutoStagePlan(
+            ApplicationUpdateCheckState.UpdateAvailable,
+            releaseFound: true,
+            automaticStageEnabled: true,
+            allowDevBuildAutoStageWithoutVersionComparison: false,
+            previousAttemptedTag: null,
+            latestTag: "V0.2.0");
+
+        Assert.Equal(ApplicationUpdateBackgroundService.AutoStagePlan.StageReleaseBuild, plan);
     }
 
     private static ApplicationUpdateDetectionService BuildService(string currentVersion, GitHubReleaseSummary? release)
