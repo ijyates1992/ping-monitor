@@ -10,11 +10,16 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly AgentProvisioningOptions _provisioningOptions;
+    private readonly ApplicationUpdaterOptions _updaterOptions;
 
-    public ApplicationSettingsService(PingMonitorDbContext dbContext, IOptions<AgentProvisioningOptions> provisioningOptions)
+    public ApplicationSettingsService(
+        PingMonitorDbContext dbContext,
+        IOptions<AgentProvisioningOptions> provisioningOptions,
+        IOptions<ApplicationUpdaterOptions> updaterOptions)
     {
         _dbContext = dbContext;
         _provisioningOptions = provisioningOptions.Value;
+        _updaterOptions = updaterOptions.Value;
     }
 
     public async Task<ApplicationSettingsDto> GetCurrentAsync(CancellationToken cancellationToken)
@@ -58,6 +63,11 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             DefaultTimeoutMs = 1000,
             DefaultFailureThreshold = 3,
             DefaultRecoveryThreshold = 2,
+            EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
+            AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes),
+            AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates,
+            AllowPreviewReleases = _updaterOptions.AllowPreviewReleases,
+            UpdaterOperationalSettingsInitializedAtUtc = DateTimeOffset.UtcNow,
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
@@ -91,5 +101,10 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             DefaultRecoveryThreshold = settings.DefaultRecoveryThreshold,
             UpdatedAtUtc = settings.UpdatedAtUtc
         };
+    }
+
+    private static int ResolveAutomaticCheckInterval(int configuredIntervalMinutes)
+    {
+        return configuredIntervalMinutes < 1 ? 1 : configuredIntervalMinutes;
     }
 }

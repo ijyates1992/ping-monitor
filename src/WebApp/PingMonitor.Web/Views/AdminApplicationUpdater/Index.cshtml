@@ -59,6 +59,62 @@
             </div>
         </section>
 
+        <form class="stack" method="post" action="/admin/application-updater/settings">
+            @Html.AntiForgeryToken()
+            <section class="card field">
+                <h2>Automatic updater operational settings</h2>
+                @if (Model.SettingsSaved)
+                {
+                    <div class="status status-ok" role="status">Updater operational settings saved.</div>
+                }
+                @if (!ViewData.ModelState.IsValid)
+                {
+                    <div class="status status-error" role="status">
+                        @Html.ValidationSummary(excludePropertyErrors: true)
+                    </div>
+                }
+                <label class="checkbox-row" for="enableAutomaticUpdateChecks">
+                    <input id="enableAutomaticUpdateChecks" name="EnableAutomaticUpdateChecks" type="checkbox" value="true" @(Model.EnableAutomaticUpdateChecks ? "checked" : null) />
+                    <input name="EnableAutomaticUpdateChecks" type="hidden" value="false" />
+                    <span>
+                        <strong>Enable automatic update checks</strong><br />
+                        <span class="muted">When disabled, background automatic updater checks are paused. Manual checks remain available.</span>
+                    </span>
+                </label>
+                <div class="field">
+                    <label for="automaticUpdateCheckIntervalMinutes"><strong>Automatic check interval (minutes)</strong></label>
+                    <input id="automaticUpdateCheckIntervalMinutes" name="AutomaticUpdateCheckIntervalMinutes" type="number" min="1" max="1440" value="@Model.AutomaticUpdateCheckIntervalMinutes" />
+                    @Html.ValidationMessageFor(x => x.AutomaticUpdateCheckIntervalMinutes)
+                    <span class="muted">Allowed range: 1 to 1440 minutes. Very low intervals increase background traffic.</span>
+                </div>
+                <label class="checkbox-row" for="automaticallyDownloadAndStageUpdates">
+                    <input id="automaticallyDownloadAndStageUpdates" name="AutomaticallyDownloadAndStageUpdates" type="checkbox" value="true" @(Model.AutomaticallyDownloadAndStageUpdates ? "checked" : null) />
+                    <input name="AutomaticallyDownloadAndStageUpdates" type="hidden" value="false" />
+                    <span>
+                        <strong>Automatically download and stage updates</strong><br />
+                        <span class="muted">When enabled, the updater stages newly detected releases automatically. Apply is still an explicit admin action.</span>
+                    </span>
+                </label>
+                <label class="checkbox-row" for="allowPreviewReleasesOperational">
+                    <input id="allowPreviewReleasesOperational" name="AllowPreviewReleases" type="checkbox" value="true" @(Model.AllowPreviewReleases ? "checked" : null) />
+                    <input name="AllowPreviewReleases" type="hidden" value="false" />
+                    <span>
+                        <strong>Allow preview releases</strong><br />
+                        <span class="muted">This controls which releases are eligible for both automatic background checks and manual updater actions.</span>
+                    </span>
+                </label>
+                @if (!Model.UpdateChecksEnabled)
+                {
+                    <div class="status status-warn" role="status">
+                        Update checks are globally disabled in deployment configuration. Runtime settings are saved, but checks remain disabled until config re-enables update checks.
+                    </div>
+                }
+                <div class="button-row">
+                    <button class="button" type="submit">Save updater settings</button>
+                </div>
+            </section>
+        </form>
+
         <form class="stack" method="post" action="/admin/application-updater/check">
             @Html.AntiForgeryToken()
             <section class="card field">
@@ -67,7 +123,7 @@
                     <input id="allowPreviewReleases" name="allowPreviewReleases" type="checkbox" value="true" @(Model.AllowPreviewReleases ? "checked" : null) />
                     <span>
                         <strong>Allow preview releases</strong><br />
-                        <span class="muted">When enabled, prerelease GitHub versions are eligible. When disabled, prereleases are ignored.</span>
+                        <span class="muted">Uses current saved operational setting as default. You can override for this one manual check.</span>
                     </span>
                 </label>
                 <div class="button-row">
