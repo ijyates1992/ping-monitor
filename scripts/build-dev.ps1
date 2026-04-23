@@ -230,6 +230,11 @@ if (-not $injectedSettings.ApplicationMetadata -or $injectedSettings.Application
     Fail-Build 'Version injection failed. ApplicationMetadata.Version was not updated as expected.'
 }
 
+$requiredSchemaVersion = $injectedSettings.StartupGate.RequiredSchemaVersion
+if ($null -eq $requiredSchemaVersion -or [int]$requiredSchemaVersion -lt 1) {
+    Fail-Build "Required schema version was missing or invalid in appsettings.json StartupGate.RequiredSchemaVersion."
+}
+
 if (-not $devVersionDisplay.StartsWith('DEV-')) {
     Fail-Build 'Dev build version safety check failed. Generated version is not clearly marked as DEV-*.'
 }
@@ -256,6 +261,7 @@ $manifest = [ordered]@{
     packageFileName = "$packageBaseName.zip"
     runtime = $Runtime
     commitHash = $commitHash
+    requiredSchemaVersion = [int]$requiredSchemaVersion
 }
 
 $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8NoBOM

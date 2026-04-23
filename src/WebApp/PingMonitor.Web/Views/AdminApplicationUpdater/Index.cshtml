@@ -7,13 +7,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Application updater</title>
     <style>
-        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --warn-bg:#fff4e5; --warn-text:#8a5a00; --error-bg:#fee4e2; --error-text:#b42318; --ok-bg:#ebffee; --ok-text:#137333; }
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --warn-bg:#fff4e5; --warn-text:#8a5a00; --error-bg:#fee4e2; --error-text:#b42318; --critical-bg:#2f1118; --critical-text:#ffe9ed; --ok-bg:#ebffee; --ok-text:#137333; }
         *{box-sizing:border-box;} body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);} main{max-width:760px;margin:0 auto;padding:1rem;}
         .stack{display:grid;gap:1rem;} .card{background:var(--card);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.08);padding:1rem;}
         .button,.button-secondary{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:.8rem 1rem;border-radius:10px;text-decoration:none;font-weight:600;}
         .button{border:0;background:var(--accent);color:#fff;cursor:pointer;} .button-secondary{border:1px solid var(--border);background:#fff;color:var(--text);} .button-row{display:flex;gap:.75rem;flex-wrap:wrap;}
         .muted{color:var(--muted);} .status{border-radius:10px;padding:.8rem;border:1px solid var(--border);}
-        .status-ok{background:var(--ok-bg);color:var(--ok-text);border-color:#c2f0c2;} .status-warn{background:var(--warn-bg);color:var(--warn-text);border-color:#f7d9a8;} .status-error{background:var(--error-bg);color:var(--error-text);border-color:#fda29b;}
+        .status-ok{background:var(--ok-bg);color:var(--ok-text);border-color:#c2f0c2;} .status-warn{background:var(--warn-bg);color:var(--warn-text);border-color:#f7d9a8;} .status-error{background:var(--error-bg);color:var(--error-text);border-color:#fda29b;} .status-critical{background:var(--critical-bg);color:var(--critical-text);border-color:#7a263d;}
         .field{display:grid;gap:.5rem;} .checkbox-row{display:flex;gap:.75rem;align-items:flex-start;}
         input[type=checkbox]{width:20px;height:20px;margin-top:.2rem;} dl{margin:0;display:grid;gap:.6rem;} dt{font-weight:700;} dd{margin:0;word-break:break-word;}
         .controls-group{display:grid;gap:1rem;padding-top:.75rem;border-top:1px solid var(--border);} .controls-group:first-of-type{border-top:0;padding-top:0;}
@@ -53,6 +53,15 @@
         var stageHasError = !string.IsNullOrWhiteSpace(Model.StagedUpdate?.FailureMessage) || Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingFailed;
         var applyHasError = Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyFailed;
         var runtimeHasError = !string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutomaticCheckFailureMessage) || !string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutoStageFailureMessage);
+        var schemaStatusClass = Model.SchemaCompatibilityState switch
+        {
+            PingMonitor.Web.ViewModels.Admin.ApplicationUpdaterSchemaCompatibilityState.UpgradeRequiredAfterUpdate => "status-warn",
+            PingMonitor.Web.ViewModels.Admin.ApplicationUpdaterSchemaCompatibilityState.TargetOlderThanCurrentSchema => "status-error",
+            PingMonitor.Web.ViewModels.Admin.ApplicationUpdaterSchemaCompatibilityState.TargetSchemaInfoMissing => "status-critical",
+            PingMonitor.Web.ViewModels.Admin.ApplicationUpdaterSchemaCompatibilityState.CurrentSchemaUnknown => "status-critical",
+            PingMonitor.Web.ViewModels.Admin.ApplicationUpdaterSchemaCompatibilityState.NotAvailable => "status-warn",
+            _ => "status-ok"
+        };
     }
 
     <div class="stack">
@@ -149,6 +158,16 @@
                         }
                     </select>
                     <p class="muted">Latest applicable under current filter: @(Model.LatestVersion ?? "(none)")</p>
+                </div>
+                <div class="status @schemaStatusClass" role="status">
+                    @if (Model.SchemaCompatibilityState == PingMonitor.Web.ViewModels.Admin.ApplicationUpdaterSchemaCompatibilityState.CompatibleNoUpgradeNeeded)
+                    {
+                        <span>Schema compatibility check: selected release requires schema version @Model.TargetRequiredSchemaVersion and current database schema is @Model.CurrentDatabaseSchemaVersion. No schema upgrade warning detected.</span>
+                    }
+                    else
+                    {
+                        <span>@(Model.SchemaCompatibilityWarningMessage ?? "Schema compatibility assessment is unavailable for the selected release.")</span>
+                    }
                 </div>
                 <h3>Manual actions</h3>
                 <div class="button-row">
@@ -259,6 +278,8 @@
                     <div><strong>Title:</strong> @(string.IsNullOrWhiteSpace(Model.SelectedRelease.Name) ? "(not provided)" : Model.SelectedRelease.Name)</div>
                     <div><strong>Published:</strong> @(Model.SelectedRelease.PublishedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Unknown")</div>
                     <div><strong>Type:</strong> @(Model.SelectedRelease.IsPrerelease ? "Preview/prerelease" : "Stable")</div>
+                    <div><strong>Required schema version (release metadata):</strong> @(Model.SelectedRelease.RequiredSchemaVersion?.ToString() ?? "(not declared)")</div>
+                    <div><strong>Current database schema version:</strong> @(Model.CurrentDatabaseSchemaVersion?.ToString() ?? "(unknown)")</div>
                     @if (!string.IsNullOrWhiteSpace(Model.SelectedRelease.HtmlUrl))
                     {
                         <div><strong>Release URL:</strong> <a href="@Model.SelectedRelease.HtmlUrl" rel="noopener noreferrer" target="_blank">@Model.SelectedRelease.HtmlUrl</a></div>

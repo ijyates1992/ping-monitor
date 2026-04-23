@@ -194,7 +194,9 @@ builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsServi
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
 builder.Services.AddHttpClient(nameof(GitHubReleaseLookupService));
 builder.Services.AddHttpClient(nameof(ApplicationUpdateStagingService));
+builder.Services.AddHttpClient(nameof(ReleaseSchemaMetadataService));
 builder.Services.AddScoped<IGitHubReleaseLookupService, GitHubReleaseLookupService>();
+builder.Services.AddScoped<IReleaseSchemaMetadataService, ReleaseSchemaMetadataService>();
 builder.Services.AddScoped<IApplicationUpdateDetectionService, ApplicationUpdateDetectionService>();
 builder.Services.AddScoped<IApplicationUpdaterOperationalSettingsService, ApplicationUpdaterOperationalSettingsService>();
 builder.Services.AddSingleton<IApplicationUpdateStagingStateStore, ApplicationUpdateStagingStateStore>();

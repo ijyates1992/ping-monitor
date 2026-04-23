@@ -35,6 +35,10 @@ public sealed class ApplicationUpdaterPageViewModel
     public DateTimeOffset? LatestPublishedAtUtc { get; init; }
     public ApplicationUpdaterRuntimeState? RuntimeState { get; init; }
     public ApplicationUpdateStagingState? StagedUpdate { get; init; }
+    public int? CurrentDatabaseSchemaVersion { get; init; }
+    public int? TargetRequiredSchemaVersion { get; init; }
+    public ApplicationUpdaterSchemaCompatibilityState SchemaCompatibilityState { get; init; }
+    public string? SchemaCompatibilityWarningMessage { get; init; }
 }
 
 public sealed class ApplicationUpdaterSelectableReleaseViewModel
@@ -45,4 +49,15 @@ public sealed class ApplicationUpdaterSelectableReleaseViewModel
     public bool IsPrerelease { get; init; }
     public string? HtmlUrl { get; init; }
     public DateTimeOffset? PublishedAtUtc { get; init; }
+    public int? RequiredSchemaVersion { get; init; }
+}
+
+public enum ApplicationUpdaterSchemaCompatibilityState
+{
+    NotAvailable = 0,
+    CompatibleNoUpgradeNeeded = 1,
+    UpgradeRequiredAfterUpdate = 2,
+    TargetOlderThanCurrentSchema = 3,
+    TargetSchemaInfoMissing = 4,
+    CurrentSchemaUnknown = 5
 }
