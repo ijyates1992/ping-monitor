@@ -18,6 +18,7 @@
         input[type=checkbox]{width:20px;height:20px;margin-top:.2rem;} dl{margin:0;display:grid;gap:.6rem;} dt{font-weight:700;} dd{margin:0;word-break:break-word;}
         .controls-group{display:grid;gap:1rem;padding-top:.75rem;border-top:1px solid var(--border);} .controls-group:first-of-type{border-top:0;padding-top:0;}
         details{margin-top:.75rem;} summary{cursor:pointer;font-weight:700;} .summary-grid{display:grid;gap:.6rem;margin-top:1rem;}
+        .release-notes{background:rgba(0,0,0,.03);border:1px solid var(--border);border-radius:10px;padding:.75rem;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;}
     </style>
 </head>
 <body>
@@ -68,6 +69,7 @@
 
             <form class="controls-group" method="post" action="/admin/application-updater/settings">
                 @Html.AntiForgeryToken()
+                <input type="hidden" name="SelectedReleaseTag" value="@Model.SelectedReleaseTag" />
                 <h3>Operational settings</h3>
                 @if (Model.SettingsSaved)
                 {
@@ -131,6 +133,23 @@
             <form class="controls-group" method="post" action="/admin/application-updater/check">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
+                <div class="field">
+                    <label for="selectedReleaseTagCheck"><strong>Target release</strong></label>
+                    <select id="selectedReleaseTagCheck" name="selectedReleaseTag">
+                        @if (Model.SelectableReleases.Count == 0)
+                        {
+                            <option value="">(No applicable releases)</option>
+                        }
+                        else
+                        {
+                            foreach (var release in Model.SelectableReleases)
+                            {
+                                <option value="@release.TagName" selected="@(string.Equals(Model.SelectedReleaseTag, release.TagName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@release.TagName @(release.IsPrerelease ? "(preview)" : "(stable)")</option>
+                            }
+                        }
+                    </select>
+                    <p class="muted">Latest applicable under current filter: @(Model.LatestVersion ?? "(none)")</p>
+                </div>
                 <h3>Manual actions</h3>
                 <div class="button-row">
                     <button class="button" type="submit" @(Model.UpdateChecksEnabled ? null : "disabled")>Check now</button>
@@ -144,6 +163,7 @@
             <form class="controls-group" method="post" action="/admin/application-updater/stage">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
+                <input type="hidden" name="selectedReleaseTag" value="@Model.SelectedReleaseTag" />
                 <div class="button-row">
                     <button class="button" type="submit" @((Model.UpdateChecksEnabled && Model.StagedUpdate?.StagingInProgress != true) ? null : "disabled")>Download, verify, and stage</button>
                 </div>
@@ -156,6 +176,7 @@
             <form class="controls-group" method="post" action="/admin/application-updater/apply">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
+                <input type="hidden" name="selectedReleaseTag" value="@Model.SelectedReleaseTag" />
                 <div class="status status-warn" role="status">
                     Confirm operator intent before proceeding. This action is fire-and-forget and may restart the application.
                 </div>
@@ -219,6 +240,35 @@
                     }
                 </dl>
             </details>
+        </section>
+
+        <section class="card">
+            <h2>Selected release details</h2>
+            @if (Model.SelectedRelease is null)
+            {
+                <div class="status status-warn" role="status">No applicable release is currently selected under the active preview-release filter.</div>
+            }
+            else
+            {
+                @if (!string.IsNullOrWhiteSpace(Model.LatestVersion) && !string.Equals(Model.SelectedRelease.TagName, Model.LatestVersion, StringComparison.OrdinalIgnoreCase))
+                {
+                    <div class="status status-warn" role="status">The selected release is not the latest applicable release. This may intentionally skip newer versions.</div>
+                }
+                <div class="summary-grid">
+                    <div><strong>Tag/version:</strong> @Model.SelectedRelease.TagName</div>
+                    <div><strong>Title:</strong> @(string.IsNullOrWhiteSpace(Model.SelectedRelease.Name) ? "(not provided)" : Model.SelectedRelease.Name)</div>
+                    <div><strong>Published:</strong> @(Model.SelectedRelease.PublishedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Unknown")</div>
+                    <div><strong>Type:</strong> @(Model.SelectedRelease.IsPrerelease ? "Preview/prerelease" : "Stable")</div>
+                    @if (!string.IsNullOrWhiteSpace(Model.SelectedRelease.HtmlUrl))
+                    {
+                        <div><strong>Release URL:</strong> <a href="@Model.SelectedRelease.HtmlUrl" rel="noopener noreferrer" target="_blank">@Model.SelectedRelease.HtmlUrl</a></div>
+                    }
+                </div>
+                <details>
+                    <summary>Release notes</summary>
+                    <div class="release-notes">@(string.IsNullOrWhiteSpace(Model.SelectedRelease.Body) ? "No release notes were provided for this release." : Model.SelectedRelease.Body)</div>
+                </details>
+            }
         </section>
 
         <section class="card">

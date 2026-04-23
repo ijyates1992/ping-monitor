@@ -220,6 +220,39 @@ public sealed class ApplicationUpdateStagingServiceTests
         }
     }
 
+    [Fact]
+    public async Task StageSelectedApplicableReleaseAsync_StagesSelectedRelease_WhenNotLatest()
+    {
+        var tempRoot = CreateTempRoot();
+        try
+        {
+            var selectedRelease = BuildRelease("V1.2.3");
+            var latestRelease = BuildRelease("V1.2.4");
+            var zipBytes = Encoding.UTF8.GetBytes("selected-release-zip-content");
+            var checksum = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipBytes));
+
+            var handler = new MappingHttpMessageHandler(new Dictionary<string, HttpResponseMessage>
+            {
+                ["https://download/release.zip"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(zipBytes) },
+                ["https://download/SHA256.txt"] = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{checksum}  PingMonitor-V1.2.3-win-x64.zip", Encoding.UTF8, "text/plain")
+                }
+            });
+
+            var service = BuildService(tempRoot, new MultiReleaseLookupService([latestRelease, selectedRelease]), handler);
+            var result = await service.StageSelectedApplicableReleaseAsync(false, "V1.2.3", CancellationToken.None);
+
+            Assert.Equal(ApplicationUpdateStagingStatus.Ready, result.State.Status);
+            Assert.Equal("V1.2.3", result.State.ReleaseTag);
+            Assert.Equal("V1.2.4", result.State.LatestApplicableReleaseTag);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static string CreateTempRoot()
     {
         var path = Path.Combine(Path.GetTempPath(), "ping-monitor-stage2-tests", Guid.NewGuid().ToString("N"));
@@ -308,6 +341,12 @@ public sealed class ApplicationUpdateStagingServiceTests
             await _delayTask.WaitAsync(cancellationToken);
             return _release;
         }
+
+        public async Task<IReadOnlyList<GitHubReleaseSummary>> GetApplicableReleasesAsync(bool allowPreviewReleases, int maxResults, CancellationToken cancellationToken)
+        {
+            await _delayTask.WaitAsync(cancellationToken);
+            return [_release];
+        }
     }
 
     private sealed class FakeReleaseLookupService : IGitHubReleaseLookupService
@@ -322,6 +361,35 @@ public sealed class ApplicationUpdateStagingServiceTests
         public Task<GitHubReleaseSummary?> GetLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken)
         {
             return Task.FromResult<GitHubReleaseSummary?>(_release);
+        }
+
+        public Task<IReadOnlyList<GitHubReleaseSummary>> GetApplicableReleasesAsync(bool allowPreviewReleases, int maxResults, CancellationToken cancellationToken)
+        {
+            IReadOnlyList<GitHubReleaseSummary> releases = [_release];
+            return Task.FromResult(releases);
+        }
+    }
+
+    private sealed class MultiReleaseLookupService : IGitHubReleaseLookupService
+    {
+        private readonly IReadOnlyList<GitHubReleaseSummary> _releases;
+
+        public MultiReleaseLookupService(IReadOnlyList<GitHubReleaseSummary> releases)
+        {
+            _releases = releases;
+        }
+
+        public Task<GitHubReleaseSummary?> GetLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_releases.FirstOrDefault());
+        }
+
+        public Task<IReadOnlyList<GitHubReleaseSummary>> GetApplicableReleasesAsync(bool allowPreviewReleases, int maxResults, CancellationToken cancellationToken)
+        {
+            IReadOnlyList<GitHubReleaseSummary> releases = maxResults > 0
+                ? _releases.Take(maxResults).ToArray()
+                : _releases;
+            return Task.FromResult(releases);
         }
     }
 

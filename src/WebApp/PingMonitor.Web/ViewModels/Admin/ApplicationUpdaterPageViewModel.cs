@@ -25,6 +25,9 @@ public sealed class ApplicationUpdaterPageViewModel
     public string PowerShellPrerequisiteMessage { get; init; } = string.Empty;
     public ApplicationUpdateCheckState State { get; init; }
     public string Message { get; init; } = string.Empty;
+    public string? SelectedReleaseTag { get; init; }
+    public ApplicationUpdaterSelectableReleaseViewModel? SelectedRelease { get; init; }
+    public IReadOnlyList<ApplicationUpdaterSelectableReleaseViewModel> SelectableReleases { get; init; } = [];
     public string? LatestVersion { get; init; }
     public string? LatestReleaseName { get; init; }
     public bool? LatestIsPrerelease { get; init; }
@@ -32,4 +35,14 @@ public sealed class ApplicationUpdaterPageViewModel
     public DateTimeOffset? LatestPublishedAtUtc { get; init; }
     public ApplicationUpdaterRuntimeState? RuntimeState { get; init; }
     public ApplicationUpdateStagingState? StagedUpdate { get; init; }
+}
+
+public sealed class ApplicationUpdaterSelectableReleaseViewModel
+{
+    public string TagName { get; init; } = string.Empty;
+    public string? Name { get; init; }
+    public string? Body { get; init; }
+    public bool IsPrerelease { get; init; }
+    public string? HtmlUrl { get; init; }
+    public DateTimeOffset? PublishedAtUtc { get; init; }
 }

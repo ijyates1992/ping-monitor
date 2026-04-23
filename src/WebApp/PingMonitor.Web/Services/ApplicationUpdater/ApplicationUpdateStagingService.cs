@@ -9,6 +9,7 @@ namespace PingMonitor.Web.Services.ApplicationUpdater;
 public interface IApplicationUpdateStagingService
 {
     Task<ApplicationUpdateStagingResult> StageLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken);
+    Task<ApplicationUpdateStagingResult> StageSelectedApplicableReleaseAsync(bool allowPreviewReleases, string? selectedReleaseTag, CancellationToken cancellationToken);
 }
 
 internal sealed partial class ApplicationUpdateStagingService : IApplicationUpdateStagingService
@@ -34,6 +35,11 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
     }
 
     public async Task<ApplicationUpdateStagingResult> StageLatestApplicableReleaseAsync(bool allowPreviewReleases, CancellationToken cancellationToken)
+    {
+        return await StageSelectedApplicableReleaseAsync(allowPreviewReleases, selectedReleaseTag: null, cancellationToken);
+    }
+
+    public async Task<ApplicationUpdateStagingResult> StageSelectedApplicableReleaseAsync(bool allowPreviewReleases, string? selectedReleaseTag, CancellationToken cancellationToken)
     {
         var repository = $"{_options.GitHubOwner}/{_options.GitHubRepository}";
         var now = DateTimeOffset.UtcNow;
@@ -74,10 +80,10 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 currentState), cancellationToken);
         }
 
-        GitHubReleaseSummary? release;
+        IReadOnlyList<GitHubReleaseSummary> releases;
         try
         {
-            release = await _gitHubReleaseLookupService.GetLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
+            releases = await _gitHubReleaseLookupService.GetApplicableReleasesAsync(allowPreviewReleases, maxResults: 20, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -90,7 +96,8 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 currentState), cancellationToken);
         }
 
-        if (release is null)
+        var latestRelease = releases.FirstOrDefault();
+        if (latestRelease is null)
         {
             return await WriteAndReturnAsync(BuildState(
                 repository,
@@ -101,6 +108,7 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 currentState), cancellationToken);
         }
 
+        var release = ResolveSelectedRelease(releases, selectedReleaseTag) ?? latestRelease;
         if (CanReuseCurrentStage(currentState, release.TagName) &&
             await ValidateExistingStagedArtifactsAsync(currentState!, cancellationToken))
         {
@@ -111,7 +119,7 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 $"Release {release.TagName} is already staged and verified. No staging changes were required.",
                 DateTimeOffset.UtcNow,
                 currentState,
-                latestApplicableReleaseTag: release.TagName,
+                latestApplicableReleaseTag: latestRelease.TagName,
                 stageOperationWasNoOp: true), cancellationToken);
         }
 
@@ -157,7 +165,7 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 checksumAsset.Name,
                 zipPath,
                 checksumPath,
-                latestApplicableReleaseTag: release.TagName), cancellationToken);
+                latestApplicableReleaseTag: latestRelease.TagName), cancellationToken);
         }
 
         string expectedHash;
@@ -181,7 +189,7 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 checksumAsset.Name,
                 zipPath,
                 checksumPath,
-                latestApplicableReleaseTag: release.TagName), cancellationToken);
+                latestApplicableReleaseTag: latestRelease.TagName), cancellationToken);
         }
 
         if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
@@ -201,7 +209,7 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 expectedHash,
                 actualHash,
                 false,
-                latestApplicableReleaseTag: release.TagName), cancellationToken);
+                latestApplicableReleaseTag: latestRelease.TagName), cancellationToken);
         }
 
         return await WriteAndReturnAsync(BuildState(
@@ -220,7 +228,17 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
             actualHash,
             true,
             DateTimeOffset.UtcNow,
-            latestApplicableReleaseTag: release.TagName), cancellationToken);
+            latestApplicableReleaseTag: latestRelease.TagName), cancellationToken);
+    }
+
+    private static GitHubReleaseSummary? ResolveSelectedRelease(IReadOnlyList<GitHubReleaseSummary> releases, string? selectedReleaseTag)
+    {
+        if (string.IsNullOrWhiteSpace(selectedReleaseTag))
+        {
+            return null;
+        }
+
+        return releases.FirstOrDefault(release => string.Equals(release.TagName, selectedReleaseTag, StringComparison.OrdinalIgnoreCase));
     }
 
     private static FileStream? TryAcquireStageLock(string lockPath)

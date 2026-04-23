@@ -183,5 +183,11 @@ public sealed class ApplicationUpdaterTests
         {
             return Task.FromResult(_release);
         }
+
+        public Task<IReadOnlyList<GitHubReleaseSummary>> GetApplicableReleasesAsync(bool allowPreviewReleases, int maxResults, CancellationToken cancellationToken)
+        {
+            IReadOnlyList<GitHubReleaseSummary> releases = _release is null ? [] : [_release];
+            return Task.FromResult(releases);
+        }
     }
 }
