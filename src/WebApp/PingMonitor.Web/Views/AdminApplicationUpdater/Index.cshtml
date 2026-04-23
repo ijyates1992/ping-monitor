@@ -18,7 +18,11 @@
         input[type=checkbox]{width:20px;height:20px;margin-top:.2rem;} dl{margin:0;display:grid;gap:.6rem;} dt{font-weight:700;} dd{margin:0;word-break:break-word;}
         .controls-group{display:grid;gap:1rem;padding-top:.75rem;border-top:1px solid var(--border);} .controls-group:first-of-type{border-top:0;padding-top:0;}
         details{margin-top:.75rem;} summary{cursor:pointer;font-weight:700;} .summary-grid{display:grid;gap:.6rem;margin-top:1rem;}
-        .release-notes{background:rgba(0,0,0,.03);border:1px solid var(--border);border-radius:10px;padding:.75rem;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;}
+        .release-notes{background:rgba(0,0,0,.03);border:1px solid var(--border);border-radius:10px;padding:.75rem;max-height:260px;overflow:auto;line-height:1.45;word-break:break-word;}
+        .release-notes :first-child{margin-top:0;} .release-notes :last-child{margin-bottom:0;}
+        .release-notes h1,.release-notes h2,.release-notes h3,.release-notes h4{line-height:1.25;margin:1rem 0 .5rem;}
+        .release-notes p{margin:.5rem 0;} .release-notes ul,.release-notes ol{margin:.5rem 0 .5rem 1.25rem;}
+        .release-notes li{margin:.25rem 0;} .release-notes code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
     </style>
 </head>
 <body>
@@ -66,7 +70,7 @@
 
     <div class="stack">
         <section class="card">
-            <h1>Application updater (Stage 4)</h1>
+            <h1>Application updater</h1>
             <p class="muted">Manual admin flow for release detection, conservative staging, and external updater handoff. Applying an update restarts the application.</p>
             <div class="button-row">
                 <a class="button-secondary" href="/admin">Back to Admin settings</a>
@@ -287,7 +291,14 @@
                 </div>
                 <details>
                     <summary>Release notes</summary>
-                    <div class="release-notes">@(string.IsNullOrWhiteSpace(Model.SelectedRelease.Body) ? "No release notes were provided for this release." : Model.SelectedRelease.Body)</div>
+                    @if (string.IsNullOrWhiteSpace(Model.SelectedRelease.BodyHtml))
+                    {
+                        <div class="release-notes">No release notes were provided for this release.</div>
+                    }
+                    else
+                    {
+                        <div class="release-notes">@Html.Raw(Model.SelectedRelease.BodyHtml)</div>
+                    }
                 </details>
             }
         </section>

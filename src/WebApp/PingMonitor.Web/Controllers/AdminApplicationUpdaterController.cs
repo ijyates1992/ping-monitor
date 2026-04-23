@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Markdig;
 using System.Security.Claims;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.ApplicationMetadata;
@@ -237,6 +238,7 @@ public sealed class AdminApplicationUpdaterController : Controller
             TagName = release.TagName,
             Name = release.Name,
             Body = release.Body,
+            BodyHtml = string.IsNullOrWhiteSpace(release.Body) ? null : Markdown.ToHtml(release.Body),
             IsPrerelease = release.IsPrerelease,
             HtmlUrl = release.HtmlUrl,
             PublishedAtUtc = release.PublishedAtUtc,
