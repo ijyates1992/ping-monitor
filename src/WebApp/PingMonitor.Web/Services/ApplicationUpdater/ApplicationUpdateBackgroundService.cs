@@ -35,14 +35,6 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var operationalSettings = await ReadOperationalSettingsAsync(stoppingToken);
-            var interval = ResolveInterval(operationalSettings.AutomaticUpdateCheckIntervalMinutes);
-            if (!_options.UpdateChecksEnabled || !operationalSettings.EnableAutomaticUpdateChecks)
-            {
-                await Task.Delay(interval, stoppingToken);
-                continue;
-            }
-
             if (!_startupGateRuntimeState.IsOperationalMode)
             {
                 if (!wasPausedByStartupGate)
@@ -61,8 +53,19 @@ internal sealed class ApplicationUpdateBackgroundService : BackgroundService
                 wasPausedByStartupGate = false;
             }
 
+            var interval = ResolveInterval(_options.AutomaticUpdateCheckIntervalMinutes);
+
             try
             {
+                var operationalSettings = await ReadOperationalSettingsAsync(stoppingToken);
+                interval = ResolveInterval(operationalSettings.AutomaticUpdateCheckIntervalMinutes);
+
+                if (!_options.UpdateChecksEnabled || !operationalSettings.EnableAutomaticUpdateChecks)
+                {
+                    await Task.Delay(interval, stoppingToken);
+                    continue;
+                }
+
                 await RunAutomaticCheckAsync(operationalSettings, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

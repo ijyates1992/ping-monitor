@@ -10,13 +10,16 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
 {
     private readonly PingMonitorDbContext _dbContext;
     private readonly ApplicationUpdaterOptions _updaterOptions;
+    private readonly AgentProvisioningOptions _provisioningOptions;
 
     public ApplicationUpdaterOperationalSettingsService(
         PingMonitorDbContext dbContext,
-        IOptions<ApplicationUpdaterOptions> updaterOptions)
+        IOptions<ApplicationUpdaterOptions> updaterOptions,
+        IOptions<AgentProvisioningOptions> provisioningOptions)
     {
         _dbContext = dbContext;
         _updaterOptions = updaterOptions.Value;
+        _provisioningOptions = provisioningOptions.Value;
     }
 
     public async Task<ApplicationUpdaterOperationalSettingsDto> GetCurrentAsync(CancellationToken cancellationToken)
@@ -52,7 +55,7 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
             settings = new ApplicationSettings
             {
                 ApplicationSettingsId = ApplicationSettings.SingletonId,
-                SiteUrl = string.Empty,
+                SiteUrl = BuildInitialSiteUrl(),
                 DefaultPingIntervalSeconds = 60,
                 DefaultRetryIntervalSeconds = 5,
                 DefaultTimeoutMs = 1000,
@@ -83,6 +86,20 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
         }
 
         return settings;
+    }
+
+
+    private string BuildInitialSiteUrl()
+    {
+        var configuredUrl = _provisioningOptions.ServerUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(configuredUrl))
+        {
+            return string.Empty;
+        }
+
+        return Uri.TryCreate(configuredUrl, UriKind.Absolute, out var uri)
+            ? uri.ToString().TrimEnd('/')
+            : string.Empty;
     }
 
     private static ApplicationUpdaterOperationalSettingsDto ToDto(ApplicationSettings settings)
