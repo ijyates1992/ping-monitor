@@ -46,6 +46,7 @@ public sealed class ApplicationUpdaterSelectableReleaseViewModel
     public string TagName { get; init; } = string.Empty;
     public string? Name { get; init; }
     public string? Body { get; init; }
+    public string? BodyHtml { get; init; }
     public bool IsPrerelease { get; init; }
     public string? HtmlUrl { get; init; }
     public DateTimeOffset? PublishedAtUtc { get; init; }
