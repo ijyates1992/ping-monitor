@@ -16,11 +16,44 @@
         .status-ok{background:var(--ok-bg);color:var(--ok-text);border-color:#c2f0c2;} .status-warn{background:var(--warn-bg);color:var(--warn-text);border-color:#f7d9a8;} .status-error{background:var(--error-bg);color:var(--error-text);border-color:#fda29b;}
         .field{display:grid;gap:.5rem;} .checkbox-row{display:flex;gap:.75rem;align-items:flex-start;}
         input[type=checkbox]{width:20px;height:20px;margin-top:.2rem;} dl{margin:0;display:grid;gap:.6rem;} dt{font-weight:700;} dd{margin:0;word-break:break-word;}
+        .controls-group{display:grid;gap:1rem;padding-top:.75rem;border-top:1px solid var(--border);} .controls-group:first-of-type{border-top:0;padding-top:0;}
+        details{margin-top:.75rem;} summary{cursor:pointer;font-weight:700;} .summary-grid{display:grid;gap:.6rem;margin-top:1rem;}
     </style>
 </head>
 <body>
 @await Html.PartialAsync("_AuthenticatedNav")
 <main>
+    @{
+        var checkStatusClass = Model.State switch
+        {
+            PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.UpdateAvailable => "status-warn",
+            PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.CheckFailed => "status-error",
+            PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.DevBuildComparisonSkipped => "status-warn",
+            PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.CurrentVersionUnknown => "status-warn",
+            PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.LatestVersionUnknown => "status-warn",
+            PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.UpdateCheckDisabled => "status-warn",
+            _ => "status-ok"
+        };
+
+        var stagedStatusClass = Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready
+            ? "status-ok"
+            : Model.StagedUpdate?.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingInProgress
+                or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingBlocked
+                ? "status-warn"
+                : "status-error";
+
+        var applyStatusClass = Model.StagedUpdate?.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplySucceeded
+            ? "status-ok"
+            : Model.StagedUpdate?.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyFailed
+                ? "status-error"
+                : "status-warn";
+
+        var checkHasError = Model.State == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.CheckFailed;
+        var stageHasError = !string.IsNullOrWhiteSpace(Model.StagedUpdate?.FailureMessage) || Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingFailed;
+        var applyHasError = Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyFailed;
+        var runtimeHasError = !string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutomaticCheckFailureMessage) || !string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutoStageFailureMessage);
+    }
+
     <div class="stack">
         <section class="card">
             <h1>Application updater (Stage 4)</h1>
@@ -30,46 +63,12 @@
             </div>
         </section>
 
-        <section class="card">
-            <h2>Current deployment</h2>
-            <dl>
-                <div>
-                    <dt>Installed version</dt>
-                    <dd>@Model.CurrentVersion</dd>
-                </div>
-                <div>
-                    <dt>GitHub source</dt>
-                    <dd>@Model.RepositoryOwner/@Model.RepositoryName</dd>
-                </div>
-                <div>
-                    <dt>Automatic checks</dt>
-                    <dd>@(Model.EnableAutomaticUpdateChecks ? "Enabled" : "Disabled") every @Model.AutomaticUpdateCheckIntervalMinutes minute(s)</dd>
-                </div>
-                <div>
-                    <dt>Automatic stage</dt>
-                    <dd>@(Model.AutomaticallyDownloadAndStageUpdates ? "Enabled" : "Disabled")</dd>
-                </div>
-                @if (Model.IsCurrentBuildDev)
-                {
-                    <div>
-                        <dt>DEV auto-stage override</dt>
-                        <dd>@(Model.AllowDevBuildAutoStageWithoutVersionComparison ? "Enabled (comparison bypass)" : "Disabled (safe default)")</dd>
-                    </div>
-                }
-                <div>
-                    <dt>PowerShell 7 (`pwsh`) prerequisite</dt>
-                    <dd>@(Model.PowerShellPrerequisiteAvailable ? "Available" : "Missing")</dd>
-                </div>
-            </dl>
-            <div class="status @(Model.PowerShellPrerequisiteAvailable ? "status-ok" : "status-error")" role="status" style="margin-top:1rem;">
-                @Model.PowerShellPrerequisiteMessage
-            </div>
-        </section>
+        <section class="card stack">
+            <h2>Updater controls</h2>
 
-        <form class="stack" method="post" action="/admin/application-updater/settings">
-            @Html.AntiForgeryToken()
-            <section class="card field">
-                <h2>Automatic updater operational settings</h2>
+            <form class="controls-group" method="post" action="/admin/application-updater/settings">
+                @Html.AntiForgeryToken()
+                <h3>Operational settings</h3>
                 @if (Model.SettingsSaved)
                 {
                     <div class="status status-ok" role="status">Updater operational settings saved.</div>
@@ -80,28 +79,25 @@
                         @Html.ValidationSummary(excludePropertyErrors: true)
                     </div>
                 }
+
                 <label class="checkbox-row" for="enableAutomaticUpdateChecks">
                     <input id="enableAutomaticUpdateChecks" name="EnableAutomaticUpdateChecks" type="checkbox" value="true" @(Model.EnableAutomaticUpdateChecks ? "checked" : null) />
                     <input name="EnableAutomaticUpdateChecks" type="hidden" value="false" />
-                    <span>
-                        <strong>Enable automatic update checks</strong><br />
-                        <span class="muted">When disabled, background automatic updater checks are paused. Manual checks remain available.</span>
-                    </span>
+                    <span><strong>Enable automatic update checks</strong></span>
                 </label>
+
                 <div class="field">
                     <label for="automaticUpdateCheckIntervalMinutes"><strong>Automatic check interval (minutes)</strong></label>
                     <input id="automaticUpdateCheckIntervalMinutes" name="AutomaticUpdateCheckIntervalMinutes" type="number" min="1" max="1440" value="@Model.AutomaticUpdateCheckIntervalMinutes" />
                     @Html.ValidationMessageFor(x => x.AutomaticUpdateCheckIntervalMinutes)
-                    <span class="muted">Allowed range: 1 to 1440 minutes. Very low intervals increase background traffic.</span>
                 </div>
+
                 <label class="checkbox-row" for="automaticallyDownloadAndStageUpdates">
                     <input id="automaticallyDownloadAndStageUpdates" name="AutomaticallyDownloadAndStageUpdates" type="checkbox" value="true" @(Model.AutomaticallyDownloadAndStageUpdates ? "checked" : null) />
                     <input name="AutomaticallyDownloadAndStageUpdates" type="hidden" value="false" />
-                    <span>
-                        <strong>Automatically download and stage updates</strong><br />
-                        <span class="muted">When enabled, the updater stages newly detected releases automatically. Apply is still an explicit admin action.</span>
-                    </span>
+                    <span><strong>Automatically download and stage updates</strong></span>
                 </label>
+
                 @if (Model.IsCurrentBuildDev)
                 {
                     <label class="checkbox-row" for="allowDevBuildAutoStageWithoutVersionComparison">
@@ -109,41 +105,33 @@
                         <input name="AllowDevBuildAutoStageWithoutVersionComparison" type="hidden" value="false" />
                         <span>
                             <strong>Allow automatic staging on DEV builds without semantic comparison</strong><br />
-                            <span class="muted">Warning: this bypasses normal installed-versus-latest version comparison. Keep disabled unless you explicitly want DEV build auto-stage behavior.</span>
+                            <span class="muted">Warning: bypasses normal installed-versus-latest version comparison.</span>
                         </span>
                     </label>
                 }
+
                 <label class="checkbox-row" for="allowPreviewReleasesOperational">
                     <input id="allowPreviewReleasesOperational" name="AllowPreviewReleases" type="checkbox" value="true" @(Model.AllowPreviewReleases ? "checked" : null) />
                     <input name="AllowPreviewReleases" type="hidden" value="false" />
-                    <span>
-                        <strong>Allow preview releases</strong><br />
-                        <span class="muted">This controls which releases are eligible for both automatic background checks and manual updater actions.</span>
-                    </span>
+                    <span><strong>Allow preview releases</strong></span>
                 </label>
+
                 @if (!Model.UpdateChecksEnabled)
                 {
                     <div class="status status-warn" role="status">
                         Update checks are globally disabled in deployment configuration. Runtime settings are saved, but checks remain disabled until config re-enables update checks.
                     </div>
                 }
+
                 <div class="button-row">
                     <button class="button" type="submit">Save updater settings</button>
                 </div>
-            </section>
-        </form>
+            </form>
 
-        <form class="stack" method="post" action="/admin/application-updater/check">
-            @Html.AntiForgeryToken()
-            <section class="card field">
-                <h2>Manual check</h2>
-                <label class="checkbox-row" for="allowPreviewReleases">
-                    <input id="allowPreviewReleases" name="allowPreviewReleases" type="checkbox" value="true" @(Model.AllowPreviewReleases ? "checked" : null) />
-                    <span>
-                        <strong>Allow preview releases</strong><br />
-                        <span class="muted">Uses current saved operational setting as default. You can override for this one manual check.</span>
-                    </span>
-                </label>
+            <form class="controls-group" method="post" action="/admin/application-updater/check">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
+                <h3>Manual actions</h3>
                 <div class="button-row">
                     <button class="button" type="submit" @(Model.UpdateChecksEnabled ? null : "disabled")>Check now</button>
                 </div>
@@ -151,75 +139,11 @@
                 {
                     <p class="muted">Update checks are disabled in configuration.</p>
                 }
-            </section>
-        </form>
+            </form>
 
-        <section class="card">
-            <h2>Check result</h2>
-            @{
-                var statusClass = Model.State switch
-                {
-                    PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.UpdateAvailable => "status-warn",
-                    PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.CheckFailed => "status-error",
-                    PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.DevBuildComparisonSkipped => "status-warn",
-                    PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.CurrentVersionUnknown => "status-warn",
-                    PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.LatestVersionUnknown => "status-warn",
-                    PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.UpdateCheckDisabled => "status-warn",
-                    _ => "status-ok"
-                };
-            }
-            <div class="status @statusClass" role="status">@Model.Message</div>
-            @if (Model.IsCurrentBuildDev)
-            {
-                <div class="status status-warn" role="status" style="margin-top:0.75rem;">
-                    DEV build detected. Semantic version comparison is skipped for release eligibility.
-                    @if (Model.AllowDevBuildAutoStageWithoutVersionComparison)
-                    {
-                        <span> Automatic stage/check override is enabled for DEV mode.</span>
-                    }
-                    else
-                    {
-                        <span> Automatic staging is suppressed while the DEV override is disabled.</span>
-                    }
-                </div>
-            }
-
-            @if (!string.IsNullOrWhiteSpace(Model.LatestVersion))
-            {
-                <dl style="margin-top:1rem;">
-                    <div>
-                        <dt>Latest applicable release</dt>
-                        <dd>@Model.LatestVersion</dd>
-                    </div>
-                    <div>
-                        <dt>Release title</dt>
-                        <dd>@(string.IsNullOrWhiteSpace(Model.LatestReleaseName) ? "(not provided)" : Model.LatestReleaseName)</dd>
-                    </div>
-                    <div>
-                        <dt>Release type</dt>
-                        <dd>@(Model.LatestIsPrerelease == true ? "Preview/prerelease" : "Standard release")</dd>
-                    </div>
-                    <div>
-                        <dt>Published</dt>
-                        <dd>@(Model.LatestPublishedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Unknown")</dd>
-                    </div>
-                    @if (!string.IsNullOrWhiteSpace(Model.LatestReleaseUrl))
-                    {
-                        <div>
-                            <dt>Release URL</dt>
-                            <dd><a href="@Model.LatestReleaseUrl" rel="noopener noreferrer" target="_blank">@Model.LatestReleaseUrl</a></dd>
-                        </div>
-                    }
-                </dl>
-            }
-        </section>
-
-        <form class="stack" method="post" action="/admin/application-updater/stage">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
-            <section class="card field">
-                <h2>Stage latest applicable release</h2>
-                <p class="muted">Downloads the selected zip and checksum, verifies SHA256, and stores artifacts under app-controlled updater storage.</p>
+            <form class="controls-group" method="post" action="/admin/application-updater/stage">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
                 <div class="button-row">
                     <button class="button" type="submit" @((Model.UpdateChecksEnabled && Model.StagedUpdate?.StagingInProgress != true) ? null : "disabled")>Download, verify, and stage</button>
                 </div>
@@ -227,69 +151,13 @@
                 {
                     <p class="muted">A staging operation is currently active. Additional requests are blocked until it completes.</p>
                 }
-            </section>
-        </form>
+            </form>
 
-        <section class="card">
-            <h2>Staged update status</h2>
-            @if (Model.StagedUpdate is null)
-            {
-                <div class="status status-warn" role="status">No staging attempt has been recorded yet.</div>
-            }
-            else
-            {
-                var stagedStatusClass = Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready
-                    ? "status-ok"
-                    : Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingInProgress
-                        or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingBlocked
-                        ? "status-warn"
-                        : "status-error";
-
-                <div class="status @stagedStatusClass" role="status">
-                    Status: @Model.StagedUpdate.Status
-                    @if (Model.StagedUpdate.ChecksumVerified)
-                    {
-                        <span> — checksum verified</span>
-                    }
-                </div>
-
-                <dl style="margin-top:1rem;">
-                    <div><dt>Last updated</dt><dd>@Model.StagedUpdate.LastUpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
-                    <div><dt>Last stage attempt</dt><dd>@(Model.StagedUpdate.LastStageAttemptAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                    <div><dt>Release tag</dt><dd>@(Model.StagedUpdate.ReleaseTag ?? "(none)")</dd></div>
-                    <div><dt>Latest applicable release tag</dt><dd>@(Model.StagedUpdate.LatestApplicableReleaseTag ?? "(unknown)")</dd></div>
-                    <div><dt>Staged release freshness</dt>
-                        <dd>
-                            @(Model.StagedUpdate.IsOutdated == true
-                                ? "Outdated — a newer applicable release is available."
-                                : Model.StagedUpdate.IsCurrentLatest == true
-                                    ? "Current — staged release matches latest applicable release."
-                                    : "Unknown")
-                        </dd>
-                    </div>
-                    <div><dt>Staging in progress</dt><dd>@(Model.StagedUpdate.StagingInProgress ? "Yes" : "No")</dd></div>
-                    <div><dt>No-op restage</dt><dd>@(Model.StagedUpdate.StageOperationWasNoOp ? "Yes" : "No")</dd></div>
-                    <div><dt>Stage message</dt><dd>@(Model.StagedUpdate.StageOperationMessage ?? "(none)")</dd></div>
-                    <div><dt>Release title</dt><dd>@(Model.StagedUpdate.ReleaseTitle ?? "(none)")</dd></div>
-                    <div><dt>Selected archive</dt><dd>@(Model.StagedUpdate.SelectedAssetName ?? "(none)")</dd></div>
-                    <div><dt>Staged zip path</dt><dd>@(Model.StagedUpdate.StagedZipPath ?? "(none)")</dd></div>
-                    <div><dt>Checksum file path</dt><dd>@(Model.StagedUpdate.StagedChecksumPath ?? "(none)")</dd></div>
-                    <div><dt>Expected SHA256</dt><dd>@(Model.StagedUpdate.ExpectedSha256 ?? "(none)")</dd></div>
-                    <div><dt>Actual SHA256</dt><dd>@(Model.StagedUpdate.ActualSha256 ?? "(none)")</dd></div>
-                    <div><dt>Staged at</dt><dd>@(Model.StagedUpdate.StagedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(not staged)")</dd></div>
-                    <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
-                </dl>
-            }
-        </section>
-
-        <form class="stack" method="post" action="/admin/application-updater/apply">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
-            <section class="card field">
-                <h2>Apply staged update</h2>
-                <p class="muted">Admin-only action. This starts the bundled external updater script with explicit install and metadata paths. The application may restart during the update.</p>
+            <form class="controls-group" method="post" action="/admin/application-updater/apply">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
                 <div class="status status-warn" role="status">
-                    Confirm operator intent before proceeding. This action is fire-and-forget and does not stream live progress from the app process.
+                    Confirm operator intent before proceeding. This action is fire-and-forget and may restart the application.
                 </div>
                 <div class="button-row">
                     <button class="button" type="submit" @((Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready && Model.PowerShellPrerequisiteAvailable) ? null : "disabled")>Apply staged update now</button>
@@ -302,23 +170,91 @@
                 {
                     <p class="muted">Apply is enabled only when a staged and checksum-verified update is in Ready state.</p>
                 }
-            </section>
-        </form>
+            </form>
+        </section>
 
         <section class="card">
-            <h2>Automatic updater runtime</h2>
-            <dl>
-                <div><dt>Last automatic check</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                <div><dt>Last successful automatic check</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckSucceededAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                <div><dt>Last failed automatic check</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckFailedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                <div><dt>Last check failure message</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckFailureMessage ?? "(none)")</dd></div>
-                <div><dt>Last auto-detected release</dt><dd>@(Model.RuntimeState?.LastDetectedApplicableReleaseTag ?? "(none)")</dd></div>
-                <div><dt>Last auto-staged release</dt><dd>@(Model.RuntimeState?.LastAutoStagedReleaseTag ?? "(none)")</dd></div>
-                <div><dt>Last auto-stage failure</dt><dd>@(Model.RuntimeState?.LastAutoStageFailureMessage ?? "(none)")</dd></div>
-                <div><dt>Last DEV comparison-skipped release</dt><dd>@(Model.RuntimeState?.LastDevComparisonSkippedReleaseTag ?? "(none)")</dd></div>
-                <div><dt>Last DEV auto-stage suppression</dt><dd>@(Model.RuntimeState?.LastDevAutoStageSuppressedReleaseTag ?? "(none)")</dd></div>
-                <div><dt>Last DEV override auto-stage release</dt><dd>@(Model.RuntimeState?.LastDevAutoStageOverrideAllowedReleaseTag ?? "(none)")</dd></div>
-            </dl>
+            <h2>Current deployment</h2>
+            <div class="summary-grid">
+                <div><strong>Installed version:</strong> @Model.CurrentVersion</div>
+                <div><strong>GitHub source:</strong> @Model.RepositoryOwner/@Model.RepositoryName</div>
+                <div><strong>PowerShell 7:</strong> @(Model.PowerShellPrerequisiteAvailable ? "Available" : "Missing")</div>
+            </div>
+            <details>
+                <summary>Show details</summary>
+                <dl style="margin-top:1rem;">
+                    <div><dt>Automatic checks</dt><dd>@(Model.EnableAutomaticUpdateChecks ? "Enabled" : "Disabled") every @Model.AutomaticUpdateCheckIntervalMinutes minute(s)</dd></div>
+                    <div><dt>Automatic stage</dt><dd>@(Model.AutomaticallyDownloadAndStageUpdates ? "Enabled" : "Disabled")</dd></div>
+                    @if (Model.IsCurrentBuildDev)
+                    {
+                        <div><dt>DEV auto-stage override</dt><dd>@(Model.AllowDevBuildAutoStageWithoutVersionComparison ? "Enabled (comparison bypass)" : "Disabled (safe default)")</dd></div>
+                    }
+                    <div><dt>PowerShell prerequisite message</dt><dd>@Model.PowerShellPrerequisiteMessage</dd></div>
+                    <div><dt>PowerShell resolved path</dt><dd>@(Model.PowerShellResolvedPath ?? "(not resolved)")</dd></div>
+                </dl>
+            </details>
+        </section>
+
+        <section class="card">
+            <h2>Check result</h2>
+            <div class="status @checkStatusClass" role="status">@Model.Message</div>
+            <div class="summary-grid">
+                <div><strong>Latest applicable release:</strong> @(Model.LatestVersion ?? "(none)")</div>
+                <div><strong>Update available:</strong> @(Model.State == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.UpdateAvailable ? "Yes" : "No")</div>
+                <div><strong>Release type:</strong> @(Model.LatestIsPrerelease == true ? "Preview/prerelease" : "Standard/unknown")</div>
+            </div>
+            <details @(checkHasError ? "open" : null)>
+                <summary>@(checkHasError ? "Hide details" : "Show details")</summary>
+                @if (Model.IsCurrentBuildDev)
+                {
+                    <div class="status status-warn" role="status" style="margin-top:0.75rem;">DEV build detected. Semantic version comparison is skipped for release eligibility.</div>
+                }
+                <dl style="margin-top:1rem;">
+                    <div><dt>Release title</dt><dd>@(string.IsNullOrWhiteSpace(Model.LatestReleaseName) ? "(not provided)" : Model.LatestReleaseName)</dd></div>
+                    <div><dt>Published</dt><dd>@(Model.LatestPublishedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Unknown")</dd></div>
+                    <div><dt>Semantic comparison performed</dt><dd>@(Model.SemanticComparisonPerformed ? "Yes" : "No")</dd></div>
+                    @if (!string.IsNullOrWhiteSpace(Model.LatestReleaseUrl))
+                    {
+                        <div><dt>Release URL</dt><dd><a href="@Model.LatestReleaseUrl" rel="noopener noreferrer" target="_blank">@Model.LatestReleaseUrl</a></dd></div>
+                    }
+                </dl>
+            </details>
+        </section>
+
+        <section class="card">
+            <h2>Staged update status</h2>
+            @if (Model.StagedUpdate is null)
+            {
+                <div class="status status-warn" role="status">No staging attempt has been recorded yet.</div>
+            }
+            else
+            {
+                <div class="status @stagedStatusClass" role="status">Status: @Model.StagedUpdate.Status</div>
+                <div class="summary-grid">
+                    <div><strong>Staged release tag:</strong> @(Model.StagedUpdate.ReleaseTag ?? "(none)")</div>
+                    <div><strong>Checksum verified:</strong> @(Model.StagedUpdate.ChecksumVerified ? "Yes" : "No")</div>
+                    <div><strong>Ready to apply:</strong> @(Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready ? "Yes" : "No")</div>
+                </div>
+                <details @(stageHasError ? "open" : null)>
+                    <summary>@(stageHasError ? "Hide details" : "Show details")</summary>
+                    <dl style="margin-top:1rem;">
+                        <div><dt>Last updated</dt><dd>@Model.StagedUpdate.LastUpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
+                        <div><dt>Last stage attempt</dt><dd>@(Model.StagedUpdate.LastStageAttemptAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                        <div><dt>Latest applicable release tag</dt><dd>@(Model.StagedUpdate.LatestApplicableReleaseTag ?? "(unknown)")</dd></div>
+                        <div><dt>Release title</dt><dd>@(Model.StagedUpdate.ReleaseTitle ?? "(none)")</dd></div>
+                        <div><dt>Selected archive</dt><dd>@(Model.StagedUpdate.SelectedAssetName ?? "(none)")</dd></div>
+                        <div><dt>Staging in progress</dt><dd>@(Model.StagedUpdate.StagingInProgress ? "Yes" : "No")</dd></div>
+                        <div><dt>No-op restage</dt><dd>@(Model.StagedUpdate.StageOperationWasNoOp ? "Yes" : "No")</dd></div>
+                        <div><dt>Stage message</dt><dd>@(Model.StagedUpdate.StageOperationMessage ?? "(none)")</dd></div>
+                        <div><dt>Staged zip path</dt><dd>@(Model.StagedUpdate.StagedZipPath ?? "(none)")</dd></div>
+                        <div><dt>Checksum file path</dt><dd>@(Model.StagedUpdate.StagedChecksumPath ?? "(none)")</dd></div>
+                        <div><dt>Expected SHA256</dt><dd>@(Model.StagedUpdate.ExpectedSha256 ?? "(none)")</dd></div>
+                        <div><dt>Actual SHA256</dt><dd>@(Model.StagedUpdate.ActualSha256 ?? "(none)")</dd></div>
+                        <div><dt>Staged at</dt><dd>@(Model.StagedUpdate.StagedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(not staged)")</dd></div>
+                        <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
+                    </dl>
+                </details>
+            }
         </section>
 
         <section class="card">
@@ -329,41 +265,64 @@
             }
             else
             {
-                var applyStatusClass = Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplySucceeded
-                    ? "status-ok"
-                    : Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyFailed
-                        ? "status-error"
-                        : "status-warn";
-
-                <div class="status @applyStatusClass" role="status">
-                    Apply status: @Model.StagedUpdate.Status
+                <div class="status @applyStatusClass" role="status">Apply status: @Model.StagedUpdate.Status</div>
+                <div class="summary-grid">
+                    <div><strong>Last known updater stage:</strong> @(Model.StagedUpdate.LastKnownUpdaterStage ?? "(none)")</div>
+                    <div><strong>Last known result code:</strong> @(Model.StagedUpdate.LastKnownUpdaterResultCode ?? "(none)")</div>
+                    <div><strong>Apply requested by:</strong> @(Model.StagedUpdate.LastApplyRequestedByUserId ?? "(none)")</div>
                 </div>
-
-                <dl style="margin-top:1rem;">
-                    <div><dt>Apply message</dt><dd>@(Model.StagedUpdate.ApplyOperationMessage ?? "(none)")</dd></div>
-                    <div><dt>Requested by</dt><dd>@(Model.StagedUpdate.LastApplyRequestedByUserId ?? "(none)")</dd></div>
-                    <div><dt>Requested at</dt><dd>@(Model.StagedUpdate.ApplyRequestedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                    <div><dt>Handoff started at</dt><dd>@(Model.StagedUpdate.ApplyHandoffStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                    <div><dt>Apply completed at</dt><dd>@(Model.StagedUpdate.ApplyCompletedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                    <div><dt>Bootstrapper path</dt><dd>@(Model.StagedUpdate.BootstrapperScriptPath ?? "(none)")</dd></div>
-                    <div><dt>Bootstrapper source</dt><dd>@(Model.StagedUpdate.BootstrapperSource ?? "(none)")</dd></div>
-                    <div><dt>Bootstrapper source details</dt><dd>@(Model.StagedUpdate.BootstrapperSelectionMessage ?? "(none)")</dd></div>
-                    <div><dt>Staged metadata path</dt><dd>@(Model.StagedUpdate.StagedMetadataPath ?? "(none)")</dd></div>
-                    <div><dt>PowerShell executable path</dt><dd>@(Model.StagedUpdate.LaunchPowerShellExecutablePath ?? "(none)")</dd></div>
-                    <div><dt>Install root path</dt><dd>@(Model.StagedUpdate.LaunchInstallRootPath ?? "(none)")</dd></div>
-                    <div><dt>Working directory</dt><dd>@(Model.StagedUpdate.LaunchWorkingDirectory ?? "(none)")</dd></div>
-                    <div><dt>Resolved site name</dt><dd>@(Model.StagedUpdate.LaunchResolvedSiteName ?? "(none)")</dd></div>
-                    <div><dt>Resolved app pool name</dt><dd>@(Model.StagedUpdate.LaunchResolvedAppPoolName ?? "(none)")</dd></div>
-                    <div><dt>Expected release tag</dt><dd>@(Model.StagedUpdate.LaunchExpectedReleaseTag ?? "(none)")</dd></div>
-                    <div><dt>External updater status path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterStatusPath ?? "(none)")</dd></div>
-                    <div><dt>External updater log path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterLogPath ?? "(none)")</dd></div>
-                    <div><dt>Bootstrapper process id</dt><dd>@(Model.StagedUpdate.BootstrapperProcessId?.ToString() ?? "(none)")</dd></div>
-                    <div><dt>Bootstrapper started at</dt><dd>@(Model.StagedUpdate.BootstrapperStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                    <div><dt>Last known updater stage</dt><dd>@(Model.StagedUpdate.LastKnownUpdaterStage ?? "(none)")</dd></div>
-                    <div><dt>Last known updater result code</dt><dd>@(Model.StagedUpdate.LastKnownUpdaterResultCode ?? "(none)")</dd></div>
-                    <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
-                </dl>
+                <details @(applyHasError ? "open" : null)>
+                    <summary>@(applyHasError ? "Hide details" : "Show details")</summary>
+                    <dl style="margin-top:1rem;">
+                        <div><dt>Apply message</dt><dd>@(Model.StagedUpdate.ApplyOperationMessage ?? "(none)")</dd></div>
+                        <div><dt>Requested at</dt><dd>@(Model.StagedUpdate.ApplyRequestedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                        <div><dt>Handoff started at</dt><dd>@(Model.StagedUpdate.ApplyHandoffStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                        <div><dt>Apply completed at</dt><dd>@(Model.StagedUpdate.ApplyCompletedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                        <div><dt>Bootstrapper path</dt><dd>@(Model.StagedUpdate.BootstrapperScriptPath ?? "(none)")</dd></div>
+                        <div><dt>Bootstrapper source</dt><dd>@(Model.StagedUpdate.BootstrapperSource ?? "(none)")</dd></div>
+                        <div><dt>Bootstrapper source details</dt><dd>@(Model.StagedUpdate.BootstrapperSelectionMessage ?? "(none)")</dd></div>
+                        <div><dt>Staged metadata path</dt><dd>@(Model.StagedUpdate.StagedMetadataPath ?? "(none)")</dd></div>
+                        <div><dt>PowerShell executable path</dt><dd>@(Model.StagedUpdate.LaunchPowerShellExecutablePath ?? "(none)")</dd></div>
+                        <div><dt>Install root path</dt><dd>@(Model.StagedUpdate.LaunchInstallRootPath ?? "(none)")</dd></div>
+                        <div><dt>Working directory</dt><dd>@(Model.StagedUpdate.LaunchWorkingDirectory ?? "(none)")</dd></div>
+                        <div><dt>Resolved site name</dt><dd>@(Model.StagedUpdate.LaunchResolvedSiteName ?? "(none)")</dd></div>
+                        <div><dt>Resolved app pool name</dt><dd>@(Model.StagedUpdate.LaunchResolvedAppPoolName ?? "(none)")</dd></div>
+                        <div><dt>Expected release tag</dt><dd>@(Model.StagedUpdate.LaunchExpectedReleaseTag ?? "(none)")</dd></div>
+                        <div><dt>External updater status path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterStatusPath ?? "(none)")</dd></div>
+                        <div><dt>External updater log path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterLogPath ?? "(none)")</dd></div>
+                        <div><dt>Bootstrapper process id</dt><dd>@(Model.StagedUpdate.BootstrapperProcessId?.ToString() ?? "(none)")</dd></div>
+                        <div><dt>Bootstrapper started at</dt><dd>@(Model.StagedUpdate.BootstrapperStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                        <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
+                    </dl>
+                </details>
             }
+        </section>
+
+        <section class="card">
+            <h2>Automatic updater runtime</h2>
+            <div class="summary-grid">
+                <div><strong>Automatic checks:</strong> @(Model.EnableAutomaticUpdateChecks ? "Enabled" : "Disabled")</div>
+                <div><strong>Check interval:</strong> @Model.AutomaticUpdateCheckIntervalMinutes minute(s)</div>
+                <div><strong>Last automatic check:</strong> @(Model.RuntimeState?.LastAutomaticCheckAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</div>
+                @if (!string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutomaticCheckFailureMessage) || !string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutoStageFailureMessage))
+                {
+                    <div><strong>Failure state:</strong> @(Model.RuntimeState?.LastAutomaticCheckFailureMessage ?? Model.RuntimeState?.LastAutoStageFailureMessage)</div>
+                }
+            </div>
+            <details @(runtimeHasError ? "open" : null)>
+                <summary>@(runtimeHasError ? "Hide details" : "Show details")</summary>
+                <dl style="margin-top:1rem;">
+                    <div><dt>Last successful automatic check</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckSucceededAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                    <div><dt>Last failed automatic check</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckFailedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                    <div><dt>Last check failure message</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckFailureMessage ?? "(none)")</dd></div>
+                    <div><dt>Last auto-detected release</dt><dd>@(Model.RuntimeState?.LastDetectedApplicableReleaseTag ?? "(none)")</dd></div>
+                    <div><dt>Last auto-staged release</dt><dd>@(Model.RuntimeState?.LastAutoStagedReleaseTag ?? "(none)")</dd></div>
+                    <div><dt>Last auto-stage failure</dt><dd>@(Model.RuntimeState?.LastAutoStageFailureMessage ?? "(none)")</dd></div>
+                    <div><dt>Last DEV comparison-skipped release</dt><dd>@(Model.RuntimeState?.LastDevComparisonSkippedReleaseTag ?? "(none)")</dd></div>
+                    <div><dt>Last DEV auto-stage suppression</dt><dd>@(Model.RuntimeState?.LastDevAutoStageSuppressedReleaseTag ?? "(none)")</dd></div>
+                    <div><dt>Last DEV override auto-stage release</dt><dd>@(Model.RuntimeState?.LastDevAutoStageOverrideAllowedReleaseTag ?? "(none)")</dd></div>
+                </dl>
+            </details>
         </section>
     </div>
 </main>
