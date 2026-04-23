@@ -122,6 +122,7 @@ Additional generated file in artifact root:
 For dev builds, `manifest.json` includes:
 
 - `buildType: "dev"`
+- `requiredSchemaVersion: <int>`
 
 ---
 

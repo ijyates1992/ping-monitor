@@ -6,6 +6,7 @@ using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.ApplicationMetadata;
 using PingMonitor.Web.Services.ApplicationUpdater;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Services.StartupGate;
 using PingMonitor.Web.ViewModels.Admin;
 
 namespace PingMonitor.Web.Controllers;
@@ -22,6 +23,8 @@ public sealed class AdminApplicationUpdaterController : Controller
     private readonly IApplicationUpdaterOperationalSettingsService _operationalSettingsService;
     private readonly IPowerShellPrerequisiteDetector _powerShellPrerequisiteDetector;
     private readonly IGitHubReleaseLookupService _gitHubReleaseLookupService;
+    private readonly IReleaseSchemaMetadataService _releaseSchemaMetadataService;
+    private readonly IStartupSchemaService _startupSchemaService;
     private readonly ApplicationUpdaterOptions _updaterOptions;
 
     public AdminApplicationUpdaterController(
@@ -33,6 +36,8 @@ public sealed class AdminApplicationUpdaterController : Controller
         IApplicationUpdaterOperationalSettingsService operationalSettingsService,
         IPowerShellPrerequisiteDetector powerShellPrerequisiteDetector,
         IGitHubReleaseLookupService gitHubReleaseLookupService,
+        IReleaseSchemaMetadataService releaseSchemaMetadataService,
+        IStartupSchemaService startupSchemaService,
         IOptions<ApplicationUpdaterOptions> updaterOptions)
     {
         _applicationMetadataProvider = applicationMetadataProvider;
@@ -43,6 +48,8 @@ public sealed class AdminApplicationUpdaterController : Controller
         _operationalSettingsService = operationalSettingsService;
         _powerShellPrerequisiteDetector = powerShellPrerequisiteDetector;
         _gitHubReleaseLookupService = gitHubReleaseLookupService;
+        _releaseSchemaMetadataService = releaseSchemaMetadataService;
+        _startupSchemaService = startupSchemaService;
         _updaterOptions = updaterOptions.Value;
     }
 
@@ -149,6 +156,9 @@ public sealed class AdminApplicationUpdaterController : Controller
         var latestApplicableRelease = releaseSelection.LatestRelease ?? result.LatestApplicableRelease;
         var decoratedStaged = ApplyLatestComparison(staged, latestApplicableRelease?.TagName);
         var powerShellStatus = _powerShellPrerequisiteDetector.GetStatus();
+        var schemaCompatibility = BuildSchemaCompatibility(
+            releaseSelection.CurrentDatabaseSchemaVersion,
+            releaseSelection.SelectedRelease?.RequiredSchemaVersion);
 
         return new ApplicationUpdaterPageViewModel
         {
@@ -178,7 +188,11 @@ public sealed class AdminApplicationUpdaterController : Controller
             LatestReleaseUrl = latestApplicableRelease?.HtmlUrl,
             LatestPublishedAtUtc = latestApplicableRelease?.PublishedAtUtc,
             RuntimeState = runtimeState,
-            StagedUpdate = decoratedStaged
+            StagedUpdate = decoratedStaged,
+            CurrentDatabaseSchemaVersion = releaseSelection.CurrentDatabaseSchemaVersion,
+            TargetRequiredSchemaVersion = releaseSelection.SelectedRelease?.RequiredSchemaVersion,
+            SchemaCompatibilityState = schemaCompatibility.State,
+            SchemaCompatibilityWarningMessage = schemaCompatibility.WarningMessage
         };
     }
 
@@ -186,7 +200,7 @@ public sealed class AdminApplicationUpdaterController : Controller
     {
         if (!_updaterOptions.UpdateChecksEnabled)
         {
-            return new ReleaseSelectionResult([], null, null);
+            return new ReleaseSelectionResult([], null, null, null);
         }
 
         try
@@ -196,12 +210,18 @@ public sealed class AdminApplicationUpdaterController : Controller
             var selected = string.IsNullOrWhiteSpace(selectedReleaseTag)
                 ? latest
                 : releases.FirstOrDefault(release => string.Equals(release.TagName, selectedReleaseTag, StringComparison.OrdinalIgnoreCase)) ?? latest;
+            var hydratedReleases = await _releaseSchemaMetadataService.PopulateRequiredSchemaVersionsAsync(releases, cancellationToken);
+            var hydratedLatest = hydratedReleases.FirstOrDefault();
+            var hydratedSelected = string.IsNullOrWhiteSpace(selectedReleaseTag)
+                ? hydratedLatest
+                : hydratedReleases.FirstOrDefault(release => string.Equals(release.TagName, selectedReleaseTag, StringComparison.OrdinalIgnoreCase)) ?? hydratedLatest;
+            var schemaStatus = await _startupSchemaService.GetStatusAsync(cancellationToken);
 
-            return new ReleaseSelectionResult(releases, selected, latest);
+            return new ReleaseSelectionResult(hydratedReleases, hydratedSelected, hydratedLatest, schemaStatus.CurrentSchemaVersion);
         }
         catch
         {
-            return new ReleaseSelectionResult([], null, null);
+            return new ReleaseSelectionResult([], null, null, null);
         }
     }
 
@@ -219,9 +239,49 @@ public sealed class AdminApplicationUpdaterController : Controller
             Body = release.Body,
             IsPrerelease = release.IsPrerelease,
             HtmlUrl = release.HtmlUrl,
-            PublishedAtUtc = release.PublishedAtUtc
+            PublishedAtUtc = release.PublishedAtUtc,
+            RequiredSchemaVersion = release.RequiredSchemaVersion
         };
     }
+
+    private static SchemaCompatibilityAssessment BuildSchemaCompatibility(int? currentSchemaVersion, int? targetRequiredSchemaVersion)
+    {
+        if (currentSchemaVersion is null)
+        {
+            return new SchemaCompatibilityAssessment(
+                ApplicationUpdaterSchemaCompatibilityState.CurrentSchemaUnknown,
+                "Current database schema version could not be determined. Schema compatibility for this release cannot be assessed safely.");
+        }
+
+        if (targetRequiredSchemaVersion is null)
+        {
+            return new SchemaCompatibilityAssessment(
+                ApplicationUpdaterSchemaCompatibilityState.TargetSchemaInfoMissing,
+                "Selected release metadata does not declare a required schema version. Schema compatibility cannot be assessed safely for this release.");
+        }
+
+        if (targetRequiredSchemaVersion > currentSchemaVersion)
+        {
+            return new SchemaCompatibilityAssessment(
+                ApplicationUpdaterSchemaCompatibilityState.UpgradeRequiredAfterUpdate,
+                $"Selected release requires schema version {targetRequiredSchemaVersion}, but current database schema version is {currentSchemaVersion}. This update will likely require a schema upgrade after restart, and Startup Gate may require explicit schema apply before normal operation resumes.");
+        }
+
+        if (targetRequiredSchemaVersion < currentSchemaVersion)
+        {
+            return new SchemaCompatibilityAssessment(
+                ApplicationUpdaterSchemaCompatibilityState.TargetOlderThanCurrentSchema,
+                $"Current database schema version is {currentSchemaVersion}, but selected release expects schema version {targetRequiredSchemaVersion}. Downgrading application files to this release may be incompatible with the current database and could fail or behave unpredictably.");
+        }
+
+        return new SchemaCompatibilityAssessment(
+            ApplicationUpdaterSchemaCompatibilityState.CompatibleNoUpgradeNeeded,
+            null);
+    }
+
+    private readonly record struct SchemaCompatibilityAssessment(
+        ApplicationUpdaterSchemaCompatibilityState State,
+        string? WarningMessage);
 
     private static ApplicationUpdateStagingState? ApplyLatestComparison(ApplicationUpdateStagingState? staged, string? latestTag)
     {
@@ -287,8 +347,9 @@ public sealed class AdminApplicationUpdaterController : Controller
         };
     }
 
-    private sealed record ReleaseSelectionResult(
-        IReadOnlyList<GitHubReleaseSummary> Releases,
-        GitHubReleaseSummary? SelectedRelease,
-        GitHubReleaseSummary? LatestRelease);
+private sealed record ReleaseSelectionResult(
+    IReadOnlyList<GitHubReleaseSummary> Releases,
+    GitHubReleaseSummary? SelectedRelease,
+    GitHubReleaseSummary? LatestRelease,
+    int? CurrentDatabaseSchemaVersion);
 }

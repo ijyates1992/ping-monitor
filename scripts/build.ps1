@@ -227,6 +227,11 @@ if (-not $injectedSettings.ApplicationMetadata -or $injectedSettings.Application
     Fail-Build 'Version injection failed. ApplicationMetadata.Version was not updated as expected.'
 }
 
+$requiredSchemaVersion = $injectedSettings.StartupGate.RequiredSchemaVersion
+if ($null -eq $requiredSchemaVersion -or [int]$requiredSchemaVersion -lt 1) {
+    Fail-Build "Required schema version was missing or invalid in appsettings.json StartupGate.RequiredSchemaVersion."
+}
+
 if ((Get-Content -LiteralPath $appSettingsPath -Raw) -match 'Internal dev build') {
     Fail-Build "Version injection verification failed. 'Internal dev build' label is still present in appsettings.json."
 }
@@ -251,6 +256,7 @@ $manifest = [ordered]@{
     packageFileName = "$packageBaseName.zip"
     runtime = $Runtime
     commitHash = $commitHash
+    requiredSchemaVersion = [int]$requiredSchemaVersion
 }
 
 $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8NoBOM

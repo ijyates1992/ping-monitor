@@ -239,6 +239,7 @@ public sealed class GitHubReleaseSummary
     public DateTimeOffset? PublishedAtUtc { get; init; }
     public string? AssetsApiUrl { get; init; }
     public IReadOnlyList<GitHubReleaseAssetSummary> Assets { get; init; } = [];
+    public int? RequiredSchemaVersion { get; init; }
 }
 
 public sealed class GitHubReleaseAssetSummary
