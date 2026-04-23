@@ -193,6 +193,17 @@ foreach ($relativeAssetPath in $requiredAgentAssets) {
     }
 }
 
+$requiredUpdaterAssets = @(
+    'Updater/run-staged-update-bootstrapper.ps1'
+)
+
+foreach ($relativeAssetPath in $requiredUpdaterAssets) {
+    $assetPath = Join-Path $publishOutputPath $relativeAssetPath
+    if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
+        Fail-Build "Required updater deployment asset missing from publish output: '$relativeAssetPath'."
+    }
+}
+
 Write-Step 'Injecting release version into app metadata source'
 $appSettingsPath = Join-Path $publishOutputPath 'appsettings.json'
 if (-not (Test-Path -LiteralPath $appSettingsPath -PathType Leaf)) {

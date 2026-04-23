@@ -23,8 +23,8 @@
 <main>
     <div class="stack">
         <section class="card">
-            <h1>Application updater (Stage 2)</h1>
-            <p class="muted">Manual admin flow for release detection and conservative staging. This page downloads, verifies, and stages artifacts only. It does not apply updates.</p>
+            <h1>Application updater (Stage 4)</h1>
+            <p class="muted">Manual admin flow for release detection, conservative staging, and external updater handoff. Applying an update restarts the application.</p>
             <div class="button-row">
                 <a class="button-secondary" href="/admin">Back to Admin settings</a>
             </div>
@@ -174,6 +174,68 @@
                     <div><dt>Expected SHA256</dt><dd>@(Model.StagedUpdate.ExpectedSha256 ?? "(none)")</dd></div>
                     <div><dt>Actual SHA256</dt><dd>@(Model.StagedUpdate.ActualSha256 ?? "(none)")</dd></div>
                     <div><dt>Staged at</dt><dd>@(Model.StagedUpdate.StagedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(not staged)")</dd></div>
+                    <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
+                </dl>
+            }
+        </section>
+
+        <form class="stack" method="post" action="/admin/application-updater/apply">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="allowPreviewReleases" value="@(Model.AllowPreviewReleases ? "true" : "false")" />
+            <section class="card field">
+                <h2>Apply staged update</h2>
+                <p class="muted">Admin-only action. This starts the bundled external updater script with explicit install and metadata paths. The application may restart during the update.</p>
+                <div class="status status-warn" role="status">
+                    Confirm operator intent before proceeding. This action is fire-and-forget and does not stream live progress from the app process.
+                </div>
+                <div class="button-row">
+                    <button class="button" type="submit" @(Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready ? null : "disabled")>Apply staged update now</button>
+                </div>
+                @if (Model.StagedUpdate?.Status != PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready)
+                {
+                    <p class="muted">Apply is enabled only when a staged and checksum-verified update is in Ready state.</p>
+                }
+            </section>
+        </form>
+
+        <section class="card">
+            <h2>Apply / updater handoff status</h2>
+            @if (Model.StagedUpdate is null)
+            {
+                <div class="status status-warn" role="status">No staged update state is available yet.</div>
+            }
+            else
+            {
+                var applyStatusClass = Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplySucceeded
+                    ? "status-ok"
+                    : Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyFailed
+                        ? "status-error"
+                        : "status-warn";
+
+                <div class="status @applyStatusClass" role="status">
+                    Apply status: @Model.StagedUpdate.Status
+                </div>
+
+                <dl style="margin-top:1rem;">
+                    <div><dt>Apply message</dt><dd>@(Model.StagedUpdate.ApplyOperationMessage ?? "(none)")</dd></div>
+                    <div><dt>Requested by</dt><dd>@(Model.StagedUpdate.LastApplyRequestedByUserId ?? "(none)")</dd></div>
+                    <div><dt>Requested at</dt><dd>@(Model.StagedUpdate.ApplyRequestedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                    <div><dt>Handoff started at</dt><dd>@(Model.StagedUpdate.ApplyHandoffStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                    <div><dt>Apply completed at</dt><dd>@(Model.StagedUpdate.ApplyCompletedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                    <div><dt>Bootstrapper path</dt><dd>@(Model.StagedUpdate.BootstrapperScriptPath ?? "(none)")</dd></div>
+                    <div><dt>Staged metadata path</dt><dd>@(Model.StagedUpdate.StagedMetadataPath ?? "(none)")</dd></div>
+                    <div><dt>PowerShell executable path</dt><dd>@(Model.StagedUpdate.LaunchPowerShellExecutablePath ?? "(none)")</dd></div>
+                    <div><dt>Install root path</dt><dd>@(Model.StagedUpdate.LaunchInstallRootPath ?? "(none)")</dd></div>
+                    <div><dt>Working directory</dt><dd>@(Model.StagedUpdate.LaunchWorkingDirectory ?? "(none)")</dd></div>
+                    <div><dt>Resolved site name</dt><dd>@(Model.StagedUpdate.LaunchResolvedSiteName ?? "(none)")</dd></div>
+                    <div><dt>Resolved app pool name</dt><dd>@(Model.StagedUpdate.LaunchResolvedAppPoolName ?? "(none)")</dd></div>
+                    <div><dt>Expected release tag</dt><dd>@(Model.StagedUpdate.LaunchExpectedReleaseTag ?? "(none)")</dd></div>
+                    <div><dt>External updater status path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterStatusPath ?? "(none)")</dd></div>
+                    <div><dt>External updater log path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterLogPath ?? "(none)")</dd></div>
+                    <div><dt>Bootstrapper process id</dt><dd>@(Model.StagedUpdate.BootstrapperProcessId?.ToString() ?? "(none)")</dd></div>
+                    <div><dt>Bootstrapper started at</dt><dd>@(Model.StagedUpdate.BootstrapperStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                    <div><dt>Last known updater stage</dt><dd>@(Model.StagedUpdate.LastKnownUpdaterStage ?? "(none)")</dd></div>
+                    <div><dt>Last known updater result code</dt><dd>@(Model.StagedUpdate.LastKnownUpdaterResultCode ?? "(none)")</dd></div>
                     <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
                 </dl>
             }

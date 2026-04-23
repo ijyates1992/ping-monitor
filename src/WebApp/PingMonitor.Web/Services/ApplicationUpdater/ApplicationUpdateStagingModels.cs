@@ -12,7 +12,13 @@ public enum ApplicationUpdateStagingStatus
     NoApplicableRelease = 5,
     StagingFailed = 6,
     StagingInProgress = 7,
-    StagingBlocked = 8
+    StagingBlocked = 8,
+    ApplyRequested = 9,
+    ApplyHandoffStarted = 10,
+    Applying = 11,
+    ApplySucceeded = 12,
+    ApplyFailed = 13,
+    ApplyStartupGateActionRequired = 14
 }
 
 public sealed class ApplicationUpdateStagingState
@@ -42,6 +48,25 @@ public sealed class ApplicationUpdateStagingState
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public ApplicationUpdateStagingStatus Status { get; init; }
     public string? FailureMessage { get; init; }
+    public string? BootstrapperScriptPath { get; init; }
+    public string? StagedMetadataPath { get; init; }
+    public string? LaunchPowerShellExecutablePath { get; init; }
+    public string? LaunchInstallRootPath { get; init; }
+    public string? LaunchWorkingDirectory { get; init; }
+    public string? LaunchResolvedSiteName { get; init; }
+    public string? LaunchResolvedAppPoolName { get; init; }
+    public string? LaunchExpectedReleaseTag { get; init; }
+    public string? ExternalUpdaterStatusPath { get; init; }
+    public string? ExternalUpdaterLogPath { get; init; }
+    public int? BootstrapperProcessId { get; init; }
+    public DateTimeOffset? BootstrapperStartedAtUtc { get; init; }
+    public string? LastApplyRequestedByUserId { get; init; }
+    public DateTimeOffset? ApplyRequestedAtUtc { get; init; }
+    public DateTimeOffset? ApplyHandoffStartedAtUtc { get; init; }
+    public DateTimeOffset? ApplyCompletedAtUtc { get; init; }
+    public string? ApplyOperationMessage { get; init; }
+    public string? LastKnownUpdaterStage { get; init; }
+    public string? LastKnownUpdaterResultCode { get; init; }
     public DateTimeOffset LastUpdatedAtUtc { get; init; }
 }
 

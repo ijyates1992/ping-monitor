@@ -59,6 +59,10 @@ $script:installRootResolved = $null
 $script:runtimeStateRootResolved = $null
 $script:statusMirrorPathResolved = $null
 $script:effectivePreservePatterns = @()
+$script:fileReplaceRetryCount = 5
+$script:fileReplaceRetryDelayMs = 750
+$script:iisStopWaitTimeoutSec = 45
+$script:iisStopWaitPollMs = 1000
 
 # Release/package ownership model:
 # 1) Runtime/environment-owned paths MUST survive file replacement.
@@ -229,6 +233,38 @@ function Write-Log {
     Write-Host $line
 }
 
+function Invoke-WithRetry {
+    param(
+        [Parameter(Mandatory = $true)][scriptblock]$Action,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [Parameter(Mandatory = $true)][int]$MaxAttempts,
+        [Parameter(Mandatory = $true)][int]$DelayMilliseconds
+    )
+
+    if ($MaxAttempts -lt 1) {
+        throw 'MaxAttempts must be at least 1.'
+    }
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            & $Action
+            if ($attempt -gt 1) {
+                Write-Log "$Description succeeded on retry attempt $attempt of $MaxAttempts."
+            }
+
+            return
+        }
+        catch {
+            if ($attempt -ge $MaxAttempts) {
+                throw
+            }
+
+            Write-Log (("{0} failed on attempt {1} of {2}: {3}. Retrying after {4}ms." -f $Description, $attempt, $MaxAttempts, $_.Exception.Message, $DelayMilliseconds))
+            Start-Sleep -Milliseconds $DelayMilliseconds
+        }
+    }
+}
+
 function Test-IsPreserved {
     param(
         [Parameter(Mandatory = $true)][string]$RelativePath,
@@ -303,7 +339,28 @@ function Get-RelativePath {
         [Parameter(Mandatory = $true)][string]$FullPath
     )
 
-    return [System.IO.Path]::GetRelativePath($BasePath, $FullPath)
+    $resolvedBasePath = [System.IO.Path]::GetFullPath($BasePath)
+    $resolvedFullPath = [System.IO.Path]::GetFullPath($FullPath)
+
+    if ($resolvedBasePath.Equals($resolvedFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return '.'
+    }
+
+    $baseWithSeparator = $resolvedBasePath.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    $baseUri = [System.Uri]::new($baseWithSeparator)
+    $fullUri = [System.Uri]::new($resolvedFullPath)
+    $relativeUri = $baseUri.MakeRelativeUri($fullUri)
+
+    if ($relativeUri.IsAbsoluteUri) {
+        return $resolvedFullPath
+    }
+
+    $relativePath = [System.Uri]::UnescapeDataString($relativeUri.ToString()) -replace '/', [System.IO.Path]::DirectorySeparatorChar
+    if ([string]::IsNullOrWhiteSpace($relativePath)) {
+        return '.'
+    }
+
+    return $relativePath
 }
 
 function Update-PreservedAppSettingsVersion {
@@ -369,16 +426,47 @@ function Stop-IisRuntime {
         Import-Module WebAdministration -ErrorAction Stop
     }
 
+    Write-Log "Attempting IIS stop for site='$SiteName', appPool='$AppPoolName'."
+
+    if (-not [string]::IsNullOrWhiteSpace($AppPoolName)) {
+        Write-Log "Stopping IIS app pool '$AppPoolName'."
+        Stop-WebAppPool -Name $AppPoolName -ErrorAction Stop
+        $script:appPoolStopped = $true
+    }
+
     if (-not [string]::IsNullOrWhiteSpace($SiteName)) {
         Write-Log "Stopping IIS site '$SiteName'."
         Stop-Website -Name $SiteName -ErrorAction Stop
         $script:siteStopped = $true
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($AppPoolName)) {
-        Write-Log "Stopping IIS app pool '$AppPoolName'."
-        Stop-WebAppPool -Name $AppPoolName -ErrorAction Stop
-        $script:appPoolStopped = $true
+    $waitStartedAt = Get-Date
+    while ($true) {
+        $appPoolStoppedConfirmed = $true
+        $siteStoppedConfirmed = $true
+
+        if (-not [string]::IsNullOrWhiteSpace($AppPoolName)) {
+            $appPoolState = (Get-WebAppPoolState -Name $AppPoolName -ErrorAction Stop).Value
+            $appPoolStoppedConfirmed = [string]::Equals($appPoolState, 'Stopped', [System.StringComparison]::OrdinalIgnoreCase)
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($SiteName)) {
+            $siteState = (Get-WebsiteState -Name $SiteName -ErrorAction Stop).Value
+            $siteStoppedConfirmed = [string]::Equals($siteState, 'Stopped', [System.StringComparison]::OrdinalIgnoreCase)
+        }
+
+        if ($appPoolStoppedConfirmed -and $siteStoppedConfirmed) {
+            Write-Log "Confirmed IIS runtime stop state (site='$SiteName', appPool='$AppPoolName')."
+            return
+        }
+
+        $elapsedSec = ((Get-Date) - $waitStartedAt).TotalSeconds
+        if ($elapsedSec -ge $script:iisStopWaitTimeoutSec) {
+            throw "Timed out waiting for IIS stop confirmation after $script:iisStopWaitTimeoutSec seconds (site='$SiteName', appPool='$AppPoolName')."
+        }
+
+        Write-Log "Waiting for IIS stop confirmation (site='$SiteName', appPool='$AppPoolName', elapsed=${elapsedSec:n1}s)."
+        Start-Sleep -Milliseconds $script:iisStopWaitPollMs
     }
 }
 
@@ -426,7 +514,9 @@ function Remove-IfStale {
                 Write-Log "DryRun: would remove stale path '$($_.FullName)'."
             }
             else {
-                Remove-Item -LiteralPath $_.FullName -Recurse -Force
+                Invoke-WithRetry -Description "Removing stale path '$relative'" -MaxAttempts $script:fileReplaceRetryCount -DelayMilliseconds $script:fileReplaceRetryDelayMs -Action {
+                    Remove-Item -LiteralPath $_.FullName -Recurse -Force
+                }
             }
         }
     }
@@ -457,7 +547,9 @@ function Copy-NewPayload {
         $destinationDirectory = Split-Path -Path $destinationPath -Parent
         if (-not $DryRun) {
             Ensure-Directory -Path $destinationDirectory
-            Copy-Item -LiteralPath $_.FullName -Destination $destinationPath -Force
+            Invoke-WithRetry -Description "Copying payload file '$relative'" -MaxAttempts $script:fileReplaceRetryCount -DelayMilliseconds $script:fileReplaceRetryDelayMs -Action {
+                Copy-Item -LiteralPath $_.FullName -Destination $destinationPath -Force
+            }
         }
         else {
             Write-Log "DryRun: would copy '$($_.FullName)' to '$destinationPath'."
@@ -570,6 +662,14 @@ try {
         throw "Install root directory does not exist: $script:installRootResolved"
     }
 
+    if ([string]::IsNullOrWhiteSpace($SiteName)) {
+        throw 'SiteName is required and cannot be empty.'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($AppPoolName)) {
+        throw 'AppPoolName is required and cannot be empty.'
+    }
+
     $status.installRootPath = $script:installRootResolved
 
     $metadataRaw = Get-Content -LiteralPath $metadataPathResolved -Raw -Encoding UTF8
@@ -607,6 +707,7 @@ try {
     Write-Log "Staged release tag: $($metadata.ReleaseTag)."
     Write-Log "Staged ZIP path: $zipPathResolved."
     Write-Log "Install root path: $script:installRootResolved."
+    Write-Log "Resolved IIS identity values: site='$SiteName', appPool='$AppPoolName'."
     Write-Log "Runtime updater state path (non-replaceable): $script:runtimeStateRootResolved."
 
     $workRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ping-monitor-updater-" + [System.Guid]::NewGuid().ToString('N'))

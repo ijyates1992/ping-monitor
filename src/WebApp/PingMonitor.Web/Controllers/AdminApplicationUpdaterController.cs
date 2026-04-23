@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using System.Security.Claims;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.ApplicationMetadata;
 using PingMonitor.Web.Services.ApplicationUpdater;
@@ -16,20 +17,20 @@ public sealed class AdminApplicationUpdaterController : Controller
     private readonly IApplicationMetadataProvider _applicationMetadataProvider;
     private readonly IApplicationUpdateDetectionService _applicationUpdateDetectionService;
     private readonly IApplicationUpdateStagingService _applicationUpdateStagingService;
-    private readonly IApplicationUpdateStagingStateStore _applicationUpdateStagingStateStore;
+    private readonly IApplicationUpdateApplyService _applicationUpdateApplyService;
     private readonly ApplicationUpdaterOptions _updaterOptions;
 
     public AdminApplicationUpdaterController(
         IApplicationMetadataProvider applicationMetadataProvider,
         IApplicationUpdateDetectionService applicationUpdateDetectionService,
         IApplicationUpdateStagingService applicationUpdateStagingService,
-        IApplicationUpdateStagingStateStore applicationUpdateStagingStateStore,
+        IApplicationUpdateApplyService applicationUpdateApplyService,
         IOptions<ApplicationUpdaterOptions> updaterOptions)
     {
         _applicationMetadataProvider = applicationMetadataProvider;
         _applicationUpdateDetectionService = applicationUpdateDetectionService;
         _applicationUpdateStagingService = applicationUpdateStagingService;
-        _applicationUpdateStagingStateStore = applicationUpdateStagingStateStore;
+        _applicationUpdateApplyService = applicationUpdateApplyService;
         _updaterOptions = updaterOptions.Value;
     }
 
@@ -41,7 +42,7 @@ public sealed class AdminApplicationUpdaterController : Controller
             ? ApplicationUpdateCheckResult.NotPerformed(currentVersion, _updaterOptions.AllowPreviewReleases)
             : ApplicationUpdateCheckResult.Disabled(currentVersion, _updaterOptions.AllowPreviewReleases);
 
-        var staged = await _applicationUpdateStagingStateStore.ReadAsync(cancellationToken);
+        var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         return View("Index", ToViewModel(result, staged));
     }
 
@@ -50,7 +51,7 @@ public sealed class AdminApplicationUpdaterController : Controller
     public async Task<IActionResult> Check([FromForm] bool allowPreviewReleases, CancellationToken cancellationToken)
     {
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
-        var staged = await _applicationUpdateStagingStateStore.ReadAsync(cancellationToken);
+        var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         return View("Index", ToViewModel(result, staged));
     }
 
@@ -60,7 +61,18 @@ public sealed class AdminApplicationUpdaterController : Controller
     {
         await _applicationUpdateStagingService.StageLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
-        var staged = await _applicationUpdateStagingStateStore.ReadAsync(cancellationToken);
+        var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
+        return View("Index", ToViewModel(result, staged));
+    }
+
+    [HttpPost("apply")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Apply([FromForm] bool allowPreviewReleases, CancellationToken cancellationToken)
+    {
+        var requestedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
+        await _applicationUpdateApplyService.RequestApplyAsync(requestedByUserId, cancellationToken);
+        var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
+        var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
         return View("Index", ToViewModel(result, staged));
     }
 
@@ -125,6 +137,25 @@ public sealed class AdminApplicationUpdaterController : Controller
             IsOutdated = !isCurrentLatest,
             Status = staged.Status,
             FailureMessage = staged.FailureMessage,
+            BootstrapperScriptPath = staged.BootstrapperScriptPath,
+            StagedMetadataPath = staged.StagedMetadataPath,
+            LaunchPowerShellExecutablePath = staged.LaunchPowerShellExecutablePath,
+            LaunchInstallRootPath = staged.LaunchInstallRootPath,
+            LaunchWorkingDirectory = staged.LaunchWorkingDirectory,
+            LaunchResolvedSiteName = staged.LaunchResolvedSiteName,
+            LaunchResolvedAppPoolName = staged.LaunchResolvedAppPoolName,
+            LaunchExpectedReleaseTag = staged.LaunchExpectedReleaseTag,
+            ExternalUpdaterStatusPath = staged.ExternalUpdaterStatusPath,
+            ExternalUpdaterLogPath = staged.ExternalUpdaterLogPath,
+            BootstrapperProcessId = staged.BootstrapperProcessId,
+            BootstrapperStartedAtUtc = staged.BootstrapperStartedAtUtc,
+            LastApplyRequestedByUserId = staged.LastApplyRequestedByUserId,
+            ApplyRequestedAtUtc = staged.ApplyRequestedAtUtc,
+            ApplyHandoffStartedAtUtc = staged.ApplyHandoffStartedAtUtc,
+            ApplyCompletedAtUtc = staged.ApplyCompletedAtUtc,
+            ApplyOperationMessage = staged.ApplyOperationMessage,
+            LastKnownUpdaterStage = staged.LastKnownUpdaterStage,
+            LastKnownUpdaterResultCode = staged.LastKnownUpdaterResultCode,
             LastUpdatedAtUtc = staged.LastUpdatedAtUtc
         };
     }
