@@ -16,8 +16,10 @@ Both scripts:
 ## Requirements
 
 - Windows environment
-- PowerShell (`pwsh` or Windows PowerShell)
+- PowerShell 7 (`pwsh`) for updater apply operations and release scripts
 - .NET SDK installed (matching project version)
+
+> Operator note: the web application's update **check** and **stage** actions can run without `pwsh`, but update **apply** is blocked unless `pwsh` is available in PATH.
 
 ---
 

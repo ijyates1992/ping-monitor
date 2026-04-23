@@ -49,6 +49,8 @@ public sealed class ApplicationUpdateStagingState
     public ApplicationUpdateStagingStatus Status { get; init; }
     public string? FailureMessage { get; init; }
     public string? BootstrapperScriptPath { get; init; }
+    public string? BootstrapperSource { get; init; }
+    public string? BootstrapperSelectionMessage { get; init; }
     public string? StagedMetadataPath { get; init; }
     public string? LaunchPowerShellExecutablePath { get; init; }
     public string? LaunchInstallRootPath { get; init; }

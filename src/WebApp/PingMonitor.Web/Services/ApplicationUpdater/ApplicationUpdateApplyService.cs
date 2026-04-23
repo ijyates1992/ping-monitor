@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -344,6 +345,7 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
     private readonly IApplicationUpdateStagingStateStore _stagingStateStore;
     private readonly IApplicationMetadataProvider _applicationMetadataProvider;
     private readonly IStartupGateRuntimeState _startupGateRuntimeState;
+    private readonly IPowerShellPrerequisiteDetector _powerShellPrerequisiteDetector;
     private readonly IExternalUpdaterProcessLauncher _launcher;
     private readonly IIisMetadataReader _iisMetadataReader;
     private readonly IWebHostEnvironment _environment;
@@ -354,6 +356,7 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         IApplicationUpdateStagingStateStore stagingStateStore,
         IApplicationMetadataProvider applicationMetadataProvider,
         IStartupGateRuntimeState startupGateRuntimeState,
+        IPowerShellPrerequisiteDetector powerShellPrerequisiteDetector,
         IExternalUpdaterProcessLauncher launcher,
         IWebHostEnvironment environment,
         IOptions<ApplicationUpdaterOptions> options,
@@ -363,6 +366,7 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         _stagingStateStore = stagingStateStore;
         _applicationMetadataProvider = applicationMetadataProvider;
         _startupGateRuntimeState = startupGateRuntimeState;
+        _powerShellPrerequisiteDetector = powerShellPrerequisiteDetector;
         _launcher = launcher;
         _environment = environment;
         _options = options.Value;
@@ -380,7 +384,8 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
 
         var stagingRoot = _stagingStateStore.GetStagingRootPath();
         var stagedMetadataPath = Path.Combine(stagingRoot, "state", "staged-update.json");
-        var bootstrapperPath = ResolveBootstrapperPath();
+        var bootstrapperSelection = ResolveBootstrapperLaunchSelection(current, stagingRoot);
+        var bootstrapperPath = bootstrapperSelection.BootstrapperPath;
         var installRootPath = Path.GetFullPath(_environment.ContentRootPath);
         var externalStatusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
         var externalLogPath = Path.Combine(stagingRoot, "state", "external-updater.log");
@@ -415,6 +420,8 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             Status = ApplicationUpdateStagingStatus.ApplyRequested,
             FailureMessage = null,
             BootstrapperScriptPath = bootstrapperPath,
+            BootstrapperSource = bootstrapperSelection.BootstrapperSource,
+            BootstrapperSelectionMessage = bootstrapperSelection.SelectionMessage,
             StagedMetadataPath = stagedMetadataPath,
             LaunchPowerShellExecutablePath = null,
             LaunchInstallRootPath = installRootPath,
@@ -461,10 +468,11 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             throw new InvalidOperationException(resolutionFailureMessage);
         }
 
-        if (!_launcher.TryResolveExecutablePath(_options.PowerShellExecutablePath, out var powerShellExecutablePath, out var powerShellResolutionError))
+        var powerShellStatus = _powerShellPrerequisiteDetector.GetStatus();
+        if (!powerShellStatus.IsAvailable || string.IsNullOrWhiteSpace(powerShellStatus.ResolvedExecutablePath))
         {
             var resolutionFailureMessage =
-                $"Unable to resolve the configured PowerShell host '{_options.PowerShellExecutablePath}'. {powerShellResolutionError}";
+                "PowerShell 7 (`pwsh`) was not found in PATH. Update apply operations are unavailable until PowerShell 7 is installed and accessible to the application.";
             await PersistLaunchFailureAsync(
                 CloneState(
                     resolvingState,
@@ -477,6 +485,7 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
                 cancellationToken);
             throw new InvalidOperationException(resolutionFailureMessage);
         }
+        var powerShellExecutablePath = powerShellStatus.ResolvedExecutablePath!;
 
         var launchInputValidationError = ValidateLaunchInputs(bootstrapperPath, stagedMetadataPath, installRootPath, powerShellExecutablePath!);
         if (!string.IsNullOrWhiteSpace(launchInputValidationError))
@@ -521,6 +530,10 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             current.ReleaseTag ?? "(none)",
             externalStatusPath,
             externalLogPath);
+        _logger.LogInformation(
+            "Updater bootstrapper source: {BootstrapperSource}. {SelectionMessage}",
+            bootstrapperSelection.BootstrapperSource,
+            bootstrapperSelection.SelectionMessage);
 
         var launched = _launcher.TryLaunch(
             powerShellExecutablePath!,
@@ -682,6 +695,83 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         return Path.IsPathRooted(configuredPath)
             ? Path.GetFullPath(configuredPath)
             : Path.GetFullPath(configuredPath, _environment.ContentRootPath);
+    }
+
+    private BootstrapperLaunchSelection ResolveBootstrapperLaunchSelection(ApplicationUpdateStagingState state, string stagingRoot)
+    {
+        var installedBootstrapperPath = ResolveBootstrapperPath();
+        var stagedZipEntryPath = (_options.StagedReleaseBootstrapperPath ?? string.Empty).Replace('\\', '/').TrimStart('/');
+        if (string.IsNullOrWhiteSpace(stagedZipEntryPath) ||
+            string.IsNullOrWhiteSpace(state.StagedZipPath) ||
+            !File.Exists(state.StagedZipPath))
+        {
+            return BootstrapperLaunchSelection.InstalledFallback(
+                installedBootstrapperPath,
+                "Staged release bootstrapper could not be evaluated. Using installed bootstrapper fallback.");
+        }
+
+        try
+        {
+            var applySessionRoot = Path.Combine(stagingRoot, "apply-session", Guid.NewGuid().ToString("N"));
+            var extractedBootstrapperPath = ExtractStagedBootstrapper(state.StagedZipPath, stagedZipEntryPath, applySessionRoot);
+            return BootstrapperLaunchSelection.StagedRelease(
+                extractedBootstrapperPath,
+                $"Using staged release bootstrapper '{stagedZipEntryPath}'.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to extract staged release bootstrapper '{StagedReleaseBootstrapperPath}' from '{StagedZipPath}'. Falling back to installed bootstrapper '{InstalledBootstrapperPath}'.",
+                stagedZipEntryPath,
+                state.StagedZipPath,
+                installedBootstrapperPath);
+            return BootstrapperLaunchSelection.InstalledFallback(
+                installedBootstrapperPath,
+                $"Staged bootstrapper extraction failed. Installed fallback selected. {ex.Message}");
+        }
+    }
+
+    private static string ExtractStagedBootstrapper(string stagedZipPath, string stagedZipEntryPath, string destinationRoot)
+    {
+        using var archive = ZipFile.OpenRead(stagedZipPath);
+        var entry = archive.Entries.FirstOrDefault(candidate =>
+            string.Equals(
+                candidate.FullName.Replace('\\', '/').TrimStart('/'),
+                stagedZipEntryPath,
+                StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            throw new InvalidOperationException($"Staged release entry '{stagedZipEntryPath}' was not found.");
+        }
+
+        Directory.CreateDirectory(destinationRoot);
+        var outputPath = Path.Combine(destinationRoot, entry.Name);
+        entry.ExtractToFile(outputPath, overwrite: true);
+        return outputPath;
+    }
+
+    private sealed class BootstrapperLaunchSelection
+    {
+        public required string BootstrapperPath { get; init; }
+        public required string BootstrapperSource { get; init; }
+        public required string SelectionMessage { get; init; }
+
+        public static BootstrapperLaunchSelection StagedRelease(string bootstrapperPath, string selectionMessage)
+            => new()
+            {
+                BootstrapperPath = bootstrapperPath,
+                BootstrapperSource = "staged_release",
+                SelectionMessage = selectionMessage
+            };
+
+        public static BootstrapperLaunchSelection InstalledFallback(string bootstrapperPath, string selectionMessage)
+            => new()
+            {
+                BootstrapperPath = bootstrapperPath,
+                BootstrapperSource = "installed_fallback",
+                SelectionMessage = selectionMessage
+            };
     }
 
     private string ResolveAppPoolName()
@@ -848,6 +938,8 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
             Status = status,
             FailureMessage = failureMessage,
             BootstrapperScriptPath = source.BootstrapperScriptPath,
+            BootstrapperSource = source.BootstrapperSource,
+            BootstrapperSelectionMessage = source.BootstrapperSelectionMessage,
             StagedMetadataPath = source.StagedMetadataPath,
             LaunchPowerShellExecutablePath = launchPowerShellExecutablePath ?? source.LaunchPowerShellExecutablePath,
             LaunchInstallRootPath = launchInstallRootPath ?? source.LaunchInstallRootPath,

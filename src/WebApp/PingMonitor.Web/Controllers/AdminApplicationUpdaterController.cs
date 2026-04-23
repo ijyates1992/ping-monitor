@@ -18,6 +18,8 @@ public sealed class AdminApplicationUpdaterController : Controller
     private readonly IApplicationUpdateDetectionService _applicationUpdateDetectionService;
     private readonly IApplicationUpdateStagingService _applicationUpdateStagingService;
     private readonly IApplicationUpdateApplyService _applicationUpdateApplyService;
+    private readonly IApplicationUpdaterRuntimeStateStore _runtimeStateStore;
+    private readonly IPowerShellPrerequisiteDetector _powerShellPrerequisiteDetector;
     private readonly ApplicationUpdaterOptions _updaterOptions;
 
     public AdminApplicationUpdaterController(
@@ -25,12 +27,16 @@ public sealed class AdminApplicationUpdaterController : Controller
         IApplicationUpdateDetectionService applicationUpdateDetectionService,
         IApplicationUpdateStagingService applicationUpdateStagingService,
         IApplicationUpdateApplyService applicationUpdateApplyService,
+        IApplicationUpdaterRuntimeStateStore runtimeStateStore,
+        IPowerShellPrerequisiteDetector powerShellPrerequisiteDetector,
         IOptions<ApplicationUpdaterOptions> updaterOptions)
     {
         _applicationMetadataProvider = applicationMetadataProvider;
         _applicationUpdateDetectionService = applicationUpdateDetectionService;
         _applicationUpdateStagingService = applicationUpdateStagingService;
         _applicationUpdateApplyService = applicationUpdateApplyService;
+        _runtimeStateStore = runtimeStateStore;
+        _powerShellPrerequisiteDetector = powerShellPrerequisiteDetector;
         _updaterOptions = updaterOptions.Value;
     }
 
@@ -43,7 +49,8 @@ public sealed class AdminApplicationUpdaterController : Controller
             : ApplicationUpdateCheckResult.Disabled(currentVersion, _updaterOptions.AllowPreviewReleases);
 
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged));
+        var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
+        return View("Index", ToViewModel(result, staged, runtimeState));
     }
 
     [HttpPost("check")]
@@ -52,7 +59,8 @@ public sealed class AdminApplicationUpdaterController : Controller
     {
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged));
+        var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
+        return View("Index", ToViewModel(result, staged, runtimeState));
     }
 
     [HttpPost("stage")]
@@ -62,7 +70,8 @@ public sealed class AdminApplicationUpdaterController : Controller
         await _applicationUpdateStagingService.StageLatestApplicableReleaseAsync(allowPreviewReleases, cancellationToken);
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged));
+        var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
+        return View("Index", ToViewModel(result, staged, runtimeState));
     }
 
     [HttpPost("apply")]
@@ -73,20 +82,28 @@ public sealed class AdminApplicationUpdaterController : Controller
         await _applicationUpdateApplyService.RequestApplyAsync(requestedByUserId, cancellationToken);
         var result = await _applicationUpdateDetectionService.CheckForUpdatesAsync(allowPreviewReleases, cancellationToken);
         var staged = await _applicationUpdateApplyService.RefreshApplyStateAsync(cancellationToken);
-        return View("Index", ToViewModel(result, staged));
+        var runtimeState = await _runtimeStateStore.ReadAsync(cancellationToken);
+        return View("Index", ToViewModel(result, staged, runtimeState));
     }
 
-    private ApplicationUpdaterPageViewModel ToViewModel(ApplicationUpdateCheckResult result, ApplicationUpdateStagingState? staged)
+    private ApplicationUpdaterPageViewModel ToViewModel(ApplicationUpdateCheckResult result, ApplicationUpdateStagingState? staged, ApplicationUpdaterRuntimeState? runtimeState)
     {
         var decoratedStaged = ApplyLatestComparison(staged, result.LatestApplicableRelease?.TagName);
+        var powerShellStatus = _powerShellPrerequisiteDetector.GetStatus();
 
         return new ApplicationUpdaterPageViewModel
         {
             CurrentVersion = result.CurrentVersion,
             AllowPreviewReleases = result.AllowPreviewReleases,
             UpdateChecksEnabled = _updaterOptions.UpdateChecksEnabled,
+            EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
+            AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates,
+            AutomaticUpdateCheckIntervalMinutes = _updaterOptions.AutomaticUpdateCheckIntervalMinutes,
             RepositoryOwner = _updaterOptions.GitHubOwner,
             RepositoryName = _updaterOptions.GitHubRepository,
+            PowerShellPrerequisiteAvailable = powerShellStatus.IsAvailable,
+            PowerShellPrerequisiteMessage = powerShellStatus.Message,
+            PowerShellResolvedPath = powerShellStatus.ResolvedExecutablePath,
             State = result.State,
             Message = result.Message,
             LatestVersion = result.LatestApplicableRelease?.TagName,
@@ -94,6 +111,7 @@ public sealed class AdminApplicationUpdaterController : Controller
             LatestIsPrerelease = result.LatestApplicableRelease?.IsPrerelease,
             LatestReleaseUrl = result.LatestApplicableRelease?.HtmlUrl,
             LatestPublishedAtUtc = result.LatestApplicableRelease?.PublishedAtUtc,
+            RuntimeState = runtimeState,
             StagedUpdate = decoratedStaged
         };
     }
@@ -138,6 +156,8 @@ public sealed class AdminApplicationUpdaterController : Controller
             Status = staged.Status,
             FailureMessage = staged.FailureMessage,
             BootstrapperScriptPath = staged.BootstrapperScriptPath,
+            BootstrapperSource = staged.BootstrapperSource,
+            BootstrapperSelectionMessage = staged.BootstrapperSelectionMessage,
             StagedMetadataPath = staged.StagedMetadataPath,
             LaunchPowerShellExecutablePath = staged.LaunchPowerShellExecutablePath,
             LaunchInstallRootPath = staged.LaunchInstallRootPath,

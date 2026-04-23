@@ -26,6 +26,15 @@ Not included:
 - schema migration apply
 - scheduled/automatic updates
 
+## Current launch preference (updater polish pass)
+
+When update apply is initiated from the web app:
+
+1. the updater first attempts to extract and launch the bootstrapper script from the staged release package (`app/Updater/run-staged-update-bootstrapper.ps1` by default)
+2. if that staged extraction cannot be used, the updater falls back to the installed bootstrapper path configured in app settings
+
+Apply remains explicit/manual and is blocked when PowerShell 7 (`pwsh`) is unavailable.
+
 ## Input contract
 
 The script reads Stage 2 metadata from `-StagedMetadataPath` and accepts explicit operator-supplied runtime targets.

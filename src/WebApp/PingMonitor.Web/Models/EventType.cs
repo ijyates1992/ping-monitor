@@ -33,4 +33,9 @@ public static class EventType
     public const string DatabaseBackupRestoreCompleted = "database_backup_restore_completed";
     public const string DatabaseBackupRestoreFailed = "database_backup_restore_failed";
     public const string DatabaseBackupDeleted = "database_backup_deleted";
+    public const string UpdaterUpdateAvailableDetected = "updater_update_available_detected";
+    public const string UpdaterAutoStageStarted = "updater_auto_stage_started";
+    public const string UpdaterAutoStageSucceeded = "updater_auto_stage_succeeded";
+    public const string UpdaterAutoStageFailed = "updater_auto_stage_failed";
+    public const string UpdaterAutomaticCheckFailed = "updater_automatic_check_failed";
 }

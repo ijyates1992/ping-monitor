@@ -104,6 +104,20 @@ All events are stored in a single table.
 
 ---
 
+### System Updater Events
+
+| Event Type                         | Description |
+|-----------------------------------|------------|
+| updater_update_available_detected | Automatic updater check detected a newly applicable release |
+| updater_auto_stage_started        | Automatic staging started for a newly detected release |
+| updater_auto_stage_succeeded      | Automatic staging succeeded (download + checksum verify + stage ready) |
+| updater_auto_stage_failed         | Automatic staging attempt failed |
+| updater_automatic_check_failed    | Automatic update check failed after prior successful checks |
+
+These events are transition-oriented and intentionally avoid per-poll log spam.
+
+---
+
 ## Message Guidelines
 
 Messages must be:
