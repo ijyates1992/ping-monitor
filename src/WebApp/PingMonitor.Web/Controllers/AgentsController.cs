@@ -20,23 +20,27 @@ public sealed class AgentsController : Controller
     private readonly IAgentManagementQueryService _agentManagementQueryService;
     private readonly IEventLogQueryService _eventLogQueryService;
     private readonly IApplicationSettingsService _applicationSettingsService;
+    private readonly IAgentTemplateVersionProvider _agentTemplateVersionProvider;
 
     public AgentsController(
         IAgentProvisioningService agentProvisioningService,
         IAgentManagementQueryService agentManagementQueryService,
         IEventLogQueryService eventLogQueryService,
-        IApplicationSettingsService applicationSettingsService)
+        IApplicationSettingsService applicationSettingsService,
+        IAgentTemplateVersionProvider agentTemplateVersionProvider)
     {
         _agentProvisioningService = agentProvisioningService;
         _agentManagementQueryService = agentManagementQueryService;
         _eventLogQueryService = eventLogQueryService;
         _applicationSettingsService = applicationSettingsService;
+        _agentTemplateVersionProvider = agentTemplateVersionProvider;
     }
 
     [HttpGet("")]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var rows = await _agentManagementQueryService.ListAsync(cancellationToken);
+        var bundledAgentVersion = _agentTemplateVersionProvider.GetBundledAgentVersion();
         var viewModel = new ManageAgentsPageViewModel
         {
             Agents = rows.Select(row => new ManageAgentRowViewModel
@@ -53,8 +57,10 @@ public sealed class AgentsController : Controller
                 Platform = row.Platform,
                 CreatedAtUtc = row.CreatedAtUtc,
                 AssignmentCount = row.AssignmentCount,
-                UptimePercent = row.UptimePercent
+                UptimePercent = row.UptimePercent,
+                IsVersionDifferentFromBundled = IsVersionDifferentFromBundled(row.AgentVersion, bundledAgentVersion)
             }).ToList(),
+            BundledAgentVersion = bundledAgentVersion,
             StatusMessage = TempData[StatusMessageKey] as string,
             ErrorMessage = TempData[ErrorMessageKey] as string
         };
@@ -240,8 +246,24 @@ public sealed class AgentsController : Controller
             SiteUrlSaved = postedModel?.SiteUrlSaved ?? false,
             SiteUrlIsValid = validation.isValid,
             SiteUrlWarningMessage = validation.warningMessage,
-            ErrorMessage = postedModel?.ErrorMessage
+            ErrorMessage = postedModel?.ErrorMessage,
+            BundledAgentVersion = _agentTemplateVersionProvider.GetBundledAgentVersion()
         };
+    }
+
+    private static bool IsVersionDifferentFromBundled(string runtimeVersion, string? bundledVersion)
+    {
+        if (string.IsNullOrWhiteSpace(bundledVersion) || string.IsNullOrWhiteSpace(runtimeVersion))
+        {
+            return false;
+        }
+
+        if (string.Equals(runtimeVersion, "Unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !string.Equals(runtimeVersion.Trim(), bundledVersion.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private static (bool isValid, string? warningMessage) ValidateDeploySiteUrl(string? siteUrl)

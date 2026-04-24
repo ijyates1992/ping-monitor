@@ -18,4 +18,6 @@ public sealed class DeployAgentPageViewModel
     public string? SiteUrlWarningMessage { get; set; }
 
     public string? ErrorMessage { get; set; }
+
+    public string? BundledAgentVersion { get; set; }
 }

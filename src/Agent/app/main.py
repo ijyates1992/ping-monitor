@@ -13,6 +13,7 @@ from app.config import load_config
 from app.models import ConfigResponse, HeartbeatRequest, HelloRequest, ResultsRequest
 from app.result_queue import ResultQueue
 from app.scheduler import AssignmentScheduler
+from app.version import AGENT_VERSION
 
 BOOTSTRAP_CONFIG_VERSION = "bootstrap-pending"
 
@@ -29,7 +30,7 @@ def main() -> None:
     started_at = _utc_now()
     hello_response = client.send_hello(
         HelloRequest(
-            agent_version="0.1.0",
+            agent_version=AGENT_VERSION,
             machine_name=platform.node() or config.instance_id,
             platform=platform.system().lower() or "unknown",
             capabilities=["icmp"],
@@ -112,7 +113,7 @@ def main() -> None:
                 try:
                     heartbeat_response = client.send_heartbeat(
                         HeartbeatRequest(
-                            agent_version="0.1.0",
+                            agent_version=AGENT_VERSION,
                             sent_at_utc=_utc_now(),
                             config_version=current_config.config_version,
                             active_assignments=active_assignments,
