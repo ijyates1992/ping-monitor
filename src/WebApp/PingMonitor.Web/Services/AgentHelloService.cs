@@ -12,12 +12,18 @@ internal sealed class AgentHelloService : IAgentHelloService
     private readonly PingMonitorDbContext _dbContext;
     private readonly AgentApiOptions _options;
     private readonly IEventLogService _eventLogService;
+    private readonly IAgentOutdatedVersionWarningService _outdatedVersionWarningService;
 
-    public AgentHelloService(PingMonitorDbContext dbContext, IOptions<AgentApiOptions> options, IEventLogService eventLogService)
+    public AgentHelloService(
+        PingMonitorDbContext dbContext,
+        IOptions<AgentApiOptions> options,
+        IEventLogService eventLogService,
+        IAgentOutdatedVersionWarningService outdatedVersionWarningService)
     {
         _dbContext = dbContext;
         _options = options.Value;
         _eventLogService = eventLogService;
+        _outdatedVersionWarningService = outdatedVersionWarningService;
     }
 
     public async Task<AgentHelloResponse> ProcessHelloAsync(Agent agent, AgentHelloRequest request, CancellationToken cancellationToken)
@@ -42,6 +48,9 @@ internal sealed class AgentHelloService : IAgentHelloService
             AgentId = agent.AgentId,
             Message = $"Agent \"{agent.Name ?? agent.InstanceId}\" authenticated successfully (hello)."
         }, cancellationToken);
+
+
+        await _outdatedVersionWarningService.TryWriteWarningAsync(agent, request.AgentVersion, now, cancellationToken);
 
         if (!wasOnline)
         {
