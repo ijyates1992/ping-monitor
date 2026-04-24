@@ -8,6 +8,7 @@ namespace PingMonitor.Web.Controllers;
 
 [ApiController]
 [AllowAnonymous]
+[IgnoreAntiforgeryToken]
 [Route("api/v1/agent/results")]
 public sealed class AgentResultsController : ControllerBase
 {

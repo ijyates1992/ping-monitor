@@ -1,4 +1,5 @@
 namespace PingMonitor.Web.Services.Backups;
+using PingMonitor.Web.Support;
 
 public interface IConfigurationRestorePreviewService
 {
@@ -55,7 +56,7 @@ public sealed class ConfigurationRestorePreviewService : IConfigurationRestorePr
 
         _logger.LogInformation(
             "Loaded restore preview for {FileId}. Included sections: {Sections}.",
-            fileId,
+            LogValueSanitizer.ForLog(fileId),
             string.Join(",", includedSections));
 
         return preview;

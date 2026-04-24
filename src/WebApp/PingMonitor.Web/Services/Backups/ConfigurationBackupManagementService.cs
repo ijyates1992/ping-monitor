@@ -1,4 +1,5 @@
 namespace PingMonitor.Web.Services.Backups;
+using PingMonitor.Web.Support;
 
 public interface IConfigurationBackupManagementService
 {
@@ -39,12 +40,12 @@ public sealed class ConfigurationBackupManagementService : IConfigurationBackupM
             var fullPath = _documentLoader.ResolveBackupPath(request.FileId);
             File.Delete(fullPath);
             await _catalogService.RemoveAsync(request.FileId, cancellationToken);
-            _logger.LogInformation("Deleted configuration backup file {FileId}.", request.FileId);
+            _logger.LogInformation("Deleted configuration backup file {FileId}.", LogValueSanitizer.ForLog(request.FileId));
             return new DeleteConfigurationBackupResponse { FileId = request.FileId, Deleted = true, Message = "Backup deleted." };
         }
         catch (FileNotFoundException)
         {
-            _logger.LogWarning("Delete request for backup file {FileId} could not be completed because file was not found.", request.FileId);
+            _logger.LogWarning("Delete request for backup file {FileId} could not be completed because file was not found.", LogValueSanitizer.ForLog(request.FileId));
             return new DeleteConfigurationBackupResponse { FileId = request.FileId, Deleted = false, Message = "Backup file was not found." };
         }
     }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.DatabaseStatus;
 using PingMonitor.Web.Services.StartupGate;
+using PingMonitor.Web.Support;
 using PingMonitor.Web.ViewModels.StartupGate;
 
 namespace PingMonitor.Web.Controllers;
@@ -69,7 +70,11 @@ public sealed class StartupGateController : Controller
             return View("Index", await BuildViewModelAsync(status, form, null, null, null, errorMessage: "Database configuration could not be saved.", cancellationToken: cancellationToken));
         }
 
-        _logger.LogInformation("Startup gate database configuration save attempt for {Host}:{Port}/{DatabaseName}.", form.Host, form.Port, form.DatabaseName);
+        _logger.LogInformation(
+            "Startup gate database configuration save attempt for {Host}:{Port}/{DatabaseName}.",
+            LogValueSanitizer.ForLog(form.Host),
+            form.Port,
+            LogValueSanitizer.ForLog(form.DatabaseName));
 
         try
         {

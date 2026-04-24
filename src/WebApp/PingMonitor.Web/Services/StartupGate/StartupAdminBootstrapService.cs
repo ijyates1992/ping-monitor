@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Support;
 
 namespace PingMonitor.Web.Services.StartupGate;
 
@@ -55,7 +56,7 @@ internal sealed class StartupAdminBootstrapService : IStartupAdminBootstrapServi
 
     public async Task<(bool Succeeded, IReadOnlyList<string> Errors)> CreateInitialAdminAsync(StartupAdminBootstrapForm form, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Startup gate initial admin creation requested for username {Username}.", form.Username);
+        _logger.LogInformation("Startup gate initial admin creation requested for username {Username}.", LogValueSanitizer.ForLog(form.Username));
 
         var existingStatus = await GetStatusAsync(cancellationToken);
         if (existingStatus.AdminExists)
@@ -92,18 +93,18 @@ internal sealed class StartupAdminBootstrapService : IStartupAdminBootstrapServi
         var createResult = await _userManager.CreateAsync(user, form.Password);
         if (!createResult.Succeeded)
         {
-            _logger.LogWarning("Startup gate initial admin creation failed for username {Username}.", form.Username);
+            _logger.LogWarning("Startup gate initial admin creation failed for username {Username}.", LogValueSanitizer.ForLog(form.Username));
             return (false, createResult.Errors.Select(error => error.Description).ToArray());
         }
 
         var roleAssignResult = await _userManager.AddToRoleAsync(user, AdminRoleName);
         if (!roleAssignResult.Succeeded)
         {
-            _logger.LogWarning("Startup gate failed to assign the Admin role to username {Username}.", form.Username);
+            _logger.LogWarning("Startup gate failed to assign the Admin role to username {Username}.", LogValueSanitizer.ForLog(form.Username));
             return (false, roleAssignResult.Errors.Select(error => error.Description).ToArray());
         }
 
-        _logger.LogInformation("Startup gate initial admin creation succeeded for username {Username}.", form.Username);
+        _logger.LogInformation("Startup gate initial admin creation succeeded for username {Username}.", LogValueSanitizer.ForLog(form.Username));
         return (true, Array.Empty<string>());
     }
 }

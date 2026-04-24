@@ -3,10 +3,10 @@ using PingMonitor.Web.Contracts.Results;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Support;
 using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Metrics;
-using PingMonitor.Web.Support;
 using Microsoft.Extensions.Options;
 
 namespace PingMonitor.Web.Services;
@@ -206,9 +206,9 @@ internal sealed class ResultIngestionService : IResultIngestionService
                     _logger.LogError(
                         ex,
                         "Result ingestion persisted batch {BatchId} for agent {AgentId}, but state evaluation failed for assignments: {AssignmentIds}.",
-                        normalizedBatchId,
-                        agent.AgentId,
-                        affectedAssignmentIds);
+                        LogValueSanitizer.ForLog(normalizedBatchId),
+                        LogValueSanitizer.ForLog(agent.AgentId),
+                        affectedAssignmentIds.Select(LogValueSanitizer.ForLog).ToArray());
                 }
             }
 

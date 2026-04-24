@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Support;
 
 namespace PingMonitor.Web.Services.Backups;
 
@@ -122,7 +123,7 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
             throw BuildValidationException(fileId, ex.Message);
         }
 
-        _logger.LogInformation("Validated configuration backup {FileId} for restore workflow.", fileId);
+        _logger.LogInformation("Validated configuration backup {FileId} for restore workflow.", LogValueSanitizer.ForLog(fileId));
         return document;
     }
 
@@ -135,7 +136,7 @@ public sealed class ConfigurationBackupDocumentLoader : IConfigurationBackupDocu
 
     private InvalidOperationException BuildValidationException(string fileId, string message)
     {
-        _logger.LogWarning("Backup validation failed for {FileId}: {ValidationMessage}", fileId, message);
+        _logger.LogWarning("Backup validation failed for {FileId}: {ValidationMessage}", LogValueSanitizer.ForLog(fileId), LogValueSanitizer.ForLog(message));
         return new InvalidOperationException(message);
     }
 
