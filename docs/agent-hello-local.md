@@ -33,7 +33,7 @@ curl -i \
   -H 'X-Instance-Id: dev-agent-01' \
   -H "Authorization: Bearer ${DevelopmentSeedAgent__ApiKey}" \
   -d '{
-    "agentVersion": "0.1.0",
+    "agentVersion": "0.1.1",
     "machineName": "DEV-WORKSTATION",
     "platform": "windows",
     "capabilities": ["icmp"],
@@ -102,7 +102,7 @@ curl -i \
   -H 'X-Instance-Id: dev-agent-01' \
   -H "Authorization: Bearer ${DevelopmentSeedAgent__ApiKey}" \
   -d '{
-    "agentVersion": "0.1.0",
+    "agentVersion": "0.1.1",
     "sentAtUtc": "2026-03-21T21:31:00Z",
     "configVersion": "cfg_dev_v1",
     "activeAssignments": 2,

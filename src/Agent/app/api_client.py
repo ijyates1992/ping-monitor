@@ -7,6 +7,7 @@ import httpx
 
 from app.config import AgentConfig
 from app.models import ConfigResponse, HeartbeatRequest, HeartbeatResponse, HelloRequest, HelloResponse, ResultsRequest
+from app.version import AGENT_VERSION
 
 
 class AgentApiClient:
@@ -20,7 +21,7 @@ class AgentApiClient:
                 "Authorization": f"Bearer {self._config.api_key}",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
-                "User-Agent": "ping-agent/0.1.0",
+                "User-Agent": f"ping-agent/{AGENT_VERSION}",
             },
             timeout=30.0,
         )
