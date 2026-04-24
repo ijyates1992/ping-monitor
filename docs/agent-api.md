@@ -54,7 +54,7 @@ X-Instance-Id: branch-office-01
 Authorization: Bearer <api_key>
 Content-Type: application/json
 Accept: application/json
-User-Agent: ping-agent/0.1.0
+User-Agent: ping-agent/0.1.1
 ```
 
 ### Authentication rules
@@ -196,7 +196,7 @@ Used by the agent at startup to validate credentials, announce its presence, and
 
 ```json
 {
-  "agentVersion": "0.1.0",
+  "agentVersion": "0.1.1",
   "machineName": "BRANCH-PC-01",
   "platform": "windows",
   "capabilities": [
@@ -393,7 +393,7 @@ Used by the agent to report liveness and current operating state.
 
 ```json
 {
-  "agentVersion": "0.1.0",
+  "agentVersion": "0.1.1",
   "sentAtUtc": "2026-03-21T21:31:00Z",
   "configVersion": "cfg_20260321_213000_01",
   "activeAssignments": 24,
