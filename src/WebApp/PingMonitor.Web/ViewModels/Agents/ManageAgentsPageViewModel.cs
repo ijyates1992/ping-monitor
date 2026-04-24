@@ -3,6 +3,7 @@ namespace PingMonitor.Web.ViewModels.Agents;
 public sealed class ManageAgentsPageViewModel
 {
     public required IReadOnlyList<ManageAgentRowViewModel> Agents { get; init; }
+    public string? BundledAgentVersion { get; init; }
     public string? StatusMessage { get; init; }
     public string? ErrorMessage { get; init; }
 }
@@ -22,6 +23,7 @@ public sealed class ManageAgentRowViewModel
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required int AssignmentCount { get; init; }
     public required double? UptimePercent { get; init; }
+    public required bool IsVersionDifferentFromBundled { get; init; }
 }
 
 public sealed class RemoveAgentPageViewModel

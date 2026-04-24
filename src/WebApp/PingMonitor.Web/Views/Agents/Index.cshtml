@@ -47,6 +47,7 @@
         .ok { background: #e7f6ec; color: var(--success); }
         .notice, .error { border-radius: 10px; padding: .75rem; }
         .notice { border: 1px solid #b7e4c7; background: #ebffee; color: var(--success); }
+        .warning { border-radius: 10px; padding: .75rem; border: 1px solid #fdc589; background: #fff4e5; color: #8a4600; }
         .error { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); }
         .empty { text-align: center; padding: 1rem; border: 1px dashed var(--border); border-radius: 12px; }
         form { margin: 0; }
@@ -63,6 +64,7 @@
         <section class="card">
             <h1>Manage agents</h1>
             <p class="muted">Operational control for registered agents. Actions here do not delete history or assignments.</p>
+            <p class="muted"><strong>Bundled downloadable agent version:</strong> @(string.IsNullOrWhiteSpace(Model.BundledAgentVersion) ? "Unknown" : Model.BundledAgentVersion)</p>
             <div class="button-row">
                 <a class="button-secondary" href="/status">Back to status</a>
                 <a class="button" href="/agents/deploy">Deploy new agent</a>
@@ -116,6 +118,12 @@
                                 <div class="meta-item"><span>Machine name</span><div>@agent.MachineName</div></div>
                                 <div class="meta-item"><span>Platform</span><div>@agent.Platform</div></div>
                             </div>
+                            @if (agent.IsVersionDifferentFromBundled)
+                            {
+                                <div class="warning" role="status" style="margin-top:.7rem;">
+                                    Runtime agent version (@agent.AgentVersion) differs from the currently bundled downloadable version (@Model.BundledAgentVersion).
+                                </div>
+                            }
 
                             <div class="action-row" style="margin-top:.9rem;">
                                 <a class="button-secondary" href="/agents/@agent.AgentId/history">View history</a>

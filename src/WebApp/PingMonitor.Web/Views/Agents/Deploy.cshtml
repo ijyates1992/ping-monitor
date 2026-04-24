@@ -49,6 +49,7 @@
     <section class="card stack">
         <h1>Deploy new agent</h1>
         <p class="muted">Create a new agent identity and download a preconfigured standard package. The API key is generated server-side and delivered only in the download.</p>
+        <p class="muted"><strong>Bundled downloadable agent version:</strong> @(string.IsNullOrWhiteSpace(Model.BundledAgentVersion) ? "Unknown" : Model.BundledAgentVersion)</p>
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
         {

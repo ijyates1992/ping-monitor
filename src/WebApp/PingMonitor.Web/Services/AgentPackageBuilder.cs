@@ -68,16 +68,7 @@ internal sealed class AgentPackageBuilder : IAgentPackageBuilder
         return output.ToArray();
     }
 
-    private string ResolveAgentRootPath()
-    {
-        var bundledTemplatePath = Path.Combine(_environment.ContentRootPath, "Agent");
-        if (Directory.Exists(bundledTemplatePath))
-        {
-            return bundledTemplatePath;
-        }
-
-        return Path.GetFullPath(Path.Combine(_environment.ContentRootPath, "..", "..", "Agent"));
-    }
+    private string ResolveAgentRootPath() => AgentTemplateLocator.ResolveAgentRootPath(_environment);
 
     private static string BuildEnvContents(string serverUrl, string instanceId, string apiKey)
     {

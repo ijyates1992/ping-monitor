@@ -189,6 +189,7 @@ builder.Services.AddScoped<IStartupSchemaService, StartupSchemaService>();
 builder.Services.AddScoped<IStartupAdminBootstrapService, StartupAdminBootstrapService>();
 builder.Services.AddScoped<DevelopmentAgentSeeder>();
 builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
+builder.Services.AddScoped<IAgentTemplateVersionProvider, AgentTemplateVersionProvider>();
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
