@@ -49,6 +49,7 @@ public sealed class DisplayTimeFormatterTests
         public Task<TimeZoneInfo> GetCurrentUserTimeZoneAsync(CancellationToken cancellationToken) => Task.FromResult(_zone);
         public Task<string> GetCurrentUserTimeZoneIdAsync(CancellationToken cancellationToken) => Task.FromResult(_zone.Id);
         public IReadOnlyList<string> GetSelectableTimeZoneIds() => [_zone.Id];
+        public IReadOnlyList<DisplayTimeZoneOption> GetSelectableTimeZoneOptions() => [new(_zone.Id, _zone.Id)];
         public bool IsSupportedTimeZoneId(string? timeZoneId) => string.Equals(timeZoneId, _zone.Id, StringComparison.Ordinal);
         public TimeZoneInfo ResolveOrUtc(string? timeZoneId) => _zone;
     }

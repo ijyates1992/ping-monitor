@@ -55,9 +55,9 @@
         <div>
             <label asp-for="DisplayTimeZoneId">Display time zone</label>
             <select asp-for="DisplayTimeZoneId" style="width:100%;min-height:44px;border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem;font:inherit;">
-                @foreach (var zoneId in Model.AvailableDisplayTimeZoneIds)
+                @foreach (var option in Model.AvailableDisplayTimeZoneOptions)
                 {
-                    <option value="@zoneId">@zoneId</option>
+                    <option value="@option.Value">@option.Label</option>
                 }
             </select>
             <div class="field-error"><span asp-validation-for="DisplayTimeZoneId"></span></div>
