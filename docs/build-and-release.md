@@ -10,6 +10,7 @@ Both scripts:
 - build and publish the app as self-contained
 - package the app, agent, docs, and sample configs
 - generate an archive and checksum
+- emit schema metadata (`requiredSchemaVersion`) for updater compatibility checks
 
 ---
 
@@ -65,6 +66,22 @@ The release script produces versioned output under:
 Primary release archive example:
 
 `PingMonitor-V0.1.0-win-x64.zip`
+
+### Required schema metadata (release-critical)
+
+Release builds enforce schema metadata consistency for updater safety:
+
+- `scripts/build.ps1` reads `StartupGate.RequiredSchemaVersion` from the **published** `appsettings.json`.
+- The release build fails if `StartupGate.RequiredSchemaVersion` is missing, null, non-numeric, or `< 1`.
+- `manifest.json` must include `requiredSchemaVersion` as an integer `>= 1`.
+- After writing `manifest.json`, the build validates:
+  - `version` matches the requested release version
+  - `requiredSchemaVersion` exists and is a valid integer `>= 1`
+  - `packageFileName` matches the generated zip name
+
+If any validation fails, release packaging stops with an error.
+
+When a release introduces a schema change, increment `StartupGate.RequiredSchemaVersion` before building the release package.
 
 ---
 

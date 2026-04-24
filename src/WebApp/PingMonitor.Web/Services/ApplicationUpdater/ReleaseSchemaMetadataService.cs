@@ -114,6 +114,12 @@ internal sealed class ReleaseSchemaMetadataService : IReleaseSchemaMetadataServi
                 return null;
             }
 
+            if (parsed < 1)
+            {
+                _logger.LogWarning("Release {ReleaseTag} manifest contains out-of-range requiredSchemaVersion {RequiredSchemaVersion}.", selectedRelease.TagName, parsed);
+                return null;
+            }
+
             return parsed;
         }
         catch (Exception ex)
