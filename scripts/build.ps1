@@ -27,6 +27,69 @@ function Fail-Build {
     exit 1
 }
 
+function Resolve-RequiredSchemaVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [psobject]$SettingsObject,
+        [Parameter(Mandatory = $true)]
+        [string]$SourcePath
+    )
+
+    if (-not ($SettingsObject.PSObject.Properties.Name -contains 'StartupGate') -or
+        $null -eq $SettingsObject.StartupGate) {
+        Fail-Build "Required schema version metadata missing: StartupGate section was not found in '$SourcePath'."
+    }
+
+    if (-not ($SettingsObject.StartupGate.PSObject.Properties.Name -contains 'RequiredSchemaVersion')) {
+        Fail-Build "Required schema version metadata missing: StartupGate.RequiredSchemaVersion was not found in '$SourcePath'."
+    }
+
+    $rawRequiredSchemaVersion = $SettingsObject.StartupGate.RequiredSchemaVersion
+    if ($null -eq $rawRequiredSchemaVersion) {
+        Fail-Build "Required schema version metadata is null in '$SourcePath' (StartupGate.RequiredSchemaVersion)."
+    }
+
+    $parsedRequiredSchemaVersion = 0
+    if (-not [int]::TryParse($rawRequiredSchemaVersion.ToString(), [ref]$parsedRequiredSchemaVersion)) {
+        Fail-Build "Required schema version metadata is invalid in '$SourcePath' (StartupGate.RequiredSchemaVersion='$rawRequiredSchemaVersion'). Expected integer >= 1."
+    }
+
+    if ($parsedRequiredSchemaVersion -lt 1) {
+        Fail-Build "Required schema version metadata is invalid in '$SourcePath' (StartupGate.RequiredSchemaVersion=$parsedRequiredSchemaVersion). Expected integer >= 1."
+    }
+
+    return $parsedRequiredSchemaVersion
+}
+
+function Resolve-ManifestRequiredSchemaVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [psobject]$ManifestObject,
+        [Parameter(Mandatory = $true)]
+        [string]$ManifestSourcePath
+    )
+
+    if (-not ($ManifestObject.PSObject.Properties.Name -contains 'requiredSchemaVersion')) {
+        Fail-Build "manifest.json validation failed: requiredSchemaVersion was not found in '$ManifestSourcePath'."
+    }
+
+    $rawRequiredSchemaVersion = $ManifestObject.requiredSchemaVersion
+    if ($null -eq $rawRequiredSchemaVersion) {
+        Fail-Build "manifest.json validation failed: requiredSchemaVersion is null in '$ManifestSourcePath'."
+    }
+
+    $parsedRequiredSchemaVersion = 0
+    if (-not [int]::TryParse($rawRequiredSchemaVersion.ToString(), [ref]$parsedRequiredSchemaVersion)) {
+        Fail-Build "manifest.json validation failed: requiredSchemaVersion value '$rawRequiredSchemaVersion' is invalid. Expected integer >= 1."
+    }
+
+    if ($parsedRequiredSchemaVersion -lt 1) {
+        Fail-Build "manifest.json validation failed: requiredSchemaVersion value '$parsedRequiredSchemaVersion' is invalid. Expected integer >= 1."
+    }
+
+    return $parsedRequiredSchemaVersion
+}
+
 function Invoke-External {
     param(
         [Parameter(Mandatory = $true)]
@@ -227,10 +290,8 @@ if (-not $injectedSettings.ApplicationMetadata -or $injectedSettings.Application
     Fail-Build 'Version injection failed. ApplicationMetadata.Version was not updated as expected.'
 }
 
-$requiredSchemaVersion = $injectedSettings.StartupGate.RequiredSchemaVersion
-if ($null -eq $requiredSchemaVersion -or [int]$requiredSchemaVersion -lt 1) {
-    Fail-Build "Required schema version was missing or invalid in appsettings.json StartupGate.RequiredSchemaVersion."
-}
+$requiredSchemaVersion = Resolve-RequiredSchemaVersion -SettingsObject $injectedSettings -SourcePath $appSettingsPath
+Write-Info "Resolved required schema version: $requiredSchemaVersion"
 
 if ((Get-Content -LiteralPath $appSettingsPath -Raw) -match 'Internal dev build') {
     Fail-Build "Version injection verification failed. 'Internal dev build' label is still present in appsettings.json."
@@ -264,6 +325,20 @@ $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -E
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     Fail-Build "manifest.json was not created at '$manifestPath'."
 }
+
+$manifestFromDisk = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+if ($manifestFromDisk.version -ne $Version) {
+    Fail-Build "manifest.json validation failed. version '$($manifestFromDisk.version)' did not match requested release version '$Version'."
+}
+
+$validatedManifestSchemaVersion = Resolve-ManifestRequiredSchemaVersion -ManifestObject $manifestFromDisk -ManifestSourcePath $manifestPath
+
+$expectedPackageFileName = Split-Path -Leaf $zipPath
+if ($manifestFromDisk.packageFileName -ne $expectedPackageFileName) {
+    Fail-Build "manifest.json validation failed. packageFileName '$($manifestFromDisk.packageFileName)' did not match generated archive '$expectedPackageFileName'."
+}
+
+Write-Info "Validated manifest required schema version: $validatedManifestSchemaVersion"
 
 if (-not (Test-Path -LiteralPath $appStagingPath -PathType Container)) {
     Fail-Build "Staging app directory missing at '$appStagingPath'."

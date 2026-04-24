@@ -72,6 +72,64 @@ public sealed class ReleaseSchemaMetadataServiceTests
         Assert.Null(enriched[0].RequiredSchemaVersion);
     }
 
+    [Fact]
+    public async Task PopulateRequiredSchemaVersionsAsync_LeavesSchemaVersionNull_WhenManifestSchemaVersionIsZero()
+    {
+        var zipBytes = BuildZipWithManifest("""{"requiredSchemaVersion":0}""");
+        var service = BuildService(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(zipBytes)
+        });
+
+        var releases = new[]
+        {
+            new GitHubReleaseSummary
+            {
+                TagName = "V1.2.3",
+                Assets = new[]
+                {
+                    new GitHubReleaseAssetSummary
+                    {
+                        Name = "PingMonitor-V1.2.3-win-x64.zip",
+                        BrowserDownloadUrl = "https://example.test/download.zip"
+                    }
+                }
+            }
+        };
+
+        var enriched = await service.PopulateRequiredSchemaVersionsAsync(releases, CancellationToken.None);
+        Assert.Null(enriched[0].RequiredSchemaVersion);
+    }
+
+    [Fact]
+    public async Task PopulateRequiredSchemaVersionsAsync_LeavesSchemaVersionNull_WhenManifestSchemaVersionIsNegative()
+    {
+        var zipBytes = BuildZipWithManifest("""{"requiredSchemaVersion":-2}""");
+        var service = BuildService(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(zipBytes)
+        });
+
+        var releases = new[]
+        {
+            new GitHubReleaseSummary
+            {
+                TagName = "V1.2.3",
+                Assets = new[]
+                {
+                    new GitHubReleaseAssetSummary
+                    {
+                        Name = "PingMonitor-V1.2.3-win-x64.zip",
+                        BrowserDownloadUrl = "https://example.test/download.zip"
+                    }
+                }
+            }
+        };
+
+        var enriched = await service.PopulateRequiredSchemaVersionsAsync(releases, CancellationToken.None);
+        Assert.Null(enriched[0].RequiredSchemaVersion);
+    }
+
     private static ReleaseSchemaMetadataService BuildService(HttpResponseMessage response)
     {
         var options = Microsoft.Extensions.Options.Options.Create(new ApplicationUpdaterOptions
