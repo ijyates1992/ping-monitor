@@ -10,15 +10,18 @@ internal sealed class AgentHeartbeatService : IHeartbeatService
     private readonly PingMonitorDbContext _dbContext;
     private readonly IAgentConfigurationService _configurationService;
     private readonly IEventLogService _eventLogService;
+    private readonly IAgentOutdatedVersionWarningService _outdatedVersionWarningService;
 
     public AgentHeartbeatService(
         PingMonitorDbContext dbContext,
         IAgentConfigurationService configurationService,
-        IEventLogService eventLogService)
+        IEventLogService eventLogService,
+        IAgentOutdatedVersionWarningService outdatedVersionWarningService)
     {
         _dbContext = dbContext;
         _configurationService = configurationService;
         _eventLogService = eventLogService;
+        _outdatedVersionWarningService = outdatedVersionWarningService;
     }
 
     public async Task<AgentHeartbeatResponse> ProcessHeartbeatAsync(Agent agent, AgentHeartbeatRequest request, CancellationToken cancellationToken)
@@ -40,6 +43,8 @@ internal sealed class AgentHeartbeatService : IHeartbeatService
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _outdatedVersionWarningService.TryWriteWarningAsync(agent, request.AgentVersion, now, cancellationToken);
 
         if (!wasOnline)
         {

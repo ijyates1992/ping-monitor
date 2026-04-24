@@ -166,6 +166,8 @@ builder.Services.AddScoped<IResultIngestionService, ResultIngestionService>();
 builder.Services.AddSingleton<IngestRateTracker>();
 builder.Services.AddSingleton<IBufferedResultIngestionService, BufferedResultIngestionService>();
 builder.Services.AddScoped<IHeartbeatService, AgentHeartbeatService>();
+builder.Services.AddScoped<IAgentOutdatedVersionWarningService, AgentOutdatedVersionWarningService>();
+builder.Services.AddScoped<IAgentOutdatedWarningRegistry, AgentOutdatedWarningRegistry>();
 builder.Services.AddScoped<IStateEvaluationService, StateEvaluationService>();
 builder.Services.AddSingleton<IAssignmentTopologyCache, AssignmentTopologyCache>();
 builder.Services.AddSingleton<IAssignmentCurrentStateCache, AssignmentCurrentStateCache>();

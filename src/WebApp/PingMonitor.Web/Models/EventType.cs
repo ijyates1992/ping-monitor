@@ -10,6 +10,7 @@ public static class EventType
     public const string AgentBecameStale = "agent_became_stale";
     public const string AgentBecameOffline = "agent_became_offline";
     public const string AgentConfigFetched = "agent_config_fetched";
+    public const string AgentOutdated = "agent_outdated";
     public const string SecuritySettingsUpdated = "security_settings_updated";
     public const string SecurityManualIpBlockAdded = "security_manual_ip_block_added";
     public const string SecurityIpBlockRemoved = "security_ip_block_removed";
