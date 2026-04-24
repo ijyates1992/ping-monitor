@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PingMonitor.Web.Support;
 
 namespace PingMonitor.Web.Services.DatabaseStatus;
 
@@ -102,7 +103,7 @@ internal sealed class DatabaseMaintenanceProgressTracker : IDatabaseMaintenanceP
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Failed to read DATABASE maintenance progress snapshot {Path}.", historyPath);
+            _logger.LogWarning(exception, "Failed to read DATABASE maintenance progress snapshot {Path}.", LogValueSanitizer.ForLog(historyPath));
             return null;
         }
     }

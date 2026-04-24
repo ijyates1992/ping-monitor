@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Models.Identity;
+using PingMonitor.Web.Support;
 using EndpointModel = PingMonitor.Web.Models.Endpoint;
 
 namespace PingMonitor.Web.Services.Backups;
@@ -55,7 +56,7 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
         _logger.LogInformation(
             "Starting configuration restore in {RestoreMode} mode for {FileId}. Sections: {Sections}.",
             restoreMode,
-            request.FileId,
+            LogValueSanitizer.ForLog(request.FileId),
             string.Join(",", selectedSections));
 
         var sectionResults = new List<RestoreSectionResult>();
@@ -68,7 +69,7 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
         {
             _logger.LogInformation(
                 "Destructive replace restore confirmed for {FileId}. Sections: {Sections}.",
-                request.FileId,
+                LogValueSanitizer.ForLog(request.FileId),
                 string.Join(",", selectedSections));
 
             await ApplyReplaceDeletesAsync(selectedSections, deletedCounts, cancellationToken);

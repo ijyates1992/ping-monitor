@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Support;
 using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Services.EventLogs;
 
@@ -226,9 +227,9 @@ internal sealed class SecurityOperatorActionService : ISecurityOperatorActionSer
 
         _logger.LogWarning(
             "Manual IP unblock rejected. SecurityIpBlockId={SecurityIpBlockId} Reason={FailureReason} OperatorUserId={OperatorUserId}",
-            securityIpBlockId,
-            failureReason,
-            string.IsNullOrWhiteSpace(operatorUserId) ? "n/a" : operatorUserId.Trim());
+            LogValueSanitizer.ForLog(securityIpBlockId),
+            LogValueSanitizer.ForLog(failureReason),
+            string.IsNullOrWhiteSpace(operatorUserId) ? "n/a" : LogValueSanitizer.ForLog(operatorUserId.Trim()));
     }
 
     private async Task WriteUnlockAuditAsync(
@@ -258,9 +259,9 @@ internal sealed class SecurityOperatorActionService : ISecurityOperatorActionSer
 
         _logger.LogWarning(
             "Manual user unlock rejected. UserId={UserId} UserName={UserName} Reason={FailureReason} OperatorUserId={OperatorUserId}",
-            userId,
-            string.IsNullOrWhiteSpace(userName) ? "n/a" : userName,
-            failureReason,
-            string.IsNullOrWhiteSpace(operatorUserId) ? "n/a" : operatorUserId.Trim());
+            LogValueSanitizer.ForLog(userId),
+            string.IsNullOrWhiteSpace(userName) ? "n/a" : LogValueSanitizer.ForLog(userName),
+            LogValueSanitizer.ForLog(failureReason),
+            string.IsNullOrWhiteSpace(operatorUserId) ? "n/a" : LogValueSanitizer.ForLog(operatorUserId.Trim()));
     }
 }

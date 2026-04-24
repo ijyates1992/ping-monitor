@@ -8,6 +8,7 @@ namespace PingMonitor.Web.Controllers;
 
 [ApiController]
 [AllowAnonymous]
+[IgnoreAntiforgeryToken]
 [Route("api/v1/agent/heartbeat")]
 public sealed class AgentHeartbeatController : ControllerBase
 {

@@ -12,6 +12,7 @@ using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.StartupGate;
+using PingMonitor.Web.Support;
 
 namespace PingMonitor.Web.Services.DatabaseStatus;
 
@@ -453,10 +454,10 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         {
             _logger.LogWarning(
                 "Database backup restore rejected before execution. FileId: {FileId}, FileName: {FileName}, ValidationMessage: {ValidationMessage}, RequestedBy: {RequestedBy}",
-                request.FileId,
-                backupFileInfo.Name,
-                validationMessage,
-                request.RequestedBy);
+                LogValueSanitizer.ForLog(request.FileId),
+                LogValueSanitizer.ForLog(backupFileInfo.Name),
+                LogValueSanitizer.ForLog(validationMessage),
+                LogValueSanitizer.ForLog(request.RequestedBy));
 
             return new DatabaseBackupRestoreResult
             {
@@ -471,11 +472,11 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
         _logger.LogInformation(
             "Database backup restore started. FileId: {FileId}, FileName: {FileName}, BackupMode: {BackupMode}, FileSizeBytes: {FileSizeBytes}, RequestedBy: {RequestedBy}",
-            request.FileId,
-            backupFileInfo.Name,
+            LogValueSanitizer.ForLog(request.FileId),
+            LogValueSanitizer.ForLog(backupFileInfo.Name),
             backupDescriptor.Mode,
             backupFileInfo.Length,
-            request.RequestedBy);
+            LogValueSanitizer.ForLog(request.RequestedBy));
 
         _startupGateDiagnosticsLogger.Write(
             "database-restore.pre-restore-backup.start",
@@ -496,10 +497,10 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
         {
             _logger.LogWarning(
                 "Database backup restore aborted because pre-restore backup failed. FileId: {FileId}, FileName: {FileName}, PreRestoreBackupMessage: {PreRestoreBackupMessage}, RequestedBy: {RequestedBy}",
-                request.FileId,
-                backupFileInfo.Name,
-                preRestoreBackup.Message,
-                request.RequestedBy);
+                LogValueSanitizer.ForLog(request.FileId),
+                LogValueSanitizer.ForLog(backupFileInfo.Name),
+                LogValueSanitizer.ForLog(preRestoreBackup.Message),
+                LogValueSanitizer.ForLog(request.RequestedBy));
 
             _progressTracker.CompleteFailure(
                 request.OperationId ?? string.Empty,
@@ -960,13 +961,13 @@ internal sealed class DatabaseMaintenanceService : IDatabaseMaintenanceService
 
         _logger.LogWarning(
             "Database backup restore failed before completion. FileId: {FileId}, FileName: {FileName}, BackupMode: {BackupMode}, PreRestoreBackupCreated: {PreRestoreBackupCreated}, PreRestoreBackupFileName: {PreRestoreBackupFileName}, RequestedBy: {RequestedBy}, Message: {Message}",
-            request.FileId,
-            backupFileInfo.Name,
+            LogValueSanitizer.ForLog(request.FileId),
+            LogValueSanitizer.ForLog(backupFileInfo.Name),
             backupMode,
             preRestoreBackupCreated,
-            preRestoreBackupFileName,
-            request.RequestedBy,
-            message);
+            LogValueSanitizer.ForLog(preRestoreBackupFileName),
+            LogValueSanitizer.ForLog(request.RequestedBy),
+            LogValueSanitizer.ForLog(message));
 
         return Task.FromResult(new DatabaseBackupRestoreResult
         {
