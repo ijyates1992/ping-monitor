@@ -23,7 +23,8 @@
 <div class="stack">
 <section class="card">
     <h1>My profile</h1>
-    <p class="muted">Manage your account details. Notification preferences are on a dedicated page.</p>
+        <p class="muted">Manage your account details. Notification preferences are on a dedicated page.</p>
+        <p class="muted">Operator timestamps in the web UI are rendered using your selected display time zone.</p>
     <div class="button-row">
         <a class="button-secondary" href="/profile/notification-settings">Notification settings</a>
         <a class="button-secondary" href="/status">Back to status</a>
@@ -44,6 +45,25 @@
             <p class="muted">SMTP notifications are delivered only after email verification succeeds.</p>
         }
         <div class="button-row"><button class="button" type="submit">Save account details</button></div>
+    </form>
+</section>
+<section class="card stack">
+    <h2>Display preferences</h2>
+    @if (Model.DisplayPreferencesSaved) { <div class="saved">Display preferences saved.</div> }
+    <form method="post" action="/profile/display-preferences" class="stack">
+        @Html.AntiForgeryToken()
+        <div>
+            <label asp-for="DisplayTimeZoneId">Display time zone</label>
+            <select asp-for="DisplayTimeZoneId" style="width:100%;min-height:44px;border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem;font:inherit;">
+                @foreach (var option in Model.AvailableDisplayTimeZoneOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-error"><span asp-validation-for="DisplayTimeZoneId"></span></div>
+        </div>
+        <p class="muted">UTC is recommended for incident and audit workflows.</p>
+        <div class="button-row"><button class="button" type="submit">Save display preferences</button></div>
     </form>
 </section>
 <section class="card stack" id="change-password">

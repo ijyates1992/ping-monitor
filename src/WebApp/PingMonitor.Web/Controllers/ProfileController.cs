@@ -10,6 +10,7 @@ using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.SmtpNotifications;
 using PingMonitor.Web.Services.Telegram;
+using PingMonitor.Web.Services.Time;
 using PingMonitor.Web.ViewModels.Profile;
 using System.Text;
 using System.Text.Json;
@@ -27,6 +28,7 @@ public sealed class ProfileController : Controller
     private readonly ITelegramBotIdentityResolver _telegramBotIdentityResolver;
     private readonly ISmtpNotificationSender _smtpNotificationSender;
     private readonly IEventLogService _eventLogService;
+    private readonly IUserTimeZoneService _userTimeZoneService;
     private readonly ILogger<ProfileController> _logger;
 
     public ProfileController(
@@ -37,6 +39,7 @@ public sealed class ProfileController : Controller
         ITelegramBotIdentityResolver telegramBotIdentityResolver,
         ISmtpNotificationSender smtpNotificationSender,
         IEventLogService eventLogService,
+        IUserTimeZoneService userTimeZoneService,
         ILogger<ProfileController> logger)
     {
         _userManager = userManager;
@@ -46,6 +49,7 @@ public sealed class ProfileController : Controller
         _telegramBotIdentityResolver = telegramBotIdentityResolver;
         _smtpNotificationSender = smtpNotificationSender;
         _eventLogService = eventLogService;
+        _userTimeZoneService = userTimeZoneService;
         _logger = logger;
     }
 
@@ -65,7 +69,7 @@ public sealed class ProfileController : Controller
 
     [HttpPost("account")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UpdateAccount([FromForm] ProfilePageViewModel model, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateAccount([FromForm] UpdateProfileAccountDetailsInputModel model, CancellationToken cancellationToken)
     {
         var user = await RequireUserAsync();
         if (user is null)
@@ -73,14 +77,11 @@ public sealed class ProfileController : Controller
             return Challenge();
         }
 
-        if (string.IsNullOrWhiteSpace(model.Email) || !MailAddress.TryCreate(model.Email, out _))
-        {
-            ModelState.AddModelError(nameof(ProfilePageViewModel.Email), "A valid email address is required.");
-        }
-
         if (!ModelState.IsValid)
         {
-            return View("Index", await BuildModelAsync(cancellationToken, model));
+            var invalidModel = await BuildModelAsync(cancellationToken);
+            invalidModel.Email = model.Email;
+            return View("Index", invalidModel);
         }
 
         var trimmedEmail = model.Email.Trim();
@@ -92,7 +93,9 @@ public sealed class ProfileController : Controller
                 ModelState.AddModelError(string.Empty, error.Description);
             }
 
-            return View("Index", await BuildModelAsync(cancellationToken, model));
+            var invalidModel = await BuildModelAsync(cancellationToken);
+            invalidModel.Email = model.Email;
+            return View("Index", invalidModel);
         }
 
         user.EmailConfirmed = false;
@@ -105,7 +108,9 @@ public sealed class ProfileController : Controller
                 ModelState.AddModelError(string.Empty, error.Description);
             }
 
-            return View("Index", await BuildModelAsync(cancellationToken, model));
+            var invalidModel = await BuildModelAsync(cancellationToken);
+            invalidModel.Email = model.Email;
+            return View("Index", invalidModel);
         }
 
         var sendResult = await SendVerificationEmailAsync(user, cancellationToken);
@@ -184,6 +189,47 @@ public sealed class ProfileController : Controller
 
         var refreshed = await BuildModelAsync(cancellationToken);
         refreshed.PasswordSaved = true;
+        return View("Index", refreshed);
+    }
+
+    [HttpPost("display-preferences")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateDisplayPreferences([FromForm] UpdateProfileDisplayPreferencesInputModel model, CancellationToken cancellationToken)
+    {
+        var user = await RequireUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        if (!_userTimeZoneService.IsSupportedTimeZoneId(model.DisplayTimeZoneId))
+        {
+            ModelState.AddModelError(nameof(UpdateProfileDisplayPreferencesInputModel.DisplayTimeZoneId), "Select a valid display time zone.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            var invalidModel = await BuildModelAsync(cancellationToken);
+            invalidModel.DisplayTimeZoneId = model.DisplayTimeZoneId;
+            return View("Index", invalidModel);
+        }
+
+        user.DisplayTimeZoneId = model.DisplayTimeZoneId.Trim();
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            foreach (var error in result.Errors)
+            {
+                ModelState.AddModelError(string.Empty, error.Description);
+            }
+
+            var invalidModel = await BuildModelAsync(cancellationToken);
+            invalidModel.DisplayTimeZoneId = model.DisplayTimeZoneId;
+            return View("Index", invalidModel);
+        }
+
+        var refreshed = await BuildModelAsync(cancellationToken);
+        refreshed.DisplayPreferencesSaved = true;
         return View("Index", refreshed);
     }
 
@@ -311,11 +357,26 @@ public sealed class ProfileController : Controller
             ? await _telegramBotIdentityResolver.ResolveBotIdentifierAsync(telegramChannelSettings.TelegramBotToken!, cancellationToken)
             : null;
 
+        var selectableTimeZones = _userTimeZoneService.GetSelectableTimeZoneOptions();
+        var selectedDisplayTimeZoneId = source?.DisplayTimeZoneId ?? user.DisplayTimeZoneId ?? "UTC";
+        if (!_userTimeZoneService.IsSupportedTimeZoneId(selectedDisplayTimeZoneId))
+        {
+            selectedDisplayTimeZoneId = "UTC";
+        }
+
         return new ProfilePageViewModel
         {
             UserName = user.UserName ?? string.Empty,
             Email = source?.Email ?? user.Email ?? string.Empty,
             EmailVerified = user.EmailConfirmed,
+            DisplayTimeZoneId = selectedDisplayTimeZoneId,
+            AvailableDisplayTimeZoneOptions = selectableTimeZones
+                .Select(option => new DisplayTimeZoneOptionViewModel
+                {
+                    Value = option.Value,
+                    Label = option.Label
+                })
+                .ToList(),
             BrowserNotificationsEnabled = source?.BrowserNotificationsEnabled ?? settings.BrowserNotificationsEnabled,
             BrowserNotifyEndpointDown = source?.BrowserNotifyEndpointDown ?? settings.BrowserNotifyEndpointDown,
             BrowserNotifyEndpointRecovered = source?.BrowserNotifyEndpointRecovered ?? settings.BrowserNotifyEndpointRecovered,

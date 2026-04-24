@@ -4,4 +4,5 @@ namespace PingMonitor.Web.Models.Identity;
 
 public sealed class ApplicationUser : IdentityUser
 {
+    public string DisplayTimeZoneId { get; set; } = "UTC";
 }

@@ -82,7 +82,7 @@
             </section>
 
             <section class="card">
-                <p class="muted">Last updated: @Model.UpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+                <p class="muted">Last updated: @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.UpdatedAtUtc)</p>
                 @if (!string.IsNullOrWhiteSpace(Model.UpdatedByUserId)) { <p class="muted">Last updated by: @Model.UpdatedByUserId</p> }
                 <div class="button-row"><button class="button" type="submit">Save notification infrastructure settings</button></div>
             </section>

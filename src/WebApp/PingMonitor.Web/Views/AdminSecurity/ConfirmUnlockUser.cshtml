@@ -21,7 +21,7 @@
     <dl>
         <dt>User name</dt><dd>@Model.UserName</dd>
         <dt>Email</dt><dd>@(string.IsNullOrWhiteSpace(Model.Email) ? "n/a" : Model.Email)</dd>
-        <dt>Lockout ends (UTC)</dt><dd>@Model.LockoutEndUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</dd>
+        <dt>Lockout ends </dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.LockoutEndUtc)</dd>
     </dl>
 
     <form method="post" action="/admin/security/users/@Model.UserId/unlock" style="display:grid;gap:.6rem;">

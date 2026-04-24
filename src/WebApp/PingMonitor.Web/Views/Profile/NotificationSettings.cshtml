@@ -76,7 +76,7 @@
         <div class="switch-row"><input asp-for="QuietHoursSuppressBrowserNotifications" type="checkbox" /><label asp-for="QuietHoursSuppressBrowserNotifications">Suppress browser during quiet hours</label></div>
         <div class="switch-row"><input asp-for="QuietHoursSuppressSmtpNotifications" type="checkbox" /><label asp-for="QuietHoursSuppressSmtpNotifications">Suppress SMTP during quiet hours</label></div>
         <div class="switch-row"><input asp-for="QuietHoursSuppressTelegramNotifications" type="checkbox" /><label asp-for="QuietHoursSuppressTelegramNotifications">Suppress Telegram during quiet hours</label></div>
-        <p class="muted">Settings last updated at @Model.NotificationSettingsUpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'").</p>
+        <p class="muted">Settings last updated at @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.NotificationSettingsUpdatedAtUtc).</p>
         <div class="button-row"><button class="button" type="submit">Save notification preferences</button></div>
     </form>
 </section>
@@ -102,7 +102,7 @@
     @if (Model.TelegramAccountRemoved) { <div class="saved">Telegram account removed.</div> }
     @if (!string.IsNullOrWhiteSpace(Model.ActiveTelegramCode))
     {
-        <p><strong>Active code:</strong> @Model.ActiveTelegramCode (expires @Model.ActiveTelegramCodeExpiresAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"))</p>
+        <p><strong>Active code:</strong> @Model.ActiveTelegramCode (expires @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.ActiveTelegramCodeExpiresAtUtc))</p>
     }
     @if (Model.TelegramLinked)
     {

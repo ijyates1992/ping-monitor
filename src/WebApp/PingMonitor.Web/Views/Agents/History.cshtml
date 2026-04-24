@@ -1,6 +1,6 @@
 @model PingMonitor.Web.ViewModels.EventLogs.EventLogHistoryPageViewModel
 @{
-    static string FormatDate(DateTimeOffset value) => value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
+    static string FormatDateInput(DateTimeOffset? value) => value?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm") ?? string.Empty;
     static string FormatRelated(string? endpointId, string? endpointName, string? agentId, string? agentName)
     {
         var parts = new List<string>();
@@ -77,11 +77,11 @@
                     </div>
                     <div>
                         <label for="dateFromUtc">Date from (UTC)</label>
-                        <input id="dateFromUtc" type="datetime-local" name="dateFromUtc" value="@Model.Filters.DateFromUtc?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")" />
+                        <input id="dateFromUtc" type="datetime-local" name="dateFromUtc" value="@FormatDateInput(Model.Filters.DateFromUtc)" />
                     </div>
                     <div>
                         <label for="dateToUtc">Date to (UTC)</label>
-                        <input id="dateToUtc" type="datetime-local" name="dateToUtc" value="@Model.Filters.DateToUtc?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")" />
+                        <input id="dateToUtc" type="datetime-local" name="dateToUtc" value="@FormatDateInput(Model.Filters.DateToUtc)" />
                     </div>
                     <div>
                         <label for="pageSize">Page size</label>
@@ -124,7 +124,7 @@
                             @foreach (var row in Model.Rows)
                             {
                                 <tr class="@row.SeverityCssClass">
-                                    <td>@FormatDate(row.OccurredAtUtc)</td>
+                                    <td>@await DisplayTimeFormatter.FormatForCurrentUserAsync(row.OccurredAtUtc)</td>
                                     <td>@row.EventType</td>
                                     <td>@row.Category</td>
                                     <td><strong>@row.Severity</strong></td>

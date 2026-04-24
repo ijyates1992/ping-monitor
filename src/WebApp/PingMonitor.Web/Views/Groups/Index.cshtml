@@ -49,7 +49,7 @@
                     <article class="row">
                         <div><strong>@row.Name</strong></div>
                         <div class="muted">@(string.IsNullOrWhiteSpace(row.Description) ? "No description" : row.Description)</div>
-                        <div class="muted">Created @row.CreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</div>
+                        <div class="muted">Created @await DisplayTimeFormatter.FormatForCurrentUserAsync(row.CreatedAtUtc)</div>
                         <div class="button-row"><a class="button-secondary" asp-controller="Groups" asp-action="Edit" asp-route-id="@row.GroupId">Edit group</a></div>
                     </article>
                 }

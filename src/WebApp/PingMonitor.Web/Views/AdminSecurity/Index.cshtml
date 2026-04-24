@@ -109,7 +109,7 @@
                 <tr>
                     <th>User name</th>
                     <th>Email</th>
-                    <th>Lockout ends (UTC)</th>
+                    <th>Lockout ends </th>
                     <th>Action</th>
                 </tr>
                 </thead>
@@ -127,7 +127,7 @@
                         <tr>
                             <td>@user.UserName</td>
                             <td>@(string.IsNullOrWhiteSpace(user.Email) ? "n/a" : user.Email)</td>
-                            <td>@user.LockoutEndUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>@await DisplayTimeFormatter.FormatForCurrentUserAsync(user.LockoutEndUtc)</td>
                             <td>
                                 <a class="button-secondary" href="/admin/security/users/@user.UserId/unlock?includeSuccessfulUsers=@Model.LogFilterForm.IncludeSuccessfulUsers.ToString().ToLowerInvariant()&includeSuccessfulAgents=@Model.LogFilterForm.IncludeSuccessfulAgents.ToString().ToLowerInvariant()">Unlock user</a>
                             </td>
@@ -219,7 +219,7 @@
                     </div>
                 </section>
             </div>
-            <p class="muted">Last updated: @Model.SettingsForm.UpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+            <p class="muted">Last updated: @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.SettingsForm.UpdatedAtUtc)</p>
             <div class="button-row">
                 <button class="button-primary" type="submit">Save security settings</button>
             </div>
@@ -279,8 +279,8 @@
                     <th>Auth type</th>
                     <th>IP address</th>
                     <th>Block type</th>
-                    <th>Blocked at (UTC)</th>
-                    <th>Expires at (UTC)</th>
+                    <th>Blocked at </th>
+                    <th>Expires at </th>
                     <th>Reason</th>
                     <th>Action</th>
                 </tr>
@@ -300,8 +300,8 @@
                             <td>@block.AuthType</td>
                             <td>@block.IpAddress</td>
                             <td>@block.BlockType</td>
-                            <td>@block.BlockedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
-                            <td>@(block.ExpiresAtUtc.HasValue ? block.ExpiresAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") : "n/a")</td>
+                            <td>@await DisplayTimeFormatter.FormatForCurrentUserAsync(block.BlockedAtUtc)</td>
+                            <td>@await DisplayTimeFormatter.FormatForCurrentUserAsync(block.ExpiresAtUtc)</td>
                             <td>@(string.IsNullOrWhiteSpace(block.Reason) ? "n/a" : block.Reason)</td>
                             <td>
                                 <a class="button-secondary" href="/admin/security/ip-blocks/@block.SecurityIpBlockId/remove?LogFilterForm.IncludeSuccessfulUsers=@Model.LogFilterForm.IncludeSuccessfulUsers.ToString().ToLowerInvariant()&LogFilterForm.IncludeSuccessfulAgents=@Model.LogFilterForm.IncludeSuccessfulAgents.ToString().ToLowerInvariant()&LogFilterForm.SearchText=@Model.LogFilterForm.SearchText&LogFilterForm.FromUtc=@Model.LogFilterForm.FromUtc&LogFilterForm.ToUtc=@Model.LogFilterForm.ToUtc">Remove block</a>
@@ -332,7 +332,7 @@
                 <div><strong>Retention days:</strong> @Model.RetentionPreview.RetentionDays</div>
                 <div><strong>Auto-prune enabled:</strong> @(Model.RetentionPreview.AutoPruneEnabled ? "Yes" : "No")</div>
                 <div><strong>Eligible auth log rows:</strong> @Model.RetentionPreview.EligibleAuthLogRows</div>
-                <div style="grid-column: 1 / -1;"><strong>Current cutoff (UTC):</strong> @(Model.RetentionPreview.CutoffUtc.HasValue ? Model.RetentionPreview.CutoffUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") : "n/a")</div>
+                <div style="grid-column: 1 / -1;"><strong>Current cutoff:</strong> @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RetentionPreview.CutoffUtc)</div>
                 @if (Model.RetentionPreview.PruneSkipped && !string.IsNullOrWhiteSpace(Model.RetentionPreview.SkipReason))
                 {
                     <div class="muted" style="grid-column: 1 / -1;">Prune preview skipped: @Model.RetentionPreview.SkipReason</div>
@@ -408,7 +408,7 @@
                 {
                     <div class="log-item @entry.SeverityCssClass">
                         <div class="entry-meta">
-                            <div><strong>@entry.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong></div>
+                            <div><strong>@await DisplayTimeFormatter.FormatForCurrentUserAsync(entry.OccurredAtUtc)</strong></div>
                             <div>Subject: @entry.SubjectIdentifier</div>
                             <div>Source IP: @(string.IsNullOrWhiteSpace(entry.SourceIpAddress) ? "n/a" : entry.SourceIpAddress)</div>
                             <div>Status: <span class="@(entry.VisualSeverity == PingMonitor.Web.Models.LogVisualSeverity.Error ? "severity-text-error" : entry.VisualSeverity == PingMonitor.Web.Models.LogVisualSeverity.Warning ? "severity-text-warning" : "severity-text-info")">@(entry.Success ? "SUCCESS" : "FAILED")</span></div>
@@ -436,7 +436,7 @@
                 {
                     <div class="log-item @entry.SeverityCssClass">
                         <div class="entry-meta">
-                            <div><strong>@entry.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong></div>
+                            <div><strong>@await DisplayTimeFormatter.FormatForCurrentUserAsync(entry.OccurredAtUtc)</strong></div>
                             <div>Subject: @entry.SubjectIdentifier</div>
                             <div>Source IP: @(string.IsNullOrWhiteSpace(entry.SourceIpAddress) ? "n/a" : entry.SourceIpAddress)</div>
                             <div>Status: <span class="@(entry.VisualSeverity == PingMonitor.Web.Models.LogVisualSeverity.Error ? "severity-text-error" : entry.VisualSeverity == PingMonitor.Web.Models.LogVisualSeverity.Warning ? "severity-text-warning" : "severity-text-info")">@(entry.Success ? "SUCCESS" : "FAILED")</span></div>

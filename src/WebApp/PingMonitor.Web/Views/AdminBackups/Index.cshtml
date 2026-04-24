@@ -160,7 +160,7 @@
                         <h3>Selected backup preview</h3>
                         <p><strong>Backup:</strong> @Model.Preview.BackupName</p>
                         <p><strong>File:</strong> @Model.Preview.FileId</p>
-                        <p><strong>Exported:</strong> @Model.Preview.ExportedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+                        <p><strong>Exported:</strong> @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.Preview.ExportedAtUtc)</p>
                         <p><strong>App version:</strong> @Model.Preview.AppVersion</p>
                         <p><strong>Format version:</strong> @Model.Preview.FormatVersion</p>
                         <p><strong>Included sections:</strong> @string.Join(", ", Model.Preview.IncludedSections)</p>
@@ -353,11 +353,11 @@
                                     <td>
                                         @if (backup.ExportedAtUtc.HasValue)
                                         {
-                                            @backup.ExportedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+                                            @await DisplayTimeFormatter.FormatForCurrentUserAsync(backup.ExportedAtUtc.Value)
                                         }
                                         else
                                         {
-                                            @backup.FileCreatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+                                            @await DisplayTimeFormatter.FormatForCurrentUserAsync(backup.FileCreatedAtUtc)
                                         }
                                     </td>
                                     <td>@(backup.AppVersion ?? "(unknown)")</td>

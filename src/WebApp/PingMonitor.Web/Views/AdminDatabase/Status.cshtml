@@ -67,7 +67,7 @@
                         <th>Avg write ms</th>
                         <th>Errors (recent / lifetime)</th>
                         <th>Write rows</th>
-                        <th>Last activity (UTC)</th>
+                        <th>Last activity</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -82,7 +82,7 @@
                             <td>@row.LifetimeAverageWriteDurationMs.ToString("0.##")</td>
                             <td>@row.RecentErrorCount / @row.LifetimeErrorCount</td>
                             <td>@row.LifetimeWriteRows</td>
-                            <td>@(row.LastActivityAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(row.LastActivityAtUtc.Value))</td>
+                            <td>@(row.LastActivityAtUtc is null ? "n/a" : await DisplayTimeFormatter.FormatForCurrentUserAsync(row.LastActivityAtUtc.Value))</td>
                         </tr>
                     }
                     </tbody>
@@ -100,11 +100,11 @@
                 <div class="metric"><div class="label">Queue utilization</div><div class="value">@Model.RuntimeBuffer.QueueUtilizationPercent.ToString("0.##")%</div></div>
                 <div class="metric"><div class="label">Configured max batch size</div><div class="value">@Model.RuntimeBuffer.ConfiguredMaxBatchSize</div></div>
                 <div class="metric"><div class="label">Configured flush interval</div><div class="value">@Model.RuntimeBuffer.ConfiguredFlushIntervalSeconds sec</div></div>
-                <div class="metric"><div class="label">Last flush time (UTC)</div><div class="value">@(Model.RuntimeBuffer.LastFlushCompletedAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.LastFlushCompletedAtUtc.Value))</div></div>
+                <div class="metric"><div class="label">Last flush time</div><div class="value">@(Model.RuntimeBuffer.LastFlushCompletedAtUtc is null ? "n/a" : await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RuntimeBuffer.LastFlushCompletedAtUtc.Value))</div></div>
                 <div class="metric"><div class="label">Last persist duration</div><div class="value">@Model.RuntimeBuffer.LastPersistDurationMs ms</div></div>
                 <div class="metric"><div class="label">Last flush result</div><div class="value">@Model.RuntimeBuffer.LastFlushPersistedCount / @Model.RuntimeBuffer.LastFlushAttemptedCount persisted</div></div>
                 <div class="metric"><div class="label">Assignments enqueued (last flush)</div><div class="value">@Model.RuntimeBuffer.LastEnqueuedAssignmentCount</div></div>
-                <div class="metric"><div class="label">Last assignment enqueue time (UTC)</div><div class="value">@(Model.RuntimeBuffer.LastAssignmentsEnqueuedAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.LastAssignmentsEnqueuedAtUtc.Value))</div></div>
+                <div class="metric"><div class="label">Last assignment enqueue time</div><div class="value">@(Model.RuntimeBuffer.LastAssignmentsEnqueuedAtUtc is null ? "n/a" : await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RuntimeBuffer.LastAssignmentsEnqueuedAtUtc.Value))</div></div>
                 <div class="metric"><div class="label">Dropped-result count</div><div class="value">@Model.RuntimeBuffer.DroppedResultCount</div></div>
                 <div class="metric"><div class="label">Drop rate</div><div class="value">@Model.RuntimeBuffer.BufferDropRatePercent.ToString("0.##")%</div></div>
                 <div class="metric"><div class="label">Flush success rate</div><div class="value">@Model.RuntimeBuffer.FlushSuccessRatePercent.ToString("0.##")%</div></div>
@@ -127,8 +127,8 @@
                 <div class="metric"><div class="label">Coalesced duplicates</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.CoalescedDuplicateCount</div></div>
                 <div class="metric"><div class="label">Processed count</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.ProcessedCount</div></div>
                 <div class="metric"><div class="label">Failed count</div><div class="value">@Model.RuntimeBuffer.AssignmentProcessingQueue.FailedCount</div></div>
-                <div class="metric"><div class="label">Last processed (UTC)</div><div class="value">@(Model.RuntimeBuffer.AssignmentProcessingQueue.LastProcessedAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.AssignmentProcessingQueue.LastProcessedAtUtc.Value))</div></div>
-                <div class="metric"><div class="label">Last failure (UTC)</div><div class="value">@(Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureAtUtc is null ? "n/a" : DisplayFormatting.FormatUtcDateTime(Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureAtUtc.Value))</div></div>
+                <div class="metric"><div class="label">Last processed</div><div class="value">@(Model.RuntimeBuffer.AssignmentProcessingQueue.LastProcessedAtUtc is null ? "n/a" : await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RuntimeBuffer.AssignmentProcessingQueue.LastProcessedAtUtc.Value))</div></div>
+                <div class="metric"><div class="label">Last failure</div><div class="value">@(Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureAtUtc is null ? "n/a" : await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureAtUtc.Value))</div></div>
             </div>
             @if (!string.IsNullOrWhiteSpace(Model.RuntimeBuffer.AssignmentProcessingQueue.LastFailureError))
             {

@@ -257,6 +257,12 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         assignmentStateInterval.HasIndex(x => new { x.AssignmentId, x.StartedAtUtc });
         assignmentStateInterval.HasIndex(x => new { x.AssignmentId, x.EndedAtUtc });
 
+        var applicationUser = modelBuilder.Entity<ApplicationUser>();
+        applicationUser.Property(x => x.DisplayTimeZoneId)
+            .HasMaxLength(128)
+            .IsRequired()
+            .HasDefaultValue("UTC");
+
         var eventLog = modelBuilder.Entity<EventLog>();
         eventLog.ToTable("EventLogs");
         eventLog.HasKey(x => x.EventLogId);
