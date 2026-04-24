@@ -74,6 +74,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         agent.Property(x => x.AgentVersion).HasMaxLength(50);
         agent.Property(x => x.Platform).HasMaxLength(50);
         agent.Property(x => x.MachineName).HasMaxLength(255);
+        agent.Property(x => x.LastUpgradeWarningVersion).HasMaxLength(50);
         agent.Property(x => x.CreatedAtUtc).IsRequired();
         agent.Property(x => x.LastHeartbeatEventLoggedAtUtc);
         agent.Property(x => x.ApiKeyCreatedAtUtc).IsRequired();

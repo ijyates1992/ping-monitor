@@ -16,6 +16,7 @@ public sealed class Agent
     public string? AgentVersion { get; set; }
     public string? Platform { get; set; }
     public string? MachineName { get; set; }
+    public string? LastUpgradeWarningVersion { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset? LastHeartbeatEventLoggedAtUtc { get; set; }
 }

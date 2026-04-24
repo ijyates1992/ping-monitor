@@ -9,31 +9,36 @@ namespace PingMonitor.Web.Tests;
 public sealed class AgentOutdatedVersionWarningServiceTests
 {
     [Fact]
-    public async Task TryWriteWarningAsync_OutdatedAgent_WritesWarningOnce()
+    public async Task TryWriteWarningAsync_MultipleOutdatedAgents_EachLogsOncePerBundledVersion()
     {
-        var registry = new FakeWarningRegistry();
-        var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.1", registry, eventLogService);
-        var agent = BuildAgent();
+        var eventLogService = new RecordingEventLogService();
+        var service = BuildService("V0.1.1", eventLogService);
+        var firstAgent = BuildAgent("agent-1");
+        var secondAgent = BuildAgent("agent-2");
 
-        await service.TryWriteWarningAsync(agent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(firstAgent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(secondAgent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
 
-        var warning = Assert.Single(eventLogService.Writes);
-        Assert.Equal(EventCategory.Agent, warning.Category);
-        Assert.Equal(EventSeverity.Warning, warning.Severity);
-        Assert.Equal(EventType.AgentOutdated, warning.EventType);
-        Assert.Contains("agent version V0.1.0", warning.Message, StringComparison.Ordinal);
-        Assert.Contains("bundled version V0.1.1", warning.Message, StringComparison.Ordinal);
-        Assert.Contains("this version brings a fix for a low risk vulnerability in dotenv", warning.Message, StringComparison.Ordinal);
+        Assert.Equal(2, eventLogService.Writes.Count);
+        Assert.All(eventLogService.Writes, warning =>
+        {
+            Assert.Equal(EventCategory.Agent, warning.Category);
+            Assert.Equal(EventSeverity.Warning, warning.Severity);
+            Assert.Equal(EventType.AgentOutdated, warning.EventType);
+            Assert.Contains("agent version V0.1.0", warning.Message, StringComparison.Ordinal);
+            Assert.Contains("bundled version V0.1.1", warning.Message, StringComparison.Ordinal);
+            Assert.Contains("this version brings a fix for a low risk vulnerability in dotenv", warning.Message, StringComparison.Ordinal);
+        });
+        Assert.Equal("V0.1.1", firstAgent.LastUpgradeWarningVersion);
+        Assert.Equal("V0.1.1", secondAgent.LastUpgradeWarningVersion);
     }
 
     [Fact]
     public async Task TryWriteWarningAsync_RepeatedHeartbeat_DoesNotSpam()
     {
-        var registry = new FakeWarningRegistry();
-        var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.1", registry, eventLogService);
-        var agent = BuildAgent();
+        var eventLogService = new RecordingEventLogService();
+        var service = BuildService("V0.1.1", eventLogService);
+        var agent = BuildAgent("agent-1");
 
         await service.TryWriteWarningAsync(agent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
         await service.TryWriteWarningAsync(agent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
@@ -42,13 +47,29 @@ public sealed class AgentOutdatedVersionWarningServiceTests
     }
 
     [Fact]
+    public async Task TryWriteWarningAsync_BundledVersionBump_LogsAgainForSameAgent()
+    {
+        var eventLogService = new RecordingEventLogService();
+        var firstService = BuildService("V0.1.1", eventLogService);
+        var secondService = BuildService("V0.1.2", eventLogService);
+        var agent = BuildAgent("agent-1");
+
+        await firstService.TryWriteWarningAsync(agent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
+        await secondService.TryWriteWarningAsync(agent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
+
+        Assert.Equal(2, eventLogService.Writes.Count);
+        Assert.Equal("V0.1.2", agent.LastUpgradeWarningVersion);
+        Assert.Contains(eventLogService.Writes, x => x.DetailsJson == "bundledVersion=V0.1.1");
+        Assert.Contains(eventLogService.Writes, x => x.DetailsJson == "bundledVersion=V0.1.2");
+    }
+
+    [Fact]
     public async Task TryWriteWarningAsync_UpToDateAgent_DoesNotWarn()
     {
-        var registry = new FakeWarningRegistry();
-        var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.1", registry, eventLogService);
+        var eventLogService = new RecordingEventLogService();
+        var service = BuildService("V0.1.1", eventLogService);
 
-        await service.TryWriteWarningAsync(BuildAgent(), "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(BuildAgent("agent-1"), "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.Empty(eventLogService.Writes);
     }
@@ -56,32 +77,29 @@ public sealed class AgentOutdatedVersionWarningServiceTests
     [Fact]
     public async Task TryWriteWarningAsync_UnparsableVersion_DoesNotCrash()
     {
-        var registry = new FakeWarningRegistry();
-        var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.1", registry, eventLogService);
+        var eventLogService = new RecordingEventLogService();
+        var service = BuildService("V0.1.1", eventLogService);
 
-        await service.TryWriteWarningAsync(BuildAgent(), "not-a-version", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(BuildAgent("agent-1"), "not-a-version", DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.Empty(eventLogService.Writes);
     }
 
     private static AgentOutdatedVersionWarningService BuildService(
         string bundledVersion,
-        FakeWarningRegistry registry,
         RecordingEventLogService eventLogService)
     {
         return new AgentOutdatedVersionWarningService(
             new StaticAgentTemplateVersionProvider(bundledVersion),
-            registry,
             eventLogService,
             NullLogger<AgentOutdatedVersionWarningService>.Instance);
     }
 
-    private static Agent BuildAgent()
+    private static Agent BuildAgent(string agentId)
     {
         return new Agent
         {
-            AgentId = "agent-1",
+            AgentId = agentId,
             InstanceId = "LOCAL",
             Name = "LOCAL"
         };
@@ -99,47 +117,13 @@ public sealed class AgentOutdatedVersionWarningServiceTests
         public string? GetBundledAgentVersion() => _bundledVersion;
     }
 
-    private sealed class FakeWarningRegistry : IAgentOutdatedWarningRegistry
-    {
-        private readonly HashSet<string> _warnings = [];
-
-        public Task<bool> HasWarningAsync(string agentId, string bundledVersion, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_warnings.Contains(GetKey(agentId, bundledVersion)));
-        }
-
-        public void Record(string agentId, string bundledVersion)
-        {
-            _warnings.Add(GetKey(agentId, bundledVersion));
-        }
-
-        private static string GetKey(string agentId, string bundledVersion) => $"{agentId}|{bundledVersion}";
-    }
-
     private sealed class RecordingEventLogService : IEventLogService
     {
-        private readonly FakeWarningRegistry _registry;
-
-        public RecordingEventLogService(FakeWarningRegistry registry)
-        {
-            _registry = registry;
-        }
-
         public List<EventLogWriteRequest> Writes { get; } = [];
 
         public Task WriteAsync(EventLogWriteRequest request, CancellationToken cancellationToken)
         {
             Writes.Add(request);
-
-            if (request.EventType == EventType.AgentOutdated && !string.IsNullOrWhiteSpace(request.AgentId) && !string.IsNullOrWhiteSpace(request.DetailsJson))
-            {
-                const string prefix = "bundledVersion=";
-                if (request.DetailsJson.StartsWith(prefix, StringComparison.Ordinal))
-                {
-                    _registry.Record(request.AgentId, request.DetailsJson[prefix.Length..]);
-                }
-            }
-
             return Task.CompletedTask;
         }
     }

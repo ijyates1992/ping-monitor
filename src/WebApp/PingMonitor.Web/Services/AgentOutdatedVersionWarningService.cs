@@ -11,18 +11,15 @@ internal sealed class AgentOutdatedVersionWarningService : IAgentOutdatedVersion
     };
 
     private readonly IAgentTemplateVersionProvider _agentTemplateVersionProvider;
-    private readonly IAgentOutdatedWarningRegistry _warningRegistry;
     private readonly IEventLogService _eventLogService;
     private readonly ILogger<AgentOutdatedVersionWarningService> _logger;
 
     public AgentOutdatedVersionWarningService(
         IAgentTemplateVersionProvider agentTemplateVersionProvider,
-        IAgentOutdatedWarningRegistry warningRegistry,
         IEventLogService eventLogService,
         ILogger<AgentOutdatedVersionWarningService> logger)
     {
         _agentTemplateVersionProvider = agentTemplateVersionProvider;
-        _warningRegistry = warningRegistry;
         _eventLogService = eventLogService;
         _logger = logger;
     }
@@ -57,7 +54,7 @@ internal sealed class AgentOutdatedVersionWarningService : IAgentOutdatedVersion
             return;
         }
 
-        if (await _warningRegistry.HasWarningAsync(agent.AgentId, bundledVersionCanonical, cancellationToken))
+        if (string.Equals(agent.LastUpgradeWarningVersion, bundledVersionCanonical, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -79,6 +76,8 @@ internal sealed class AgentOutdatedVersionWarningService : IAgentOutdatedVersion
             Message = message,
             DetailsJson = AgentOutdatedWarningRegistry.BuildDetailsMarker(bundledVersionCanonical)
         }, cancellationToken);
+
+        agent.LastUpgradeWarningVersion = bundledVersionCanonical;
     }
 
     private static bool TryParseVersion(string value, out Version version, out string canonicalVersion)

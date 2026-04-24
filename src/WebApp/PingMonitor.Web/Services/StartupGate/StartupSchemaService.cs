@@ -1155,6 +1155,16 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """,
                 cancellationToken);
         }
+
+        if (!await HasAgentColumnAsync(connection, "LastUpgradeWarningVersion", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `Agents`
+                ADD COLUMN `LastUpgradeWarningVersion` varchar(50) NULL;
+                """,
+                cancellationToken);
+        }
     }
 
     private static async Task EnsureSecuritySettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
