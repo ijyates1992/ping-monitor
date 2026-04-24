@@ -72,7 +72,7 @@
 
             @if (Model.PrunePreview is not null)
             {
-                <p><strong>Preview:</strong> @Model.PrunePreview.Target rows older than <strong>@DisplayFormatting.FormatUtcDateTime(Model.PrunePreview.CutoffUtc)</strong>. Eligible rows: <strong>@Model.PrunePreview.EligibleRowCount</strong>.</p>
+                <p><strong>Preview:</strong> @Model.PrunePreview.Target rows older than <strong>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.PrunePreview.CutoffUtc)</strong>. Eligible rows: <strong>@Model.PrunePreview.EligibleRowCount</strong>.</p>
             }
 
             <form method="post" action="/admin/database/prune/execute" class="form-grid">
@@ -126,13 +126,13 @@
             <h3>DATABASE backup files</h3>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>File</th><th>Created/Exported (UTC)</th><th>Size</th><th>Type</th><th>Source</th><th>Metadata</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>File</th><th>Created/Exported</th><th>Size</th><th>Type</th><th>Source</th><th>Metadata</th><th>Actions</th></tr></thead>
                     <tbody>
                     @foreach (var backup in Model.Backups)
                     {
                         <tr>
                             <td>@backup.FileName</td>
-                            <td>@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc)</td>
+                            <td>@await DisplayTimeFormatter.FormatForCurrentUserAsync(backup.CreatedAtUtc)</td>
                             <td>@DisplayFormatting.FormatBytes(backup.SizeBytes)</td>
                             <td>@backup.BackupModeDisplayName</td>
                             <td>@backup.BackupSource</td>
@@ -158,7 +158,7 @@
                             <option value="">-- Select DATABASE backup --</option>
                             @foreach (var backup in Model.Backups)
                             {
-                                <option value="@backup.FileId">@backup.FileName (@backup.BackupSource, @backup.BackupModeDisplayName, @DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc))</option>
+                                <option value="@backup.FileId">@backup.FileName (@backup.BackupSource, @backup.BackupModeDisplayName, @await DisplayTimeFormatter.FormatForCurrentUserAsync(backup.CreatedAtUtc))</option>
                             }
                         </select>
                     </label>
@@ -180,7 +180,7 @@
                             <option value="">-- Select DATABASE backup --</option>
                             @foreach (var backup in Model.Backups)
                             {
-                                <option value="@backup.FileId">@backup.FileName (@DisplayFormatting.FormatUtcDateTime(backup.CreatedAtUtc))</option>
+                                <option value="@backup.FileId">@backup.FileName (@await DisplayTimeFormatter.FormatForCurrentUserAsync(backup.CreatedAtUtc))</option>
                             }
                         </select>
                     </label>

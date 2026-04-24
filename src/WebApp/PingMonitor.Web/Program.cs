@@ -30,6 +30,7 @@ using PingMonitor.Web.Services.ApplicationMetadata;
 using PingMonitor.Web.Services.ApplicationUpdater;
 using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.Telegram;
+using PingMonitor.Web.Services.Time;
 using PingMonitor.Web.Support;
 using Microsoft.Extensions.Options;
 
@@ -214,6 +215,8 @@ builder.Services.AddScoped<IDatabaseMaintenanceService, DatabaseMaintenanceServi
 builder.Services.AddSingleton<IDatabaseMaintenanceProgressTracker, DatabaseMaintenanceProgressTracker>();
 builder.Services.AddScoped<INotificationSettingsService, NotificationSettingsService>();
 builder.Services.AddScoped<IUserNotificationSettingsService, UserNotificationSettingsService>();
+builder.Services.AddScoped<IUserTimeZoneService, UserTimeZoneService>();
+builder.Services.AddScoped<IDisplayTimeFormatter, DisplayTimeFormatter>();
 builder.Services.AddScoped<INotificationSuppressionService, NotificationSuppressionService>();
 builder.Services.AddScoped<ISmtpNotificationSender, SmtpNotificationSender>();
 builder.Services.AddScoped<IBrowserNotificationQueryService, BrowserNotificationQueryService>();

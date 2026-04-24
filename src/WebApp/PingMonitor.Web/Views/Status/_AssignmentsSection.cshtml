@@ -2,7 +2,6 @@
 @using PingMonitor.Web.Models
 @using PingMonitor.Web.Services.Endpoints
 @{
-    static string FormatDate(DateTimeOffset? value) => value.HasValue ? value.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") : "No checks yet";
     static string FormatDependencies(IReadOnlyList<string> endpointIds, IReadOnlyList<string> endpointNames, string emptyText) => endpointIds.Count == 0
         ? emptyText
         : endpointNames.Count == 0
@@ -76,8 +75,8 @@
                             <div class="row-meta">
                                 <div class="meta-item"><span>Agent / instance</span><div>@row.AgentName <span class="muted">(@row.AgentInstanceId)</span></div></div>
                                 <div class="meta-item"><span>Check type</span><div>@row.CheckType</div></div>
-                                <div class="meta-item"><span>Last check</span><div class="nowrap">@FormatDate(row.LastCheckUtc)</div></div>
-                                <div class="meta-item"><span>Last state change</span><div class="nowrap">@FormatDate(row.LastStateChangeUtc)</div></div>
+                                <div class="meta-item"><span>Last check</span><div class="nowrap">@await DisplayTimeFormatter.FormatForCurrentUserAsync(row.LastCheckUtc, "No checks yet")</div></div>
+                                <div class="meta-item"><span>Last state change</span><div class="nowrap">@await DisplayTimeFormatter.FormatForCurrentUserAsync(row.LastStateChangeUtc, "No checks yet")</div></div>
                                 <div class="meta-item"><span>Current state duration</span><div>@row.CurrentStateDurationDisplay</div></div>
                                 <div class="meta-item"><span>Consecutive failures</span><div>@row.ConsecutiveFailureCount</div></div>
                                 <div class="meta-item"><span>Consecutive successes</span><div>@row.ConsecutiveSuccessCount</div></div>

@@ -10,6 +10,8 @@ public sealed class ProfilePageViewModel
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
     public bool EmailVerified { get; set; }
+    public string DisplayTimeZoneId { get; set; } = "UTC";
+    public IReadOnlyList<string> AvailableDisplayTimeZoneIds { get; set; } = Array.Empty<string>();
 
     [DataType(DataType.Password)]
     public string CurrentPassword { get; set; } = string.Empty;
@@ -45,6 +47,7 @@ public sealed class ProfilePageViewModel
     public bool AccountSaved { get; set; }
     public bool PasswordSaved { get; set; }
     public bool NotificationsSaved { get; set; }
+    public bool DisplayPreferencesSaved { get; set; }
 
     public string? ActiveTelegramCode { get; set; }
     public DateTimeOffset? ActiveTelegramCodeExpiresAtUtc { get; set; }

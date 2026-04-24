@@ -64,7 +64,7 @@
                         <div class="field-error"><span asp-validation-for="DefaultRecoveryThreshold"></span></div>
                     </div>
                 </div>
-                <p class="muted">Last updated: @Model.UpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+                <p class="muted">Last updated: @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.UpdatedAtUtc)</p>
             </section>
 
             <div class="button-row"><button class="button" type="submit">Save default endpoint values</button></div>

@@ -255,7 +255,7 @@
                 }
                 <dl style="margin-top:1rem;">
                     <div><dt>Release title</dt><dd>@(string.IsNullOrWhiteSpace(Model.LatestReleaseName) ? "(not provided)" : Model.LatestReleaseName)</dd></div>
-                    <div><dt>Published</dt><dd>@(Model.LatestPublishedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Unknown")</dd></div>
+                    <div><dt>Published</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.LatestPublishedAtUtc, "Unknown")</dd></div>
                     <div><dt>Semantic comparison performed</dt><dd>@(Model.SemanticComparisonPerformed ? "Yes" : "No")</dd></div>
                     @if (!string.IsNullOrWhiteSpace(Model.LatestReleaseUrl))
                     {
@@ -280,7 +280,7 @@
                 <div class="summary-grid">
                     <div><strong>Tag/version:</strong> @Model.SelectedRelease.TagName</div>
                     <div><strong>Title:</strong> @(string.IsNullOrWhiteSpace(Model.SelectedRelease.Name) ? "(not provided)" : Model.SelectedRelease.Name)</div>
-                    <div><strong>Published:</strong> @(Model.SelectedRelease.PublishedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Unknown")</div>
+                    <div><strong>Published:</strong> @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.SelectedRelease.PublishedAtUtc, "Unknown")</div>
                     <div><strong>Type:</strong> @(Model.SelectedRelease.IsPrerelease ? "Preview/prerelease" : "Stable")</div>
                     <div><strong>Required schema version (release metadata):</strong> @(Model.SelectedRelease.RequiredSchemaVersion?.ToString() ?? "(not declared)")</div>
                     <div><strong>Current database schema version:</strong> @(Model.CurrentDatabaseSchemaVersion?.ToString() ?? "(unknown)")</div>
@@ -320,8 +320,8 @@
                 <details @(stageHasError ? "open" : null)>
                     <summary>@(stageHasError ? "Hide details" : "Show details")</summary>
                     <dl style="margin-top:1rem;">
-                        <div><dt>Last updated</dt><dd>@Model.StagedUpdate.LastUpdatedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
-                        <div><dt>Last stage attempt</dt><dd>@(Model.StagedUpdate.LastStageAttemptAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                        <div><dt>Last updated</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.StagedUpdate.LastUpdatedAtUtc)</dd></div>
+                        <div><dt>Last stage attempt</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.StagedUpdate.LastStageAttemptAtUtc, "(none)")</dd></div>
                         <div><dt>Latest applicable release tag</dt><dd>@(Model.StagedUpdate.LatestApplicableReleaseTag ?? "(unknown)")</dd></div>
                         <div><dt>Release title</dt><dd>@(Model.StagedUpdate.ReleaseTitle ?? "(none)")</dd></div>
                         <div><dt>Selected archive</dt><dd>@(Model.StagedUpdate.SelectedAssetName ?? "(none)")</dd></div>
@@ -332,7 +332,7 @@
                         <div><dt>Checksum file path</dt><dd>@(Model.StagedUpdate.StagedChecksumPath ?? "(none)")</dd></div>
                         <div><dt>Expected SHA256</dt><dd>@(Model.StagedUpdate.ExpectedSha256 ?? "(none)")</dd></div>
                         <div><dt>Actual SHA256</dt><dd>@(Model.StagedUpdate.ActualSha256 ?? "(none)")</dd></div>
-                        <div><dt>Staged at</dt><dd>@(Model.StagedUpdate.StagedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(not staged)")</dd></div>
+                        <div><dt>Staged at</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.StagedUpdate.StagedAtUtc, "(not staged)")</dd></div>
                         <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
                     </dl>
                 </details>
@@ -357,9 +357,9 @@
                     <summary>@(applyHasError ? "Hide details" : "Show details")</summary>
                     <dl style="margin-top:1rem;">
                         <div><dt>Apply message</dt><dd>@(Model.StagedUpdate.ApplyOperationMessage ?? "(none)")</dd></div>
-                        <div><dt>Requested at</dt><dd>@(Model.StagedUpdate.ApplyRequestedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                        <div><dt>Handoff started at</dt><dd>@(Model.StagedUpdate.ApplyHandoffStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                        <div><dt>Apply completed at</dt><dd>@(Model.StagedUpdate.ApplyCompletedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                        <div><dt>Requested at</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.StagedUpdate.ApplyRequestedAtUtc, "(none)")</dd></div>
+                        <div><dt>Handoff started at</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.StagedUpdate.ApplyHandoffStartedAtUtc, "(none)")</dd></div>
+                        <div><dt>Apply completed at</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.StagedUpdate.ApplyCompletedAtUtc, "(none)")</dd></div>
                         <div><dt>Bootstrapper path</dt><dd>@(Model.StagedUpdate.BootstrapperScriptPath ?? "(none)")</dd></div>
                         <div><dt>Bootstrapper source</dt><dd>@(Model.StagedUpdate.BootstrapperSource ?? "(none)")</dd></div>
                         <div><dt>Bootstrapper source details</dt><dd>@(Model.StagedUpdate.BootstrapperSelectionMessage ?? "(none)")</dd></div>
@@ -373,7 +373,7 @@
                         <div><dt>External updater status path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterStatusPath ?? "(none)")</dd></div>
                         <div><dt>External updater log path</dt><dd>@(Model.StagedUpdate.ExternalUpdaterLogPath ?? "(none)")</dd></div>
                         <div><dt>Bootstrapper process id</dt><dd>@(Model.StagedUpdate.BootstrapperProcessId?.ToString() ?? "(none)")</dd></div>
-                        <div><dt>Bootstrapper started at</dt><dd>@(Model.StagedUpdate.BootstrapperStartedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                        <div><dt>Bootstrapper started at</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.StagedUpdate.BootstrapperStartedAtUtc, "(none)")</dd></div>
                         <div><dt>Failure message</dt><dd>@(Model.StagedUpdate.FailureMessage ?? "(none)")</dd></div>
                     </dl>
                 </details>
@@ -385,7 +385,7 @@
             <div class="summary-grid">
                 <div><strong>Automatic checks:</strong> @(Model.EnableAutomaticUpdateChecks ? "Enabled" : "Disabled")</div>
                 <div><strong>Check interval:</strong> @Model.AutomaticUpdateCheckIntervalMinutes minute(s)</div>
-                <div><strong>Last automatic check:</strong> @(Model.RuntimeState?.LastAutomaticCheckAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</div>
+                <div><strong>Last automatic check:</strong> @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RuntimeState?.LastAutomaticCheckAtUtc, "(none)")</div>
                 @if (!string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutomaticCheckFailureMessage) || !string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutoStageFailureMessage))
                 {
                     <div><strong>Failure state:</strong> @(Model.RuntimeState?.LastAutomaticCheckFailureMessage ?? Model.RuntimeState?.LastAutoStageFailureMessage)</div>
@@ -394,8 +394,8 @@
             <details @(runtimeHasError ? "open" : null)>
                 <summary>@(runtimeHasError ? "Hide details" : "Show details")</summary>
                 <dl style="margin-top:1rem;">
-                    <div><dt>Last successful automatic check</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckSucceededAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
-                    <div><dt>Last failed automatic check</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckFailedAtUtc?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "(none)")</dd></div>
+                    <div><dt>Last successful automatic check</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RuntimeState?.LastAutomaticCheckSucceededAtUtc, "(none)")</dd></div>
+                    <div><dt>Last failed automatic check</dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RuntimeState?.LastAutomaticCheckFailedAtUtc, "(none)")</dd></div>
                     <div><dt>Last check failure message</dt><dd>@(Model.RuntimeState?.LastAutomaticCheckFailureMessage ?? "(none)")</dd></div>
                     <div><dt>Last auto-detected release</dt><dd>@(Model.RuntimeState?.LastDetectedApplicableReleaseTag ?? "(none)")</dd></div>
                     <div><dt>Last auto-staged release</dt><dd>@(Model.RuntimeState?.LastAutoStagedReleaseTag ?? "(none)")</dd></div>

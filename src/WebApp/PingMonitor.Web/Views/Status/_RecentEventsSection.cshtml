@@ -48,6 +48,7 @@
         <div class="recent-events">
             @foreach (var recentEvent in Model.RecentEvents)
             {
+                var occurredAtDisplay = await DisplayTimeFormatter.FormatForCurrentUserAsync(recentEvent.OccurredAtUtc);
                 var destination = GetRecentEventDestination(recentEvent);
                 var severityClassName = recentEvent.SeverityCssClass;
                 var rowClassName = destination is null
@@ -57,7 +58,7 @@
                 if (destination is null)
                 {
                     <div class="@rowClassName">
-                        <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
+                        <div><strong>@occurredAtDisplay</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
                         <div>@recentEvent.Message</div>
                         <div class="muted">
                             @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))
@@ -73,8 +74,8 @@
                 }
                 else
                 {
-                    <a class="@rowClassName" href="@destination" aria-label="Open details for @recentEvent.EventType event at @recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")">
-                        <div><strong>@recentEvent.OccurredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
+                    <a class="@rowClassName" href="@destination" aria-label="Open details for @recentEvent.EventType event at @occurredAtDisplay">
+                        <div><strong>@occurredAtDisplay</strong> · @recentEvent.EventType (@recentEvent.Category)</div>
                         <div>@recentEvent.Message</div>
                         <div class="muted">
                             @if (!string.IsNullOrWhiteSpace(recentEvent.EndpointId))

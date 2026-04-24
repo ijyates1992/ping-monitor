@@ -192,6 +192,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "ReceivedAtUtc",
         "BatchId"
     ];
+    private static readonly string[] RequiredAspNetUsersColumns =
+    [
+        "Id",
+        "DisplayTimeZoneId"
+    ];
 
     private readonly IDbContextFactory<PingMonitorDbContext> _dbContextFactory;
     private readonly IStartupDatabaseConfigurationStore _configurationStore;
@@ -300,6 +305,14 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"AssignmentMetrics24h table is missing required columns: {string.Join(", ", missingAssignmentMetrics24hColumns)}.");
+            return status;
+        }
+
+        var missingAspNetUsersColumns = await GetMissingAspNetUsersColumnsAsync(connection, cancellationToken);
+        if (missingAspNetUsersColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AspNetUsers table is missing required columns: {string.Join(", ", missingAspNetUsersColumns)}.");
             return status;
         }
 
@@ -758,6 +771,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
+        await EnsureAspNetUsersColumnsAsync(dbContext, cancellationToken);
         await EnsureCheckResultsNormalizedSchemaAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
@@ -1020,6 +1034,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             .ToArray();
     }
 
+    private static async Task<string[]> GetMissingAspNetUsersColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'AspNetUsers';
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return RequiredAspNetUsersColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
+    }
+
     private static async Task EnsureEndpointDependenciesColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         await using var connection = dbContext.Database.GetDbConnection();
@@ -1152,6 +1188,25 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """
                 ALTER TABLE `Agents`
                 ADD COLUMN `LastHeartbeatEventLoggedAtUtc` datetime(6) NULL;
+                """,
+                cancellationToken);
+        }
+    }
+
+    private static async Task EnsureAspNetUsersColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await HasAspNetUsersColumnAsync(connection, "DisplayTimeZoneId", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `AspNetUsers`
+                ADD COLUMN `DisplayTimeZoneId` varchar(128) NOT NULL DEFAULT 'UTC';
                 """,
                 cancellationToken);
         }
@@ -1901,6 +1956,24 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             FROM information_schema.columns
             WHERE table_schema = DATABASE()
               AND table_name = 'Agents'
+              AND column_name = @columnName;
+            """;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@columnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+    private static async Task<bool> HasAspNetUsersColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'AspNetUsers'
               AND column_name = @columnName;
             """;
         var parameter = command.CreateParameter();

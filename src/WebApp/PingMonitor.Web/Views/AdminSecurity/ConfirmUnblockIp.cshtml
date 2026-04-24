@@ -22,8 +22,8 @@
         <dt>Auth type</dt><dd>@Model.AuthType</dd>
         <dt>IP address</dt><dd>@Model.IpAddress</dd>
         <dt>Block type</dt><dd>@Model.BlockType</dd>
-        <dt>Blocked at (UTC)</dt><dd>@Model.BlockedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</dd>
-        <dt>Expires at (UTC)</dt><dd>@(Model.ExpiresAtUtc.HasValue ? Model.ExpiresAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") : "n/a")</dd>
+        <dt>Blocked at </dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.BlockedAtUtc)</dd>
+        <dt>Expires at </dt><dd>@await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.ExpiresAtUtc)</dd>
     </dl>
 
     <form method="post" action="/admin/security/ip-blocks/@Model.SecurityIpBlockId/remove" style="display:grid;gap:.6rem;">
