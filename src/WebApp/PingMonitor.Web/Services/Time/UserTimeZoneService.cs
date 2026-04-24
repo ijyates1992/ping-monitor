@@ -11,6 +11,7 @@ public sealed class UserTimeZoneService : IUserTimeZoneService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IReadOnlyList<string> _selectableTimeZoneIds;
+    private readonly IReadOnlyList<DisplayTimeZoneOption> _selectableTimeZoneOptions;
 
     public UserTimeZoneService(IHttpContextAccessor httpContextAccessor, UserManager<ApplicationUser> userManager)
     {
@@ -35,7 +36,14 @@ public sealed class UserTimeZoneService : IUserTimeZoneService
             ids.Insert(0, UtcTimeZoneId);
         }
 
+        const string londonTimeZoneId = "Europe/London";
+        if (!ids.Contains(londonTimeZoneId, StringComparer.Ordinal))
+        {
+            ids.Insert(1, londonTimeZoneId);
+        }
+
         _selectableTimeZoneIds = ids;
+        _selectableTimeZoneOptions = BuildSelectableTimeZoneOptions(ids);
     }
 
     public async Task<TimeZoneInfo> GetCurrentUserTimeZoneAsync(CancellationToken cancellationToken)
@@ -62,6 +70,7 @@ public sealed class UserTimeZoneService : IUserTimeZoneService
     }
 
     public IReadOnlyList<string> GetSelectableTimeZoneIds() => _selectableTimeZoneIds;
+    public IReadOnlyList<DisplayTimeZoneOption> GetSelectableTimeZoneOptions() => _selectableTimeZoneOptions;
 
     public bool IsSupportedTimeZoneId(string? timeZoneId)
     {
@@ -88,5 +97,34 @@ public sealed class UserTimeZoneService : IUserTimeZoneService
         {
             return TimeZoneInfo.Utc;
         }
+    }
+
+    private static IReadOnlyList<DisplayTimeZoneOption> BuildSelectableTimeZoneOptions(IReadOnlyList<string> ids)
+    {
+        const string londonTimeZoneId = "Europe/London";
+        var options = new List<DisplayTimeZoneOption>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        if (seen.Add(UtcTimeZoneId))
+        {
+            options.Add(new DisplayTimeZoneOption(UtcTimeZoneId, "UTC (Coordinated Universal Time)"));
+        }
+
+        if (ids.Contains(londonTimeZoneId, StringComparer.Ordinal) && seen.Add(londonTimeZoneId))
+        {
+            options.Add(new DisplayTimeZoneOption(londonTimeZoneId, "United Kingdom — London (Europe/London)"));
+        }
+
+        foreach (var id in ids)
+        {
+            if (!seen.Add(id))
+            {
+                continue;
+            }
+
+            options.Add(new DisplayTimeZoneOption(id, id));
+        }
+
+        return options;
     }
 }

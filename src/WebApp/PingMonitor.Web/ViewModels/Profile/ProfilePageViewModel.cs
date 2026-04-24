@@ -11,7 +11,7 @@ public sealed class ProfilePageViewModel
     public string Email { get; set; } = string.Empty;
     public bool EmailVerified { get; set; }
     public string DisplayTimeZoneId { get; set; } = "UTC";
-    public IReadOnlyList<string> AvailableDisplayTimeZoneIds { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<DisplayTimeZoneOptionViewModel> AvailableDisplayTimeZoneOptions { get; set; } = Array.Empty<DisplayTimeZoneOptionViewModel>();
 
     [DataType(DataType.Password)]
     public string CurrentPassword { get; set; } = string.Empty;
@@ -62,4 +62,23 @@ public sealed class ProfilePageViewModel
     public string? TelegramBotIdentifier { get; set; }
     public bool EmailVerificationResendSucceeded { get; set; }
     public string? EmailVerificationMessage { get; set; }
+}
+
+public sealed class DisplayTimeZoneOptionViewModel
+{
+    public string Value { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+}
+
+public sealed class UpdateProfileAccountDetailsInputModel
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+}
+
+public sealed class UpdateProfileDisplayPreferencesInputModel
+{
+    [Required]
+    public string DisplayTimeZoneId { get; set; } = "UTC";
 }
