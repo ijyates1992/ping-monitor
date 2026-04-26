@@ -4,18 +4,21 @@ import logging
 import platform
 import time
 from datetime import UTC, datetime
+from json import JSONDecodeError
 
 import httpx
 
-from app.api_client import AgentApiClient
+from app.api_client import AgentApiClient, AgentApiError
 from app.checks import CheckRunner
 from app.config import load_config
-from app.models import ConfigResponse, HeartbeatRequest, HelloRequest, ResultsRequest
+from app.models import ConfigResponse, HeartbeatRequest, HelloRequest, HelloResponse, ResultsRequest
 from app.result_queue import ResultQueue
 from app.scheduler import AssignmentScheduler
 from app.version import AGENT_VERSION
 
 BOOTSTRAP_CONFIG_VERSION = "bootstrap-pending"
+INITIAL_HELLO_RETRY_SECONDS = 2
+MAX_HELLO_RETRY_SECONDS = 30
 
 
 def main() -> None:
@@ -28,15 +31,7 @@ def main() -> None:
     scheduler = AssignmentScheduler(CheckRunner())
 
     started_at = _utc_now()
-    hello_response = client.send_hello(
-        HelloRequest(
-            agent_version=AGENT_VERSION,
-            machine_name=platform.node() or config.instance_id,
-            platform=platform.system().lower() or "unknown",
-            capabilities=["icmp"],
-            started_at_utc=started_at,
-        )
-    )
+    hello_response = _send_hello_with_retry(client, config.instance_id, started_at)
 
     current_config = _initialize_config(client, hello_response.config_version)
     logging.info(
@@ -92,21 +87,7 @@ def main() -> None:
                     logging.info("Executed %d checks in this cycle", len(results))
                 queue.extend(results)
             if now - last_result_batch >= result_batch_interval_seconds:
-                batch = queue.dequeue_batch(max_result_batch_size)
-                if batch:
-                    try:
-                        client.submit_results(
-                            ResultsRequest(
-                                sent_at_utc=_utc_now(),
-                                batch_id=f"results-{config.instance_id}-{int(now)}",
-                                results=batch,
-                            )
-                        )
-                    except httpx.HTTPError as ex:
-                        logging.error("Result submission failed and will be retried: %s", _format_http_error(ex))
-                        queue.requeue_front(batch)
-                else:
-                    logging.debug("No queued results to submit in this cycle.")
+                _submit_result_batch(client, queue, config.instance_id, now, max_result_batch_size)
                 last_result_batch = now
 
             if now - last_heartbeat >= heartbeat_interval_seconds:
@@ -129,8 +110,8 @@ def main() -> None:
                     if heartbeat_response.config_changed:
                         current_config = _try_refresh_config(client, current_config, "heartbeat-config-changed")
                         last_config_refresh = now
-                except httpx.HTTPError as ex:
-                    logging.error("Heartbeat failed: %s", _format_http_error(ex))
+                except _retryable_api_exceptions() as ex:
+                    logging.error("Heartbeat failed: %s", _format_api_error(ex))
                 last_heartbeat = now
 
             time.sleep(1)
@@ -144,7 +125,37 @@ def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _format_http_error(error: httpx.HTTPError) -> str:
+
+def _submit_result_batch(
+    client: AgentApiClient,
+    queue: ResultQueue,
+    instance_id: str,
+    now: float,
+    max_result_batch_size: int,
+) -> None:
+    batch = queue.dequeue_batch(max_result_batch_size)
+    if not batch:
+        logging.debug("No queued results to submit in this cycle.")
+        return
+
+    try:
+        client.submit_results(
+            ResultsRequest(
+                sent_at_utc=_utc_now(),
+                batch_id=f"results-{instance_id}-{int(now)}",
+                results=batch,
+            )
+        )
+    except _retryable_api_exceptions() as ex:
+        logging.error("Result submission failed and will be retried: %s", _format_api_error(ex))
+        queue.requeue_front(batch)
+
+
+def _retryable_api_exceptions() -> tuple[type[BaseException], ...]:
+    return httpx.HTTPError, AgentApiError, ValueError, JSONDecodeError
+
+
+def _format_api_error(error: BaseException) -> str:
     if isinstance(error, httpx.HTTPStatusError):
         response_body = error.response.text.strip()
         if response_body:
@@ -162,12 +173,12 @@ def _try_refresh_config(client: AgentApiClient, current_config: ConfigResponse, 
             len(updated_config.assignments),
         )
         return updated_config
-    except httpx.HTTPError as ex:
+    except _retryable_api_exceptions() as ex:
         logging.error(
             "Config refresh failed (%s). Continuing with previous config version %s: %s",
             reason,
             current_config.config_version,
-            _format_http_error(ex),
+            _format_api_error(ex),
         )
         return current_config
 
@@ -179,6 +190,29 @@ def _initialize_config(client: AgentApiClient, hello_config_version: str) -> Con
         assignments=[],
     )
     return _try_refresh_config(client, bootstrap_config, "startup")
+
+
+def _send_hello_with_retry(client: AgentApiClient, instance_id: str, started_at: str) -> HelloResponse:
+    retry_delay_seconds = INITIAL_HELLO_RETRY_SECONDS
+    while True:
+        try:
+            return client.send_hello(
+                HelloRequest(
+                    agent_version=AGENT_VERSION,
+                    machine_name=platform.node() or instance_id,
+                    platform=platform.system().lower() or "unknown",
+                    capabilities=["icmp"],
+                    started_at_utc=started_at,
+                )
+            )
+        except _retryable_api_exceptions() as ex:
+            logging.warning(
+                "Initial hello failed. Server may be unavailable or restarting. Retrying in %ss: %s",
+                retry_delay_seconds,
+                _format_api_error(ex),
+            )
+            time.sleep(retry_delay_seconds)
+            retry_delay_seconds = min(MAX_HELLO_RETRY_SECONDS, retry_delay_seconds * 2)
 
 
 if __name__ == "__main__":
