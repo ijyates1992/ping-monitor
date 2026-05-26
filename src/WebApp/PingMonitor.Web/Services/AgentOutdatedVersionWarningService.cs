@@ -7,7 +7,8 @@ internal sealed class AgentOutdatedVersionWarningService : IAgentOutdatedVersion
 {
     private static readonly IReadOnlyDictionary<string, string> ReleaseUpgradeNotes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["V0.1.1"] = "this version brings a fix for a low risk vulnerability in dotenv"
+        ["V0.1.1"] = "this version brings a fix for a low risk vulnerability in dotenv",
+        ["V0.1.2"] = "this version improves agent resilience when the web app is restarting or temporarily unavailable"
     };
 
     private readonly IAgentTemplateVersionProvider _agentTemplateVersionProvider;
