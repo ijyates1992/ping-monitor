@@ -13,18 +13,18 @@ public sealed class AgentOutdatedVersionWarningServiceTests
     {
         var registry = new FakeWarningRegistry();
         var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.1", registry, eventLogService);
+        var service = BuildService("V0.1.2", registry, eventLogService);
         var agent = BuildAgent();
 
-        await service.TryWriteWarningAsync(agent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(agent, "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
 
         var warning = Assert.Single(eventLogService.Writes);
         Assert.Equal(EventCategory.Agent, warning.Category);
         Assert.Equal(EventSeverity.Warning, warning.Severity);
         Assert.Equal(EventType.AgentOutdated, warning.EventType);
-        Assert.Contains("agent version V0.1.0", warning.Message, StringComparison.Ordinal);
-        Assert.Contains("bundled version V0.1.1", warning.Message, StringComparison.Ordinal);
-        Assert.Contains("this version brings a fix for a low risk vulnerability in dotenv", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("agent version V0.1.1", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("bundled version V0.1.2", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("this version improves agent resilience when the web app is restarting or temporarily unavailable", warning.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -32,11 +32,11 @@ public sealed class AgentOutdatedVersionWarningServiceTests
     {
         var registry = new FakeWarningRegistry();
         var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.1", registry, eventLogService);
+        var service = BuildService("V0.1.2", registry, eventLogService);
         var agent = BuildAgent();
 
-        await service.TryWriteWarningAsync(agent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
-        await service.TryWriteWarningAsync(agent, "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(agent, "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(agent, "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.Single(eventLogService.Writes);
     }
@@ -46,9 +46,9 @@ public sealed class AgentOutdatedVersionWarningServiceTests
     {
         var registry = new FakeWarningRegistry();
         var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.1", registry, eventLogService);
+        var service = BuildService("V0.1.2", registry, eventLogService);
 
-        await service.TryWriteWarningAsync(BuildAgent(), "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(BuildAgent(), "V0.1.2", DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.Empty(eventLogService.Writes);
     }
@@ -58,11 +58,23 @@ public sealed class AgentOutdatedVersionWarningServiceTests
     {
         var registry = new FakeWarningRegistry();
         var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.1", registry, eventLogService);
+        var service = BuildService("V0.1.2", registry, eventLogService);
 
         await service.TryWriteWarningAsync(BuildAgent(), "not-a-version", DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.Empty(eventLogService.Writes);
+    }
+
+    [Fact]
+    public async Task TryWriteWarningAsync_V010_StillWarnsAgainstV012()
+    {
+        var registry = new FakeWarningRegistry();
+        var eventLogService = new RecordingEventLogService(registry);
+        var service = BuildService("V0.1.2", registry, eventLogService);
+
+        await service.TryWriteWarningAsync(BuildAgent(), "V0.1.0", DateTimeOffset.UtcNow, CancellationToken.None);
+
+        Assert.Single(eventLogService.Writes);
     }
 
     private static AgentOutdatedVersionWarningService BuildService(

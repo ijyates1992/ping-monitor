@@ -1,6 +1,10 @@
 import unittest
 
-from app.api_client import _assignment_from_dict
+import httpx
+
+from app.api_client import AgentApiClient, AgentApiError, _assignment_from_dict
+from app.config import AgentConfig
+from app.models import HeartbeatRequest, ResultsRequest
 
 
 class AgentApiClientTests(unittest.TestCase):
@@ -45,6 +49,56 @@ class AgentApiClientTests(unittest.TestCase):
         assignment = _assignment_from_dict(payload)
 
         self.assertEqual(["e-parent-1"], assignment.depends_on_endpoint_ids)
+
+    def test_submit_results_accepts_200_empty_body(self) -> None:
+        client = self._build_client(lambda request: httpx.Response(200, text="", request=request))
+
+        response = client.submit_results(self._results_request())
+
+        self.assertEqual({}, response)
+        client.close()
+
+    def test_submit_results_accepts_204_no_content(self) -> None:
+        client = self._build_client(lambda request: httpx.Response(204, request=request))
+
+        response = client.submit_results(self._results_request())
+
+        self.assertEqual({}, response)
+        client.close()
+
+    def test_send_heartbeat_raises_agent_api_error_for_malformed_json(self) -> None:
+        client = self._build_client(
+            lambda request: httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text="<html>not-json</html>",
+                request=request,
+            )
+        )
+
+        with self.assertRaises(AgentApiError):
+            client.send_heartbeat(
+                HeartbeatRequest(
+                    agent_version="1.0.0",
+                    sent_at_utc="2026-01-01T00:00:00Z",
+                    config_version="v1",
+                    active_assignments=0,
+                    queued_result_count=0,
+                    status="online",
+                )
+            )
+
+        client.close()
+
+    def _build_client(self, handler) -> AgentApiClient:
+        config = AgentConfig(server_url="https://example.test", instance_id="agent-1", api_key="secret")
+        client = AgentApiClient(config)
+        client._client.close()
+        client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url=config.server_url)
+        return client
+
+    def _results_request(self) -> ResultsRequest:
+        return ResultsRequest(sent_at_utc="2026-01-01T00:00:00Z", batch_id="batch-1", results=[])
 
 
 if __name__ == "__main__":
