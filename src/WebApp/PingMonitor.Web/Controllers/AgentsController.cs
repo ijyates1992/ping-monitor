@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PingMonitor.Web.Data;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Agents;
 using PingMonitor.Web.Services.EventLogs;
@@ -21,19 +23,22 @@ public sealed class AgentsController : Controller
     private readonly IEventLogQueryService _eventLogQueryService;
     private readonly IApplicationSettingsService _applicationSettingsService;
     private readonly IAgentTemplateVersionProvider _agentTemplateVersionProvider;
+    private readonly PingMonitorDbContext _dbContext;
 
     public AgentsController(
         IAgentProvisioningService agentProvisioningService,
         IAgentManagementQueryService agentManagementQueryService,
         IEventLogQueryService eventLogQueryService,
         IApplicationSettingsService applicationSettingsService,
-        IAgentTemplateVersionProvider agentTemplateVersionProvider)
+        IAgentTemplateVersionProvider agentTemplateVersionProvider,
+        PingMonitorDbContext dbContext)
     {
         _agentProvisioningService = agentProvisioningService;
         _agentManagementQueryService = agentManagementQueryService;
         _eventLogQueryService = eventLogQueryService;
         _applicationSettingsService = applicationSettingsService;
         _agentTemplateVersionProvider = agentTemplateVersionProvider;
+        _dbContext = dbContext;
     }
 
     [HttpGet("")]
@@ -58,7 +63,8 @@ public sealed class AgentsController : Controller
                 CreatedAtUtc = row.CreatedAtUtc,
                 AssignmentCount = row.AssignmentCount,
                 UptimePercent = row.UptimePercent,
-                IsVersionDifferentFromBundled = IsVersionDifferentFromBundled(row.AgentVersion, bundledAgentVersion)
+                IsVersionDifferentFromBundled = IsVersionDifferentFromBundled(row.AgentVersion, bundledAgentVersion),
+                EndpointUnknownAfterAgentOfflineSeconds = row.EndpointUnknownAfterAgentOfflineSeconds
             }).ToList(),
             BundledAgentVersion = bundledAgentVersion,
             StatusMessage = TempData[StatusMessageKey] as string,
@@ -185,6 +191,27 @@ public sealed class AgentsController : Controller
             TempData[ErrorMessageKey] = ex.Message;
             return RedirectToAction(nameof(Index));
         }
+    }
+
+
+    [HttpPost("{id}/stale-timeout")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateStaleTimeout([FromRoute] string id, [FromForm] int endpointUnknownAfterAgentOfflineSeconds, CancellationToken cancellationToken)
+    {
+        var normalizedAgentId = id.Trim();
+        var agent = await _dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
+        if (agent is null)
+        {
+            TempData[ErrorMessageKey] = "Agent not found.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var normalizedValue = Math.Clamp(endpointUnknownAfterAgentOfflineSeconds, 30, 86400);
+        agent.EndpointUnknownAfterAgentOfflineSeconds = normalizedValue;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        TempData[StatusMessageKey] = $"Updated stale endpoint timeout for agent '{agent.Name ?? agent.InstanceId}' to {normalizedValue} seconds.";
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpGet("{id}/remove")]

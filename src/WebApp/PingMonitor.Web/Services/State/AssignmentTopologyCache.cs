@@ -99,7 +99,9 @@ internal sealed class AssignmentTopologyCache : IAssignmentTopologyCache
                 AgentId = x.AgentId,
                 Enabled = x.Enabled,
                 ApiKeyRevoked = x.ApiKeyRevoked,
-                Status = x.Status
+                Status = x.Status,
+                LastSeenUtc = x.LastSeenUtc,
+                EndpointUnknownAfterAgentOfflineSeconds = x.EndpointUnknownAfterAgentOfflineSeconds
             })
             .ToDictionaryAsync(x => x.AgentId, StringComparer.Ordinal, cancellationToken);
 
@@ -180,6 +182,8 @@ internal sealed class AssignmentTopologyCache : IAssignmentTopologyCache
                 AgentEnabled = agent?.Enabled ?? false,
                 AgentApiKeyRevoked = agent?.ApiKeyRevoked ?? true,
                 AgentStatus = agent?.Status ?? AgentHealthStatus.Offline,
+                AgentLastSeenUtc = agent?.LastSeenUtc,
+                AgentEndpointUnknownAfterOfflineSeconds = agent?.EndpointUnknownAfterAgentOfflineSeconds ?? 300,
                 ParentDependencies = parentDependencies,
                 ChildAssignmentIds = childAssignments
             };
@@ -212,6 +216,8 @@ internal sealed class AssignmentTopologyCache : IAssignmentTopologyCache
         public required bool Enabled { get; init; }
         public required bool ApiKeyRevoked { get; init; }
         public required AgentHealthStatus Status { get; init; }
+        public required DateTimeOffset? LastSeenUtc { get; init; }
+        public required int EndpointUnknownAfterAgentOfflineSeconds { get; init; }
     }
 
     private sealed class DependencyRow

@@ -17,5 +17,6 @@ public sealed class Agent
     public string? Platform { get; set; }
     public string? MachineName { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
+    public int EndpointUnknownAfterAgentOfflineSeconds { get; set; } = 300;
     public DateTimeOffset? LastHeartbeatEventLoggedAtUtc { get; set; }
 }

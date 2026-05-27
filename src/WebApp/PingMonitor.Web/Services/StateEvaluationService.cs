@@ -126,7 +126,8 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 
         var previousState = mutableState.CurrentState;
         var previousStateChangedAtUtc = mutableState.LastStateChangeUtc ?? DateTimeOffset.UtcNow;
-        var nextState = DetermineNextState(assignmentContext, mutableState, parentContext);
+        var now = DateTimeOffset.UtcNow;
+        var nextState = DetermineNextState(assignmentContext, mutableState, parentContext, now);
         var reasonCode = GetReasonCode(previousState, nextState, parentContext.DependencyDown);
 
         mutableState.CurrentState = nextState;
@@ -137,7 +138,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         DateTimeOffset? transitionAtUtc = null;
         if (previousState != nextState)
         {
-            transitionAtUtc = DateTimeOffset.UtcNow;
+            transitionAtUtc = now;
             mutableState.LastStateChangeUtc = transitionAtUtc.Value;
 
             _dbContext.StateTransitions.Add(new StateTransition
@@ -233,7 +234,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             mutableState.CurrentState,
             transitionAtUtc,
             previousStateChangedAtUtc,
-            DateTimeOffset.UtcNow,
+            now,
             cancellationToken);
 
         if (CrossedDownBoundary(previousState, nextState))
@@ -267,14 +268,21 @@ internal sealed class StateEvaluationService : IStateEvaluationService
     private static EndpointStateKind DetermineNextState(
         AssignmentTopologyContext assignment,
         CachedAssignmentState state,
-        ParentStateContext parentContext)
+        ParentStateContext parentContext,
+        DateTimeOffset now)
     {
         if (!assignment.AssignmentEnabled)
         {
             return EndpointStateKind.Unknown;
         }
 
-        if (!assignment.AgentEnabled || assignment.AgentApiKeyRevoked || assignment.AgentStatus != AgentHealthStatus.Online)
+        if (AgentOfflineStateEvaluator.ShouldForceUnknown(
+                assignment.AgentEnabled,
+                assignment.AgentApiKeyRevoked,
+                assignment.AgentStatus,
+                assignment.AgentLastSeenUtc,
+                assignment.AgentEndpointUnknownAfterOfflineSeconds,
+                now))
         {
             return EndpointStateKind.Unknown;
         }
@@ -299,6 +307,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 
         return state.CurrentState;
     }
+
 
     private static string? GetReasonCode(EndpointStateKind previousState, EndpointStateKind newState, bool dependencyDown)
     {

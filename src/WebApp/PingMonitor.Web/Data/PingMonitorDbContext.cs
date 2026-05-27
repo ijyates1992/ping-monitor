@@ -79,6 +79,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         agent.Property(x => x.ApiKeyCreatedAtUtc).IsRequired();
         agent.Property(x => x.Enabled).HasDefaultValue(true);
         agent.Property(x => x.ApiKeyRevoked).HasDefaultValue(false);
+        agent.Property(x => x.EndpointUnknownAfterAgentOfflineSeconds).IsRequired().HasDefaultValue(300);
         agent.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
         agent.HasIndex(x => x.InstanceId).IsUnique();
 

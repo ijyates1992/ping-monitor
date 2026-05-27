@@ -62,7 +62,8 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
             MachineName = null,
             CreatedAtUtc = now,
             ApiKeyCreatedAtUtc = now,
-            ApiKeyHash = string.Empty
+            ApiKeyHash = string.Empty,
+            EndpointUnknownAfterAgentOfflineSeconds = 300
         };
 
         agent.ApiKeyHash = _apiKeyHasher.Hash(agent, plainTextApiKey);

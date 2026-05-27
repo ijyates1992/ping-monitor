@@ -1191,6 +1191,16 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """,
                 cancellationToken);
         }
+
+        if (!await HasAgentColumnAsync(connection, "EndpointUnknownAfterAgentOfflineSeconds", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `Agents`
+                ADD COLUMN `EndpointUnknownAfterAgentOfflineSeconds` int NOT NULL DEFAULT 300;
+                """,
+                cancellationToken);
+        }
     }
 
     private static async Task EnsureAspNetUsersColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
