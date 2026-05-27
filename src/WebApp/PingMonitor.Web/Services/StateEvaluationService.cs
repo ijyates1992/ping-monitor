@@ -274,7 +274,18 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             return EndpointStateKind.Unknown;
         }
 
-        if (!assignment.AgentEnabled || assignment.AgentApiKeyRevoked || assignment.AgentStatus != AgentHealthStatus.Online)
+        if (!assignment.AgentEnabled || assignment.AgentApiKeyRevoked)
+        {
+            return EndpointStateKind.Unknown;
+        }
+
+        if (!assignment.AgentLastSeenUtc.HasValue)
+        {
+            return EndpointStateKind.Unknown;
+        }
+
+        var unknownAfterOffline = TimeSpan.FromSeconds(assignment.EndpointUnknownAfterAgentOfflineSeconds);
+        if (DateTimeOffset.UtcNow - assignment.AgentLastSeenUtc.Value >= unknownAfterOffline)
         {
             return EndpointStateKind.Unknown;
         }

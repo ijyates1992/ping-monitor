@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.EventLogs;
+using PingMonitor.Web.Services.State;
 using PingMonitor.Web.Services.StartupGate;
 
 namespace PingMonitor.Web.Services;
@@ -14,15 +15,18 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IStartupGateRuntimeState _startupGateRuntimeState;
+    private readonly IAssignmentProcessingQueue _assignmentProcessingQueue;
     private readonly ILogger<AgentStatusTransitionBackgroundService> _logger;
 
     public AgentStatusTransitionBackgroundService(
         IServiceScopeFactory serviceScopeFactory,
         IStartupGateRuntimeState startupGateRuntimeState,
+        IAssignmentProcessingQueue assignmentProcessingQueue,
         ILogger<AgentStatusTransitionBackgroundService> logger)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _startupGateRuntimeState = startupGateRuntimeState;
+        _assignmentProcessingQueue = assignmentProcessingQueue;
         _logger = logger;
     }
 
@@ -79,13 +83,13 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
 
         foreach (var agent in agents)
         {
-            if (!agent.LastHeartbeatUtc.HasValue)
+            if (!agent.LastSeenUtc.HasValue)
             {
                 continue;
             }
 
             var previousStatus = agent.Status;
-            var elapsed = now - agent.LastHeartbeatUtc.Value;
+            var elapsed = now - agent.LastSeenUtc.Value;
             var nextStatus = elapsed >= OfflineThreshold
                 ? AgentHealthStatus.Offline
                 : elapsed >= StaleThreshold
@@ -94,6 +98,7 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
 
             if (nextStatus == previousStatus)
             {
+                await EnqueueAssignedEndpointsForEvaluationIfOfflineWindowElapsedAsync(dbContext, agent, elapsed, cancellationToken);
                 continue;
             }
 
@@ -118,6 +123,29 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
                         : $"Agent \"{agent.Name ?? agent.InstanceId}\" became offline."
                 },
                 cancellationToken);
+
+            await EnqueueAssignedEndpointsForEvaluationIfOfflineWindowElapsedAsync(dbContext, agent, elapsed, cancellationToken);
         }
+    }
+
+    private async Task EnqueueAssignedEndpointsForEvaluationIfOfflineWindowElapsedAsync(
+        PingMonitorDbContext dbContext,
+        Agent agent,
+        TimeSpan elapsedSinceLastSeen,
+        CancellationToken cancellationToken)
+    {
+        var unknownTimeout = TimeSpan.FromSeconds(agent.EndpointUnknownAfterAgentOfflineSeconds);
+        if (elapsedSinceLastSeen < unknownTimeout)
+        {
+            return;
+        }
+
+        var assignmentIds = await dbContext.MonitorAssignments
+            .AsNoTracking()
+            .Where(x => x.AgentId == agent.AgentId && x.Enabled)
+            .Select(x => x.AssignmentId)
+            .ToArrayAsync(cancellationToken);
+
+        _assignmentProcessingQueue.EnqueueAssignments(assignmentIds);
     }
 }

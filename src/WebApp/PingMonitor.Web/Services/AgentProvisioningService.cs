@@ -195,6 +195,27 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
         }
     }
 
+    public async Task<bool> SetEndpointUnknownAfterAgentOfflineSecondsAsync(string agentId, int seconds, CancellationToken cancellationToken)
+    {
+        var normalizedAgentId = NormalizeAgentId(agentId);
+        var agent = await _dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
+        if (agent is null)
+        {
+            throw new InvalidOperationException("Agent not found.");
+        }
+
+        if (agent.EndpointUnknownAfterAgentOfflineSeconds == seconds)
+        {
+            return false;
+        }
+
+        agent.EndpointUnknownAfterAgentOfflineSeconds = seconds;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _configurationChangeBackupSignal.NotifyConfigurationChanged("agent-offline-unknown-timeout-updated");
+        _logger.LogInformation("Updated EndpointUnknownAfterAgentOfflineSeconds={Seconds} for agent {AgentId}", seconds, agent.AgentId);
+        return true;
+    }
+
     private static string NormalizeAgentId(string agentId)
     {
         var normalizedAgentId = agentId.Trim();

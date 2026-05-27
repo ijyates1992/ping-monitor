@@ -20,6 +20,8 @@ public sealed class AssignmentTopologyContext
     public required bool AgentEnabled { get; init; }
     public required bool AgentApiKeyRevoked { get; init; }
     public required AgentHealthStatus AgentStatus { get; init; }
+    public required DateTimeOffset? AgentLastSeenUtc { get; init; }
+    public required int EndpointUnknownAfterAgentOfflineSeconds { get; init; }
     public required IReadOnlyList<AssignmentParentDependency> ParentDependencies { get; init; }
     public required IReadOnlyList<string> ChildAssignmentIds { get; init; }
 }

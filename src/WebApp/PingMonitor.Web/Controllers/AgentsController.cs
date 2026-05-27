@@ -58,7 +58,8 @@ public sealed class AgentsController : Controller
                 CreatedAtUtc = row.CreatedAtUtc,
                 AssignmentCount = row.AssignmentCount,
                 UptimePercent = row.UptimePercent,
-                IsVersionDifferentFromBundled = IsVersionDifferentFromBundled(row.AgentVersion, bundledAgentVersion)
+                IsVersionDifferentFromBundled = IsVersionDifferentFromBundled(row.AgentVersion, bundledAgentVersion),
+                EndpointUnknownAfterAgentOfflineSeconds = row.EndpointUnknownAfterAgentOfflineSeconds
             }).ToList(),
             BundledAgentVersion = bundledAgentVersion,
             StatusMessage = TempData[StatusMessageKey] as string,
@@ -169,6 +170,31 @@ public sealed class AgentsController : Controller
     public async Task<IActionResult> Disable([FromRoute] string id, CancellationToken cancellationToken)
     {
         return await SetEnabledAsync(id, false, cancellationToken);
+    }
+
+    [HttpPost("{id}/endpoint-unknown-timeout")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetEndpointUnknownTimeout([FromRoute] string id, [FromForm] int endpointUnknownAfterAgentOfflineSeconds, CancellationToken cancellationToken)
+    {
+        if (endpointUnknownAfterAgentOfflineSeconds < 30 || endpointUnknownAfterAgentOfflineSeconds > 86400)
+        {
+            TempData[ErrorMessageKey] = "Endpoint Unknown timeout must be between 30 and 86400 seconds.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var changed = await _agentProvisioningService.SetEndpointUnknownAfterAgentOfflineSecondsAsync(id, endpointUnknownAfterAgentOfflineSeconds, cancellationToken);
+            TempData[StatusMessageKey] = changed
+                ? "Agent offline Unknown timeout updated."
+                : "Agent offline Unknown timeout was already set to that value.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData[ErrorMessageKey] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost("{id}/rotate-package")]
