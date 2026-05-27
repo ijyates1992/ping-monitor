@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.EventLogs;
+using PingMonitor.Web.Services.State;
 using PingMonitor.Web.Services.StartupGate;
+using System.Text.Json;
 
 namespace PingMonitor.Web.Services;
 
@@ -118,6 +120,112 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
                         : $"Agent \"{agent.Name ?? agent.InstanceId}\" became offline."
                 },
                 cancellationToken);
+
+            if (nextStatus == AgentHealthStatus.Offline)
+            {
+                await TransitionAssignedEndpointsToUnknownAsync(dbContext, eventLogService, agent, now, cancellationToken);
+            }
         }
+    }
+
+    internal static async Task TransitionAssignedEndpointsToUnknownAsync(
+        PingMonitorDbContext dbContext,
+        IEventLogService eventLogService,
+        Agent agent,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (!ShouldTransitionAssignmentsToUnknown(agent, now))
+        {
+            return;
+        }
+
+        var assignments = await dbContext.MonitorAssignments
+            .Where(x => x.AgentId == agent.AgentId && x.Enabled)
+            .Select(x => new { x.AssignmentId, x.EndpointId })
+            .ToListAsync(cancellationToken);
+
+        if (assignments.Count == 0)
+        {
+            return;
+        }
+
+        var assignmentIds = assignments.Select(x => x.AssignmentId).ToArray();
+        var states = await dbContext.EndpointStates
+            .Where(x => assignmentIds.Contains(x.AssignmentId))
+            .ToDictionaryAsync(x => x.AssignmentId, x => x, cancellationToken);
+
+        foreach (var assignment in assignments)
+        {
+            if (states.TryGetValue(assignment.AssignmentId, out var state)
+                && state.CurrentState == EndpointStateKind.Unknown)
+            {
+                continue;
+            }
+
+            var previousState = states.TryGetValue(assignment.AssignmentId, out var existingState)
+                ? existingState.CurrentState
+                : EndpointStateKind.Unknown;
+
+            var nextState = existingState ?? new EndpointState
+            {
+                AssignmentId = assignment.AssignmentId,
+                AgentId = agent.AgentId,
+                EndpointId = assignment.EndpointId
+            };
+
+            nextState.CurrentState = EndpointStateKind.Unknown;
+            nextState.SuppressedByEndpointId = null;
+            nextState.LastStateChangeUtc = now;
+
+            if (existingState is null)
+            {
+                dbContext.EndpointStates.Add(nextState);
+            }
+
+            dbContext.StateTransitions.Add(new StateTransition
+            {
+                TransitionId = Guid.NewGuid().ToString(),
+                AssignmentId = assignment.AssignmentId,
+                AgentId = agent.AgentId,
+                EndpointId = assignment.EndpointId,
+                PreviousState = previousState,
+                NewState = EndpointStateKind.Unknown,
+                TransitionAtUtc = now,
+                ReasonCode = StateTransitionReasonCodes.AgentOfflineTimeout
+            });
+
+            await eventLogService.WriteAsync(new EventLogWriteRequest
+            {
+                OccurredAtUtc = now,
+                Category = EventCategory.Endpoint,
+                EventType = EventType.EndpointStateChanged,
+                Severity = EventSeverity.Info,
+                AgentId = agent.AgentId,
+                EndpointId = assignment.EndpointId,
+                AssignmentId = assignment.AssignmentId,
+                Message = "Endpoint state changed to Unknown because its assigned agent is offline beyond the configured timeout.",
+                DetailsJson = JsonSerializer.Serialize(new
+                {
+                    assignment.AssignmentId,
+                    assignment.EndpointId,
+                    previousState = previousState.ToString(),
+                    newState = EndpointStateKind.Unknown.ToString(),
+                    reasonCode = StateTransitionReasonCodes.AgentOfflineTimeout,
+                    agent.EndpointUnknownAfterAgentOfflineSeconds
+                })
+            }, cancellationToken);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    internal static bool ShouldTransitionAssignmentsToUnknown(Agent agent, DateTimeOffset now)
+    {
+        var staleAfter = TimeSpan.FromSeconds(agent.EndpointUnknownAfterAgentOfflineSeconds <= 0
+            ? Agent.DefaultEndpointUnknownAfterAgentOfflineSeconds
+            : agent.EndpointUnknownAfterAgentOfflineSeconds);
+        var lastSeenUtc = agent.LastSeenUtc ?? agent.LastHeartbeatUtc;
+        return lastSeenUtc.HasValue && now - lastSeenUtc.Value >= staleAfter;
     }
 }

@@ -24,6 +24,7 @@ public sealed class ManageAgentRowViewModel
     public required int AssignmentCount { get; init; }
     public required double? UptimePercent { get; init; }
     public required bool IsVersionDifferentFromBundled { get; init; }
+    public required int EndpointUnknownAfterAgentOfflineSeconds { get; init; }
 }
 
 public sealed class RemoveAgentPageViewModel

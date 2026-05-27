@@ -2,6 +2,7 @@ namespace PingMonitor.Web.Models;
 
 public sealed class Agent
 {
+    public const int DefaultEndpointUnknownAfterAgentOfflineSeconds = 300;
     public string AgentId { get; set; } = string.Empty;
     public string InstanceId { get; set; } = string.Empty;
     public string? Name { get; set; }
@@ -18,4 +19,5 @@ public sealed class Agent
     public string? MachineName { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset? LastHeartbeatEventLoggedAtUtc { get; set; }
+    public int EndpointUnknownAfterAgentOfflineSeconds { get; set; } = DefaultEndpointUnknownAfterAgentOfflineSeconds;
 }

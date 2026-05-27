@@ -43,7 +43,8 @@ internal sealed class AgentManagementQueryService : IAgentManagementQueryService
                 agent.AgentVersion,
                 agent.MachineName,
                 agent.Platform,
-                agent.CreatedAtUtc
+                agent.CreatedAtUtc,
+                agent.EndpointUnknownAfterAgentOfflineSeconds
             })
             .ToListAsync(cancellationToken);
 
@@ -65,7 +66,8 @@ internal sealed class AgentManagementQueryService : IAgentManagementQueryService
                 Platform = agent.Platform ?? "Unknown",
                 CreatedAtUtc = agent.CreatedAtUtc,
                 AssignmentCount = assignmentCounts.GetValueOrDefault(agent.AgentId, 0),
-                UptimePercent = uptimeByAgentId.GetValueOrDefault(agent.AgentId)?.UptimePercent
+                UptimePercent = uptimeByAgentId.GetValueOrDefault(agent.AgentId)?.UptimePercent,
+                EndpointUnknownAfterAgentOfflineSeconds = agent.EndpointUnknownAfterAgentOfflineSeconds
             })
             .ToList();
     }
