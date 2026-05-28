@@ -100,7 +100,13 @@ public sealed class AgentsController : Controller
                 DefaultRetryIntervalSeconds = current.DefaultRetryIntervalSeconds,
                 DefaultTimeoutMs = current.DefaultTimeoutMs,
                 DefaultFailureThreshold = current.DefaultFailureThreshold,
-                DefaultRecoveryThreshold = current.DefaultRecoveryThreshold
+                DefaultRecoveryThreshold = current.DefaultRecoveryThreshold,
+                DegradedEvaluationEnabled = current.DegradedEvaluationEnabled,
+                DegradedBaselineLookbackMinutes = current.DegradedBaselineLookbackMinutes,
+                DegradedCurrentWindowMinutes = current.DegradedCurrentWindowMinutes,
+                DegradedPacketLossIncreasePercentagePoints = current.DegradedPacketLossIncreasePercentagePoints,
+                DegradedRttIncreasePercent = current.DegradedRttIncreasePercent,
+                DegradedMinimumSamples = current.DegradedMinimumSamples
             },
             cancellationToken);
 

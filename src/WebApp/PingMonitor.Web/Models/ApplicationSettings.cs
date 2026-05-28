@@ -18,6 +18,18 @@ public sealed class ApplicationSettings
 
     public int DefaultRecoveryThreshold { get; set; } = 2;
 
+    public bool DegradedEvaluationEnabled { get; set; } = true;
+
+    public int DegradedBaselineLookbackMinutes { get; set; } = 1440;
+
+    public int DegradedCurrentWindowMinutes { get; set; } = 60;
+
+    public double DegradedPacketLossIncreasePercentagePoints { get; set; } = 20d;
+
+    public double DegradedRttIncreasePercent { get; set; } = 20d;
+
+    public int DegradedMinimumSamples { get; set; } = 10;
+
     public bool EnableAutomaticUpdateChecks { get; set; } = true;
 
     public int AutomaticUpdateCheckIntervalMinutes { get; set; } = 15;

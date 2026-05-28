@@ -15,7 +15,7 @@
         .button{border:0;background:var(--accent);color:#fff;cursor:pointer;} .button-secondary{border:1px solid var(--border);color:var(--text);background:#fff;cursor:pointer;}
         .saved{border:1px solid #c2f0c2;background:#ebffee;color:var(--success);border-radius:10px;padding:.8rem;} .errors{border:1px solid #fda29b;background:var(--error-bg);color:var(--error-text);border-radius:10px;padding:.8rem;}
         .muted{color:var(--muted);} .field-error{color:var(--error-text);font-size:.9rem;margin-top:.25rem;}
-        input{width:100%;min-height:44px;border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem;font:inherit;}
+        input{width:100%;min-height:44px;border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem;font:inherit;} input[type="checkbox"]{width:auto;min-height:0;transform:scale(1.2);margin-right:.5rem;} .field-help{font-size:.9rem;color:var(--muted);margin:.25rem 0 0;} .checkbox-row{display:flex;align-items:center;min-height:44px;}
         @@media (min-width: 720px) { .field-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
     </style>
 </head>
@@ -65,6 +65,50 @@
                     </div>
                 </div>
                 <p class="muted">Last updated: @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.UpdatedAtUtc)</p>
+            </section>
+
+            <section class="card">
+                <h2>Degraded evaluation</h2>
+                <p class="muted">Mark endpoint Degraded when recent RTT or packet loss is significantly worse than its baseline.</p>
+                <div class="field-grid">
+                    <div>
+                        <div class="checkbox-row">
+                            <input asp-for="DegradedEvaluationEnabled" type="checkbox" />
+                            <label asp-for="DegradedEvaluationEnabled"></label>
+                        </div>
+                        <p class="field-help">When enabled, Degraded is evaluated only after an assignment would otherwise be UP.</p>
+                    </div>
+                    <div>
+                        <label asp-for="DegradedMinimumSamples"></label>
+                        <input asp-for="DegradedMinimumSamples" type="number" min="1" />
+                        <p class="field-help">Minimum completed results required in both baseline and current windows.</p>
+                        <div class="field-error"><span asp-validation-for="DegradedMinimumSamples"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DegradedBaselineLookbackMinutes"></label>
+                        <input asp-for="DegradedBaselineLookbackMinutes" type="number" min="2" />
+                        <p class="field-help">Default: 1440 minutes (24 hours). The current window is excluded from the baseline.</p>
+                        <div class="field-error"><span asp-validation-for="DegradedBaselineLookbackMinutes"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DegradedCurrentWindowMinutes"></label>
+                        <input asp-for="DegradedCurrentWindowMinutes" type="number" min="1" />
+                        <p class="field-help">Default: 60 minutes.</p>
+                        <div class="field-error"><span asp-validation-for="DegradedCurrentWindowMinutes"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DegradedPacketLossIncreasePercentagePoints"></label>
+                        <input asp-for="DegradedPacketLossIncreasePercentagePoints" type="number" min="0" max="100" step="0.1" />
+                        <p class="field-help">Default: +20 percentage points over baseline packet loss.</p>
+                        <div class="field-error"><span asp-validation-for="DegradedPacketLossIncreasePercentagePoints"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DegradedRttIncreasePercent"></label>
+                        <input asp-for="DegradedRttIncreasePercent" type="number" min="0" step="0.1" />
+                        <p class="field-help">Default: +20% over baseline average successful RTT.</p>
+                        <div class="field-error"><span asp-validation-for="DegradedRttIncreasePercent"></span></div>
+                    </div>
+                </div>
             </section>
 
             <div class="button-row"><button class="button" type="submit">Save default endpoint values</button></div>

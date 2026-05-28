@@ -87,6 +87,12 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "DefaultTimeoutMs",
         "DefaultFailureThreshold",
         "DefaultRecoveryThreshold",
+        "DegradedEvaluationEnabled",
+        "DegradedBaselineLookbackMinutes",
+        "DegradedCurrentWindowMinutes",
+        "DegradedPacketLossIncreasePercentagePoints",
+        "DegradedRttIncreasePercent",
+        "DegradedMinimumSamples",
         "EnableAutomaticUpdateChecks",
         "AutomaticUpdateCheckIntervalMinutes",
         "AutomaticallyDownloadAndStageUpdates",
@@ -434,6 +440,12 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `DefaultTimeoutMs` int NOT NULL,
                 `DefaultFailureThreshold` int NOT NULL,
                 `DefaultRecoveryThreshold` int NOT NULL,
+                `DegradedEvaluationEnabled` tinyint(1) NOT NULL DEFAULT 1,
+                `DegradedBaselineLookbackMinutes` int NOT NULL DEFAULT 1440,
+                `DegradedCurrentWindowMinutes` int NOT NULL DEFAULT 60,
+                `DegradedPacketLossIncreasePercentagePoints` double NOT NULL DEFAULT 20,
+                `DegradedRttIncreasePercent` double NOT NULL DEFAULT 20,
+                `DegradedMinimumSamples` int NOT NULL DEFAULT 10,
                 `EnableAutomaticUpdateChecks` tinyint(1) NOT NULL DEFAULT 1,
                 `AutomaticUpdateCheckIntervalMinutes` int NOT NULL DEFAULT 15,
                 `AutomaticallyDownloadAndStageUpdates` tinyint(1) NOT NULL DEFAULT 0,
@@ -1267,6 +1279,67 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         if (connection.State != System.Data.ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
+        }
+
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "DegradedEvaluationEnabled", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `DegradedEvaluationEnabled` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "DegradedBaselineLookbackMinutes", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `DegradedBaselineLookbackMinutes` int NOT NULL DEFAULT 1440;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "DegradedCurrentWindowMinutes", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `DegradedCurrentWindowMinutes` int NOT NULL DEFAULT 60;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "DegradedPacketLossIncreasePercentagePoints", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `DegradedPacketLossIncreasePercentagePoints` double NOT NULL DEFAULT 20;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "DegradedRttIncreasePercent", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `DegradedRttIncreasePercent` double NOT NULL DEFAULT 20;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "DegradedMinimumSamples", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `DegradedMinimumSamples` int NOT NULL DEFAULT 10;
+                """,
+                cancellationToken);
         }
 
         if (!await HasApplicationSettingsColumnAsync(connection, "EnableAutomaticUpdateChecks", cancellationToken))

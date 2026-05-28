@@ -42,7 +42,13 @@ public sealed class AdminDefaultEndpointValuesController : Controller
                 DefaultRetryIntervalSeconds = model.DefaultRetryIntervalSeconds,
                 DefaultTimeoutMs = model.DefaultTimeoutMs,
                 DefaultFailureThreshold = model.DefaultFailureThreshold,
-                DefaultRecoveryThreshold = model.DefaultRecoveryThreshold
+                DefaultRecoveryThreshold = model.DefaultRecoveryThreshold,
+                DegradedEvaluationEnabled = model.DegradedEvaluationEnabled,
+                DegradedBaselineLookbackMinutes = model.DegradedBaselineLookbackMinutes,
+                DegradedCurrentWindowMinutes = model.DegradedCurrentWindowMinutes,
+                DegradedPacketLossIncreasePercentagePoints = model.DegradedPacketLossIncreasePercentagePoints,
+                DegradedRttIncreasePercent = model.DegradedRttIncreasePercent,
+                DegradedMinimumSamples = model.DegradedMinimumSamples
             },
             cancellationToken);
 
@@ -58,6 +64,12 @@ public sealed class AdminDefaultEndpointValuesController : Controller
             DefaultTimeoutMs = settings.DefaultTimeoutMs,
             DefaultFailureThreshold = settings.DefaultFailureThreshold,
             DefaultRecoveryThreshold = settings.DefaultRecoveryThreshold,
+            DegradedEvaluationEnabled = settings.DegradedEvaluationEnabled,
+            DegradedBaselineLookbackMinutes = settings.DegradedBaselineLookbackMinutes,
+            DegradedCurrentWindowMinutes = settings.DegradedCurrentWindowMinutes,
+            DegradedPacketLossIncreasePercentagePoints = settings.DegradedPacketLossIncreasePercentagePoints,
+            DegradedRttIncreasePercent = settings.DegradedRttIncreasePercent,
+            DegradedMinimumSamples = settings.DegradedMinimumSamples,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             Saved = saved
         };

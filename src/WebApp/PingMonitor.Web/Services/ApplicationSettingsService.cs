@@ -38,6 +38,12 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
         settings.DefaultTimeoutMs = command.DefaultTimeoutMs;
         settings.DefaultFailureThreshold = command.DefaultFailureThreshold;
         settings.DefaultRecoveryThreshold = command.DefaultRecoveryThreshold;
+        settings.DegradedEvaluationEnabled = command.DegradedEvaluationEnabled;
+        settings.DegradedBaselineLookbackMinutes = command.DegradedBaselineLookbackMinutes;
+        settings.DegradedCurrentWindowMinutes = command.DegradedCurrentWindowMinutes;
+        settings.DegradedPacketLossIncreasePercentagePoints = command.DegradedPacketLossIncreasePercentagePoints;
+        settings.DegradedRttIncreasePercent = command.DegradedRttIncreasePercent;
+        settings.DegradedMinimumSamples = command.DegradedMinimumSamples;
         settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -63,6 +69,12 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             DefaultTimeoutMs = 1000,
             DefaultFailureThreshold = 3,
             DefaultRecoveryThreshold = 2,
+            DegradedEvaluationEnabled = true,
+            DegradedBaselineLookbackMinutes = 1440,
+            DegradedCurrentWindowMinutes = 60,
+            DegradedPacketLossIncreasePercentagePoints = 20d,
+            DegradedRttIncreasePercent = 20d,
+            DegradedMinimumSamples = 10,
             EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
             AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes),
             AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates,
@@ -100,6 +112,12 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             DefaultTimeoutMs = settings.DefaultTimeoutMs,
             DefaultFailureThreshold = settings.DefaultFailureThreshold,
             DefaultRecoveryThreshold = settings.DefaultRecoveryThreshold,
+            DegradedEvaluationEnabled = settings.DegradedEvaluationEnabled,
+            DegradedBaselineLookbackMinutes = settings.DegradedBaselineLookbackMinutes,
+            DegradedCurrentWindowMinutes = settings.DegradedCurrentWindowMinutes,
+            DegradedPacketLossIncreasePercentagePoints = settings.DegradedPacketLossIncreasePercentagePoints,
+            DegradedRttIncreasePercent = settings.DegradedRttIncreasePercent,
+            DegradedMinimumSamples = settings.DegradedMinimumSamples,
             UpdatedAtUtc = settings.UpdatedAtUtc
         };
     }

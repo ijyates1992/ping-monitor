@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.EventLogs;
@@ -126,8 +127,12 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 
         var previousState = mutableState.CurrentState;
         var previousStateChangedAtUtc = mutableState.LastStateChangeUtc ?? DateTimeOffset.UtcNow;
-        var nextState = DetermineNextState(assignmentContext, mutableState, parentContext);
-        var reasonCode = GetReasonCode(previousState, nextState, parentContext.DependencyDown);
+        var baseNextState = DetermineNextState(assignmentContext, mutableState, parentContext);
+        var degradedEvaluation = baseNextState == EndpointStateKind.Up
+            ? await EvaluateDegradedAsync(assignmentContext.AssignmentId, DateTimeOffset.UtcNow, cancellationToken)
+            : DegradedEndpointEvaluationResult.NotDegraded;
+        var nextState = DegradedEndpointStatePriority.Apply(baseNextState, degradedEvaluation);
+        var reasonCode = GetReasonCode(previousState, nextState, parentContext.DependencyDown, degradedEvaluation.IsDegraded);
 
         mutableState.CurrentState = nextState;
         mutableState.SuppressedByEndpointId = nextState == EndpointStateKind.Suppressed
@@ -185,7 +190,8 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                         previousState,
                         nextState,
                         transitionAtUtc.Value,
-                        previousStateChangedAtUtc),
+                        previousStateChangedAtUtc,
+                        degradedEvaluation),
                     DetailsJson = JsonSerializer.Serialize(new
                     {
                         assignmentContext.AssignmentId,
@@ -194,7 +200,20 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                         previousState = previousState.ToString(),
                         newState = nextState.ToString(),
                         reasonCode,
-                        dependencyEndpointId = mutableState.SuppressedByEndpointId
+                        dependencyEndpointId = mutableState.SuppressedByEndpointId,
+                        degraded = new
+                        {
+                            degradedEvaluation.IsDegraded,
+                            degradedEvaluation.ReasonSummary,
+                            degradedEvaluation.BaselineSampleCount,
+                            degradedEvaluation.CurrentSampleCount,
+                            degradedEvaluation.BaselinePacketLossPercent,
+                            degradedEvaluation.CurrentPacketLossPercent,
+                            degradedEvaluation.BaselineAverageRttMs,
+                            degradedEvaluation.CurrentAverageRttMs,
+                            degradedEvaluation.PacketLossDegraded,
+                            degradedEvaluation.RttDegraded
+                        }
                     })
                 },
                 cancellationToken);
@@ -300,7 +319,57 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         return state.CurrentState;
     }
 
-    private static string? GetReasonCode(EndpointStateKind previousState, EndpointStateKind newState, bool dependencyDown)
+    private async Task<DegradedEndpointEvaluationResult> EvaluateDegradedAsync(
+        string assignmentId,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var settings = await GetDegradedSettingsAsync(cancellationToken);
+        if (!settings.Enabled || settings.BaselineLookbackMinutes <= settings.CurrentWindowMinutes)
+        {
+            return DegradedEndpointEvaluationResult.NotDegraded;
+        }
+
+        var windowStartUtc = nowUtc.AddMinutes(-settings.BaselineLookbackMinutes);
+        var results = await _dbContext.CheckResults.AsNoTracking()
+            .Where(x => x.AssignmentId == assignmentId
+                && x.CheckedAtUtc >= windowStartUtc
+                && x.CheckedAtUtc <= nowUtc)
+            .OrderBy(x => x.CheckedAtUtc)
+            .Select(x => new CheckResult
+            {
+                AssignmentId = x.AssignmentId,
+                CheckedAtUtc = x.CheckedAtUtc,
+                Success = x.Success,
+                RoundTripMs = x.RoundTripMs
+            })
+            .ToArrayAsync(cancellationToken);
+
+        return DegradedEndpointEvaluator.Evaluate(results, nowUtc, settings);
+    }
+
+    private async Task<DegradedEndpointEvaluationSettings> GetDegradedSettingsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _dbContext.ApplicationSettings.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ApplicationSettingsId == ApplicationSettings.SingletonId, cancellationToken);
+
+        if (settings is null)
+        {
+            return new DegradedEndpointEvaluationSettings();
+        }
+
+        return new DegradedEndpointEvaluationSettings
+        {
+            Enabled = settings.DegradedEvaluationEnabled,
+            BaselineLookbackMinutes = Math.Max(1, settings.DegradedBaselineLookbackMinutes),
+            CurrentWindowMinutes = Math.Max(1, settings.DegradedCurrentWindowMinutes),
+            PacketLossIncreasePercentagePoints = Math.Clamp(settings.DegradedPacketLossIncreasePercentagePoints, 0d, 100d),
+            RttIncreasePercent = Math.Max(0d, settings.DegradedRttIncreasePercent),
+            MinimumSamples = Math.Max(1, settings.DegradedMinimumSamples)
+        };
+    }
+
+    private static string? GetReasonCode(EndpointStateKind previousState, EndpointStateKind newState, bool dependencyDown, bool degraded)
     {
         if (previousState == newState)
         {
@@ -317,6 +386,11 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             return StateTransitionReasonCodes.DependencyDown;
         }
 
+        if (previousState == EndpointStateKind.Degraded && newState == EndpointStateKind.Up)
+        {
+            return StateTransitionReasonCodes.DegradedThresholdCleared;
+        }
+
         if (newState == EndpointStateKind.Up)
         {
             return previousState == EndpointStateKind.Suppressed
@@ -329,6 +403,11 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             return previousState == EndpointStateKind.Suppressed && !dependencyDown
                 ? StateTransitionReasonCodes.DependencyCleared
                 : StateTransitionReasonCodes.FailureThresholdReached;
+        }
+
+        if (newState == EndpointStateKind.Degraded && degraded)
+        {
+            return StateTransitionReasonCodes.DegradedThresholdReached;
         }
 
         return null;
@@ -346,7 +425,8 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         EndpointStateKind previousState,
         EndpointStateKind nextState,
         DateTimeOffset transitionAtUtc,
-        DateTimeOffset previousStateChangedAtUtc)
+        DateTimeOffset previousStateChangedAtUtc,
+        DegradedEndpointEvaluationResult degradedEvaluation)
     {
         if (nextState == EndpointStateKind.Down)
         {
@@ -357,6 +437,16 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         {
             var downtime = transitionAtUtc - previousStateChangedAtUtc;
             return $"Endpoint \"{endpointName}\" recovered after {FormatDuration(downtime)} downtime.";
+        }
+
+        if (nextState == EndpointStateKind.Degraded && degradedEvaluation.IsDegraded && !string.IsNullOrWhiteSpace(degradedEvaluation.ReasonSummary))
+        {
+            return $"Endpoint \"{endpointName}\" is degraded: {degradedEvaluation.ReasonSummary}.";
+        }
+
+        if (previousState == EndpointStateKind.Degraded && nextState == EndpointStateKind.Up)
+        {
+            return $"Endpoint \"{endpointName}\" recovered from degraded performance; current RTT and packet loss no longer exceed configured thresholds or there is insufficient comparison data.";
         }
 
         return $"Endpoint \"{endpointName}\" state changed from {previousState} to {nextState}.";

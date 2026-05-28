@@ -9,4 +9,6 @@ public static class StateTransitionReasonCodes
     public const string AdministrativeReset = "administrative_reset";
     public const string AgentContextLost = "agent_context_lost";
     public const string AgentOfflineTimeout = "agent_offline_timeout";
+    public const string DegradedThresholdReached = "degraded_threshold_reached";
+    public const string DegradedThresholdCleared = "degraded_threshold_cleared";
 }
