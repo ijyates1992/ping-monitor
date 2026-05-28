@@ -17,6 +17,7 @@ class AgentConfig:
     verify_tls: bool = True
     log_level: str = "INFO"
     result_queue_path: str = "./data/result-queue.jsonl"
+    icmp_backend: str = "auto"
 
 
 REQUIRED_KEYS = ("SERVER_URL", "INSTANCE_ID", "API_KEY")
@@ -40,6 +41,7 @@ def load_config() -> AgentConfig:
         verify_tls=_get_bool("VERIFY_TLS", True),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         result_queue_path=os.getenv("RESULT_QUEUE_PATH", "./data/result-queue.jsonl"),
+        icmp_backend=_get_icmp_backend("ICMP_BACKEND", "auto"),
     )
 
 
@@ -66,3 +68,15 @@ def _get_bool(name: str, default: bool) -> bool:
         return False
 
     raise ValueError(f"Environment variable {name} must be a boolean value.")
+
+
+def _get_icmp_backend(name: str, default: str) -> str:
+    raw_value = os.getenv(name)
+    if raw_value is None or raw_value == "":
+        return default
+
+    normalized = raw_value.strip().lower()
+    if normalized in {"auto", "pythonping", "subprocess"}:
+        return normalized
+
+    raise ValueError(f"Environment variable {name} must be one of: auto, pythonping, subprocess.")

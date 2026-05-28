@@ -33,7 +33,7 @@ public sealed class LatestAssignmentResultContext
     public required DateTimeOffset CheckedAtUtc { get; init; }
     public required DateTimeOffset ReceivedAtUtc { get; init; }
     public required bool Success { get; init; }
-    public int? RoundTripMs { get; init; }
+    public decimal? RoundTripMs { get; init; }
     public string? ErrorCode { get; init; }
     public string? ErrorMessage { get; init; }
 }
@@ -43,9 +43,9 @@ public sealed class AssignmentWindowSnapshot
     public required string AssignmentId { get; init; }
     public required DateTimeOffset WindowStartUtc { get; init; }
     public required DateTimeOffset WindowEndUtc { get; init; }
-    public required int? LastRttMs { get; init; }
-    public required int? HighestRttMs { get; init; }
-    public required int? LowestRttMs { get; init; }
+    public required double? LastRttMs { get; init; }
+    public required double? HighestRttMs { get; init; }
+    public required double? LowestRttMs { get; init; }
     public required double? AverageRttMs { get; init; }
     public required double? JitterMs { get; init; }
     public required DateTimeOffset? LastSuccessfulCheckUtc { get; init; }

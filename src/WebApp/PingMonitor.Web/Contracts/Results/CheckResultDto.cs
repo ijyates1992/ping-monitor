@@ -6,6 +6,6 @@ public sealed record CheckResultDto(
     string CheckType,
     DateTimeOffset CheckedAtUtc,
     bool Success,
-    int? RoundTripMs,
+    decimal? RoundTripMs,
     string? ErrorCode,
     string? ErrorMessage);

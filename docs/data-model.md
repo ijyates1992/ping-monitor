@@ -331,7 +331,7 @@ Represents a single raw check result.
 
 - `checkedAtUtc`
 - `success` (bool)
-- `roundTripMs` (nullable)
+- `roundTripMs` (nullable decimal milliseconds; existing integer values remain valid)
 - `errorCode` (nullable)
 - `errorMessage` (nullable)
 

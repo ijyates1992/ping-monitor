@@ -130,7 +130,7 @@ internal static class DegradedEndpointEvaluator
             .Select(static x => x.RoundTripMs!.Value)
             .ToArray();
 
-        return successfulRtts.Length == 0 ? null : successfulRtts.Average();
+        return successfulRtts.Length == 0 ? null : (double)successfulRtts.Average();
     }
 }
 

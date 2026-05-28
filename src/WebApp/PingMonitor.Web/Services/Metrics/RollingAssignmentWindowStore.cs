@@ -33,7 +33,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
         {
             var window = await GetWindowAsync(group.Key, nowUtc, cancellationToken);
             var ordered = group
-                .Select(x => new RttSamplePoint(x.CheckedAtUtc, x.RoundTripMs!.Value))
+                .Select(x => new RttSamplePoint(x.CheckedAtUtc, (double)x.RoundTripMs!.Value))
                 .OrderBy(x => x.CheckedAtUtc)
                 .ToArray();
 
@@ -202,7 +202,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
             .OrderBy(x => x.CheckedAtUtc)
             .ThenBy(x => x.ReceivedAtUtc)
             .ThenBy(x => x.CheckResultId)
-            .Select(x => new RttSamplePoint(x.CheckedAtUtc, x.RoundTripMs!.Value))
+            .Select(x => new RttSamplePoint(x.CheckedAtUtc, (double)x.RoundTripMs!.Value))
             .ToArrayAsync(cancellationToken);
 
         var transitionsInWindow = await dbContext.StateTransitions.AsNoTracking()
@@ -258,7 +258,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
             .ToArray();
     }
 
-    private readonly record struct RttSamplePoint(DateTimeOffset CheckedAtUtc, int RttMs);
+    private readonly record struct RttSamplePoint(DateTimeOffset CheckedAtUtc, double RttMs);
     private readonly record struct StateTransitionPoint(DateTimeOffset TransitionAtUtc, EndpointStateKind State);
 
     private void TryUpdateLatestResult(CheckResult checkResult)
@@ -307,9 +307,9 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
         private readonly SemaphoreSlim _gate = new(1, 1);
         private readonly LinkedList<RttSamplePoint> _rttSamples = [];
         private readonly LinkedList<StateTransitionPoint> _stateTransitions = [];
-        private long _rttSum;
-        private int? _rttMin;
-        private int? _rttMax;
+        private double _rttSum;
+        private double? _rttMin;
+        private double? _rttMax;
         private bool _rttMinDirty;
         private bool _rttMaxDirty;
         private double _rttDeltaSum;
@@ -460,7 +460,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
             var rttCount = _rttSamples.Count;
             var lastRtt = _rttSamples.Last?.Value.RttMs;
             var lastSuccessUtc = _rttSamples.Last?.Value.CheckedAtUtc;
-            var averageRtt = rttCount > 0 ? _rttSum / (double)rttCount : (double?)null;
+            var averageRtt = rttCount > 0 ? _rttSum / rttCount : (double?)null;
             var jitter = rttCount >= 2 ? _rttDeltaSum / (rttCount - 1) : (double?)null;
 
             var durations = CalculateStateDurations(windowStartUtc, nowUtc);

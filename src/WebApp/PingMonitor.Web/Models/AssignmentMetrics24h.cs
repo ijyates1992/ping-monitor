@@ -9,9 +9,9 @@ public sealed class AssignmentMetrics24h
     public long DowntimeSeconds { get; set; }
     public long UnknownSeconds { get; set; }
     public long SuppressedSeconds { get; set; }
-    public int? LastRttMs { get; set; }
-    public int? HighestRttMs { get; set; }
-    public int? LowestRttMs { get; set; }
+    public double? LastRttMs { get; set; }
+    public double? HighestRttMs { get; set; }
+    public double? LowestRttMs { get; set; }
     public double? AverageRttMs { get; set; }
     public double? JitterMs { get; set; }
     public DateTimeOffset? LastSuccessfulCheckUtc { get; set; }

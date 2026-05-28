@@ -130,7 +130,7 @@ curl -i \
         "checkType": "icmp",
         "checkedAtUtc": "2026-03-21T21:31:05Z",
         "success": true,
-        "roundTripMs": 2,
+        "roundTripMs": 2.345,
         "errorCode": null,
         "errorMessage": null
       },

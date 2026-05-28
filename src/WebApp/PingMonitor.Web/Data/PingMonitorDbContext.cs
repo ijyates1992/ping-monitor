@@ -172,6 +172,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         checkResult.Property(x => x.ErrorCode).HasMaxLength(128);
         checkResult.Property(x => x.ErrorMessage).HasMaxLength(2048);
         checkResult.Property(x => x.BatchId).HasMaxLength(128).IsRequired();
+        checkResult.Property(x => x.RoundTripMs).HasPrecision(10, 3);
         checkResult.Property(x => x.CheckedAtUtc).IsRequired();
         checkResult.Property(x => x.ReceivedAtUtc).IsRequired();
         checkResult.HasIndex(x => new { x.AssignmentId, x.CheckedAtUtc });
