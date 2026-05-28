@@ -150,9 +150,8 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
             return;
         }
 
-        var assignmentIds = assignments.Select(x => x.AssignmentId).ToArray();
         var states = await dbContext.EndpointStates
-            .Where(x => assignmentIds.Contains(x.AssignmentId))
+            .Where(x => x.AgentId == agent.AgentId)
             .ToDictionaryAsync(x => x.AssignmentId, x => x, cancellationToken);
 
         foreach (var assignment in assignments)
