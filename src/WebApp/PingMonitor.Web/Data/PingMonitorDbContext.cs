@@ -311,6 +311,12 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         appSettings.Property(x => x.DefaultTimeoutMs).IsRequired();
         appSettings.Property(x => x.DefaultFailureThreshold).IsRequired();
         appSettings.Property(x => x.DefaultRecoveryThreshold).IsRequired();
+        appSettings.Property(x => x.DegradedEvaluationEnabled).IsRequired();
+        appSettings.Property(x => x.DegradedBaselineLookbackMinutes).IsRequired();
+        appSettings.Property(x => x.DegradedCurrentWindowMinutes).IsRequired();
+        appSettings.Property(x => x.DegradedPacketLossIncreasePercentagePoints).IsRequired();
+        appSettings.Property(x => x.DegradedRttIncreasePercent).IsRequired();
+        appSettings.Property(x => x.DegradedMinimumSamples).IsRequired();
         appSettings.Property(x => x.UpdatedAtUtc).IsRequired();
 
         var notificationSettings = modelBuilder.Entity<NotificationSettings>();

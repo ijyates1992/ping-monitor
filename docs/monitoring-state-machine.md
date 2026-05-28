@@ -6,13 +6,13 @@ This document defines how endpoint state is calculated from raw monitoring resul
 
 It is the authoritative source for:
 
-- endpoint state values  
-- state transition rules  
-- threshold behaviour  
-- dependency suppression rules  
-- agent-offline handling  
-- alert-trigger conditions  
-- recovery-trigger conditions  
+- endpoint state values
+- state transition rules
+- threshold behaviour
+- dependency suppression rules
+- agent-offline handling
+- alert-trigger conditions
+- recovery-trigger conditions
 
 This document is intentionally explicit. Monitoring state must be deterministic, explainable, and auditable.
 
@@ -20,15 +20,15 @@ This document is intentionally explicit. Monitoring state must be deterministic,
 
 ## Design principles
 
-- Raw results are facts  
-- State is derived by the server  
-- Agents do not calculate endpoint state  
-- Agents do not apply dependency suppression  
-- Suppression is a first-class state  
-- State transitions must be deterministic  
-- Alerting must be based on confirmed state transitions  
-- Missing data must not be silently treated as healthy  
-- Agent health and endpoint health must be tracked separately  
+- Raw results are facts
+- State is derived by the server
+- Agents do not calculate endpoint state
+- Agents do not apply dependency suppression
+- Suppression is a first-class state
+- State transitions must be deterministic
+- Alerting must be based on confirmed state transitions
+- Missing data must not be silently treated as healthy
+- Agent health and endpoint health must be tracked separately
 
 ---
 
@@ -40,8 +40,8 @@ A raw check result is a single factual observation submitted by an agent.
 
 Examples:
 
-- ICMP ping succeeded in 3 ms  
-- ICMP ping timed out  
+- ICMP ping succeeded in 3 ms
+- ICMP ping timed out
 
 A raw check result is not itself an incident or a state.
 
@@ -53,10 +53,10 @@ Endpoint state is the server’s interpretation of an endpoint’s status for a 
 
 State is derived from:
 
-- raw results  
-- thresholds  
-- dependency relationships  
-- agent health context  
+- raw results
+- thresholds
+- dependency relationships
+- agent health context
 
 ---
 
@@ -95,9 +95,9 @@ State is tracked **per assignment (agent + endpoint)**.
 Insufficient trusted data to determine state.
 
 Typical causes:
-- no results yet  
-- agent offline  
-- startup  
+- no results yet
+- agent offline
+- startup
 
 ---
 
@@ -112,20 +112,27 @@ Endpoint is reachable and meets all success criteria.
 Endpoint is reachable, but quality is below acceptable thresholds.
 
 Examples:
-- high latency  
-- packet loss  
-- intermittent instability  
+- high latency
+- packet loss
+- intermittent instability
 
 Important:
 
-- endpoint is still reachable  
-- this is not a failure state  
-- this does not imply outage  
+- endpoint is still reachable
+- this is not a failure state
+- this does not imply outage
 
 ### v1 behaviour
 
-- `DEGRADED` is defined but **not actively used unless explicitly implemented**
-- endpoints will not enter `DEGRADED` without degradation rules configured
+- `DEGRADED` is actively evaluated when degraded evaluation is enabled.
+- Default degraded settings are:
+  - baseline lookback: 24 hours
+  - current evaluation window: 1 hour
+  - packet loss increase threshold: +20 percentage points
+  - RTT increase threshold: +20%
+  - minimum samples: 10 completed results in both baseline and current windows
+- Baseline comparison excludes the current window so current degradation does not dilute its own baseline.
+- `DEGRADED` is non-failure and only applies when the assignment would otherwise be `UP`.
 
 ---
 
@@ -141,9 +148,9 @@ Endpoint is failing, but failure is attributed to a dependency.
 
 Important:
 
-- this is a real state  
-- alerts are suppressed  
-- endpoint may still be unreachable  
+- this is a real state
+- alerts are suppressed
+- endpoint may still be unreachable
 
 ---
 
@@ -151,8 +158,8 @@ Important:
 
 State must be calculated per:
 
-- agent  
-- endpoint  
+- agent
+- endpoint
 
 Different agents may observe different states.
 
@@ -170,8 +177,8 @@ Number of consecutive successes required before `UP`.
 
 ### Counter behaviour
 
-- success resets failure count  
-- failure resets success count  
+- success resets failure count
+- failure resets success count
 
 ---
 
@@ -219,12 +226,14 @@ Transitions:
 
 ### Core evaluation order
 
-1. assignment enabled  
-2. agent health valid  
-3. update counters  
-4. evaluate thresholds  
-5. evaluate dependency  
-6. determine state  
+1. assignment enabled
+2. agent health valid
+3. update counters
+4. evaluate thresholds
+5. evaluate dependency
+6. determine base state
+7. evaluate degraded only when base state is `UP`
+8. determine final state
 
 ---
 
@@ -253,6 +262,9 @@ else:
 
     else:
         state = current state
+
+    if state == UP and degraded evaluation is enabled and recent RTT or packet loss exceeds baseline thresholds:
+        state = DEGRADED
 ```
 
 ---
@@ -287,7 +299,8 @@ else:
 
 ### v1 degraded behaviour
 
-- `DEGRADED` does NOT trigger alerts by default  
+- `DEGRADED` does NOT trigger alerts by default.
+- State transition events are recorded when entering or leaving `DEGRADED`, including the RTT and/or packet-loss reason.
 
 ---
 
@@ -297,15 +310,15 @@ Agent offline must NOT imply endpoint failure.
 
 ### Behaviour:
 
-- stale agent → endpoints remain temporarily  
+- stale agent → endpoints remain temporarily
 - prolonged outage → endpoints become `UNKNOWN`
 
 ---
 
 ## Missing data rules
 
-- missing data ≠ success  
-- missing data ≠ failure  
+- missing data ≠ success
+- missing data ≠ failure
 
 Default:
 
@@ -317,10 +330,10 @@ Default:
 
 Disabled endpoints:
 
-- not monitored  
-- state becomes `UNKNOWN`  
-- do not alert  
-- do not suppress others  
+- not monitored
+- state becomes `UNKNOWN`
+- do not alert
+- do not suppress others
 
 ---
 
@@ -328,10 +341,10 @@ Disabled endpoints:
 
 State must be recalculated when:
 
-- new result arrives  
-- dependency changes  
-- agent health changes  
-- assignment changes  
+- new result arrives
+- dependency changes
+- agent health changes
+- assignment changes
 
 ---
 
@@ -354,36 +367,30 @@ State must be recalculated when:
 
 ### Agent offline
 
-- agent stops reporting  
-- endpoints → eventually `UNKNOWN`  
+- agent stops reporting
+- endpoints → eventually `UNKNOWN`
 
 ---
 
 ## Invariants
 
-- agents never submit state  
-- suppression is server-only  
-- `SUPPRESSED` never alerts  
-- `DOWN` always respects threshold  
-- agent offline ≠ endpoint down  
-- system must be deterministic  
+- agents never submit state
+- suppression is server-only
+- `SUPPRESSED` never alerts
+- `DOWN` always respects threshold
+- agent offline ≠ endpoint down
+- system must be deterministic
 
 ---
 
-## Future extension (DEGRADED)
+## Degraded extension rules
 
-Planned future logic may include:
+Degraded remains:
 
-- latency thresholds  
-- packet loss thresholds  
-- rolling averages  
-- percentile-based degradation  
-
-Degraded must remain:
-
-- non-failure  
-- policy-driven  
-- optionally alertable  
+- non-failure
+- policy-driven
+- optionally alertable
+- lower priority than `UNKNOWN`, `SUPPRESSED`, and `DOWN`
 
 ---
 
@@ -391,11 +398,11 @@ Degraded must remain:
 
 **Agents submit facts. The server derives state.**
 
-- `UP` = healthy  
-- `DEGRADED` = reachable but poor quality  
-- `DOWN` = confirmed failure  
-- `SUPPRESSED` = dependency-caused failure  
-- `UNKNOWN` = insufficient data  
+- `UP` = healthy
+- `DEGRADED` = reachable but poor quality
+- `DOWN` = confirmed failure
+- `SUPPRESSED` = dependency-caused failure
+- `UNKNOWN` = insufficient data
 
 The system must remain predictable, auditable, and explainable at all times.
 

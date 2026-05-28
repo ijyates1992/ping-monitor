@@ -8,4 +8,10 @@ public sealed class UpdateApplicationSettingsCommand
     public int DefaultTimeoutMs { get; init; }
     public int DefaultFailureThreshold { get; init; }
     public int DefaultRecoveryThreshold { get; init; }
+    public bool DegradedEvaluationEnabled { get; init; } = true;
+    public int DegradedBaselineLookbackMinutes { get; init; } = 1440;
+    public int DegradedCurrentWindowMinutes { get; init; } = 60;
+    public double DegradedPacketLossIncreasePercentagePoints { get; init; } = 20d;
+    public double DegradedRttIncreasePercent { get; init; } = 20d;
+    public int DegradedMinimumSamples { get; init; } = 10;
 }
