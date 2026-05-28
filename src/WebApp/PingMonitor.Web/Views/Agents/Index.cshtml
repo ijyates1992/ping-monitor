@@ -116,6 +116,7 @@
                                 <div class="meta-item"><span>Agent version</span><div>@agent.AgentVersion</div></div>
                                 <div class="meta-item"><span>Machine name</span><div>@agent.MachineName</div></div>
                                 <div class="meta-item"><span>Platform</span><div>@agent.Platform</div></div>
+                                <div class="meta-item"><span>Unknown after offline</span><div>@agent.EndpointUnknownAfterAgentOfflineSeconds seconds</div></div>
                             </div>
                             @if (agent.IsVersionDifferentFromBundled)
                             {
@@ -125,6 +126,14 @@
                             }
 
                             <div class="action-row" style="margin-top:.9rem;">
+                                <form method="post" action="/agents/@agent.AgentId/offline-unknown-timeout">
+                                    @Html.AntiForgeryToken()
+                                    <label for="offline-timeout-@agent.AgentId" class="muted" style="display:block;margin-bottom:.2rem;">If this agent stops reporting for this long, its assigned endpoints are marked Unknown.</label>
+                                    <div style="display:flex;gap:.4rem;align-items:center;">
+                                        <input id="offline-timeout-@agent.AgentId" name="endpointUnknownAfterAgentOfflineSeconds" type="number" min="30" max="86400" step="1" value="@agent.EndpointUnknownAfterAgentOfflineSeconds" style="min-height:46px;max-width:140px;padding:.5rem;border:1px solid var(--border);border-radius:10px;" />
+                                        <button class="button-secondary" type="submit">Save timeout</button>
+                                    </div>
+                                </form>
                                 <a class="button-secondary" href="/agents/@agent.AgentId/history">View history</a>
                                 @if (agent.Enabled)
                                 {

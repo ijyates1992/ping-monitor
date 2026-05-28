@@ -15,6 +15,7 @@ public sealed class AgentManagementRow
     public required DateTimeOffset CreatedAtUtc { get; init; }
     public required int AssignmentCount { get; init; }
     public double? UptimePercent { get; init; }
+    public required int EndpointUnknownAfterAgentOfflineSeconds { get; init; }
 }
 
 public sealed class RemoveAgentDetails

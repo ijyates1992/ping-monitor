@@ -62,7 +62,8 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
             MachineName = null,
             CreatedAtUtc = now,
             ApiKeyCreatedAtUtc = now,
-            ApiKeyHash = string.Empty
+            ApiKeyHash = string.Empty,
+            EndpointUnknownAfterAgentOfflineSeconds = Agent.DefaultEndpointUnknownAfterAgentOfflineSeconds
         };
 
         agent.ApiKeyHash = _apiKeyHasher.Hash(agent, plainTextApiKey);
@@ -106,6 +107,37 @@ internal sealed class AgentProvisioningService : IAgentProvisioningService
         await _dbContext.SaveChangesAsync(cancellationToken);
         _configurationChangeBackupSignal.NotifyConfigurationChanged("agent-enabled-state-changed");
         _logger.LogInformation("Set enabled={Enabled} for agent {AgentId}", enabled, agent.AgentId);
+        return true;
+    }
+
+    public async Task<bool> SetEndpointUnknownAfterOfflineSecondsAsync(string agentId, int seconds, CancellationToken cancellationToken)
+    {
+        var normalizedAgentId = NormalizeAgentId(agentId);
+        var agent = await _dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
+        if (agent is null)
+        {
+            throw new InvalidOperationException("Agent not found.");
+        }
+
+        if (seconds < 30)
+        {
+            throw new InvalidOperationException("Offline Unknown timeout must be at least 30 seconds.");
+        }
+
+        if (seconds > 86400)
+        {
+            throw new InvalidOperationException("Offline Unknown timeout must be 86400 seconds or less.");
+        }
+
+        if (agent.EndpointUnknownAfterAgentOfflineSeconds == seconds)
+        {
+            return false;
+        }
+
+        agent.EndpointUnknownAfterAgentOfflineSeconds = seconds;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _configurationChangeBackupSignal.NotifyConfigurationChanged("agent-offline-unknown-timeout-changed");
+        _logger.LogInformation("Set EndpointUnknownAfterAgentOfflineSeconds={Seconds} for agent {AgentId}", seconds, agent.AgentId);
         return true;
     }
 

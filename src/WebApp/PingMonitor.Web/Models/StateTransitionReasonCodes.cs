@@ -8,4 +8,5 @@ public static class StateTransitionReasonCodes
     public const string DependencyCleared = "dependency_cleared";
     public const string AdministrativeReset = "administrative_reset";
     public const string AgentContextLost = "agent_context_lost";
+    public const string AgentOfflineTimeout = "agent_offline_timeout";
 }
