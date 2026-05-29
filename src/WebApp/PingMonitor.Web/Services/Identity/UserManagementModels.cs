@@ -9,6 +9,14 @@ public sealed class UserManagementListItem
     public required bool Enabled { get; init; }
 }
 
+public sealed class UserManagementDeleteModel
+{
+    public required string UserId { get; init; }
+    public required string UserName { get; init; }
+    public required string Email { get; init; }
+    public required IReadOnlyList<string> Roles { get; init; }
+}
+
 public sealed class UserManagementEditModel
 {
     public required string UserId { get; init; }
@@ -43,4 +51,11 @@ public sealed class UserManagementResult
     public required bool Success { get; init; }
     public required bool Found { get; init; }
     public required IReadOnlyList<string> Errors { get; init; }
+}
+
+public sealed class UserManagementDeleteCommand
+{
+    public required string UserId { get; init; }
+    public required string? CurrentUserId { get; init; }
+    public required string? CurrentUserName { get; init; }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
@@ -61,6 +62,24 @@ internal sealed class UserManagementService : IUserManagementService
         };
     }
 
+    public async Task<UserManagementDeleteModel?> GetUserForDeleteAsync(string userId, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var roles = await _userManager.GetRolesAsync(user);
+        return new UserManagementDeleteModel
+        {
+            UserId = user.Id,
+            UserName = user.UserName ?? string.Empty,
+            Email = user.Email ?? string.Empty,
+            Roles = roles.Count > 0 ? roles.ToArray() : [ApplicationRoles.User]
+        };
+    }
+
     public async Task<IReadOnlyList<UserManagementOption>> GetGroupOptionsAsync(CancellationToken cancellationToken) =>
         await _dbContext.Groups.AsNoTracking().OrderBy(x => x.Name).Select(x => new UserManagementOption { Id = x.GroupId, Name = x.Name }).ToArrayAsync(cancellationToken);
 
@@ -120,6 +139,106 @@ internal sealed class UserManagementService : IUserManagementService
         }
 
         return await ApplyRoleAndScopeAsync(user, command, cancellationToken);
+    }
+
+    public async Task<UserManagementResult> DeleteAsync(UserManagementDeleteCommand command, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(command.UserId))
+        {
+            return new UserManagementResult { Success = false, Found = false, Errors = ["User id is required."] };
+        }
+
+        var user = await _userManager.FindByIdAsync(command.UserId);
+        if (user is null)
+        {
+            return new UserManagementResult { Success = false, Found = false, Errors = ["User not found."] };
+        }
+
+        if ((!string.IsNullOrWhiteSpace(command.CurrentUserId)
+                && string.Equals(user.Id, command.CurrentUserId, StringComparison.Ordinal))
+            || (!string.IsNullOrWhiteSpace(command.CurrentUserName)
+                && string.Equals(user.UserName, command.CurrentUserName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return new UserManagementResult
+            {
+                Success = false,
+                Found = true,
+                Errors = ["You cannot delete your own signed-in account."]
+            };
+        }
+
+        var roles = await _userManager.GetRolesAsync(user);
+        if (roles.Contains(ApplicationRoles.Admin, StringComparer.Ordinal))
+        {
+            var adminCount = await CountAdminUsersAsync(cancellationToken);
+            if (adminCount <= 1)
+            {
+                return new UserManagementResult
+                {
+                    Success = false,
+                    Found = true,
+                    Errors = ["You cannot delete the last remaining admin user."]
+                };
+            }
+        }
+
+        var deletedUserName = user.UserName ?? string.Empty;
+        var deletedEmail = user.Email ?? string.Empty;
+        var deletedRoles = roles.Count > 0 ? roles.ToArray() : [ApplicationRoles.User];
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        _dbContext.UserGroupAccesses.RemoveRange(_dbContext.UserGroupAccesses.Where(x => x.UserId == user.Id));
+        _dbContext.UserEndpointAccesses.RemoveRange(_dbContext.UserEndpointAccesses.Where(x => x.UserId == user.Id));
+        _dbContext.UserNotificationSettings.RemoveRange(_dbContext.UserNotificationSettings.Where(x => x.UserId == user.Id));
+        _dbContext.PendingTelegramLinks.RemoveRange(_dbContext.PendingTelegramLinks.Where(x => x.UserId == user.Id));
+        _dbContext.TelegramAccounts.RemoveRange(_dbContext.TelegramAccounts.Where(x => x.UserId == user.Id));
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var delete = await _userManager.DeleteAsync(user);
+        if (!delete.Succeeded)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new UserManagementResult
+            {
+                Success = false,
+                Found = true,
+                Errors = delete.Errors.Select(x => x.Description).ToArray()
+            };
+        }
+
+        _dbContext.EventLogs.Add(new EventLog
+        {
+            EventLogId = $"evt_{Guid.NewGuid():N}",
+            OccurredAtUtc = DateTimeOffset.UtcNow,
+            EventCategory = EventCategory.Security,
+            EventType = "user.deleted",
+            Severity = EventSeverity.Warning,
+            Message = $"User '{deletedUserName}' ({deletedEmail}) was deleted by admin '{command.CurrentUserName ?? "unknown"}'.",
+            DetailsJson = JsonSerializer.Serialize(new
+            {
+                deletedUserId = command.UserId,
+                deletedUserName,
+                deletedEmail,
+                deletedRoles,
+                adminUserId = command.CurrentUserId,
+                adminUserName = command.CurrentUserName
+            })
+        });
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return new UserManagementResult { Success = true, Found = true, Errors = [] };
+    }
+
+    private async Task<int> CountAdminUsersAsync(CancellationToken cancellationToken)
+    {
+        return await (from userRole in _dbContext.UserRoles.AsNoTracking()
+                      join role in _dbContext.Roles.AsNoTracking() on userRole.RoleId equals role.Id
+                      where role.Name == ApplicationRoles.Admin
+                      select userRole.UserId)
+            .Distinct()
+            .CountAsync(cancellationToken);
     }
 
     private async Task<UserManagementResult> ApplyRoleAndScopeAsync(ApplicationUser user, UserManagementSaveCommand command, CancellationToken cancellationToken)

@@ -15,6 +15,21 @@ public sealed class UserRowViewModel
     public required string Email { get; init; }
     public required string Role { get; init; }
     public required bool Enabled { get; init; }
+    public required bool CanDelete { get; init; }
+    public string? DeleteBlockedReason { get; init; }
+}
+
+public sealed class UserDeletePageViewModel
+{
+    public required string UserId { get; init; }
+    public required string UserName { get; init; }
+    public required string Email { get; init; }
+    public required IReadOnlyList<string> Roles { get; init; }
+    public required bool CanDelete { get; init; }
+    public string? DeleteBlockedReason { get; init; }
+
+    [Display(Name = "Confirmation text")]
+    public string ConfirmationText { get; set; } = string.Empty;
 }
 
 public sealed class UserEditPageViewModel

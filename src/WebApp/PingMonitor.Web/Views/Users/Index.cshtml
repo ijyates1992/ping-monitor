@@ -47,7 +47,19 @@
                             <td>@user.Email</td>
                             <td>@user.Role</td>
                             <td>@(user.Enabled ? "Yes" : "No")</td>
-                            <td><a class="button-secondary" href="/users/@user.UserId/edit">Edit</a></td>
+                            <td>
+                                <div class="button-row">
+                                    <a class="button-secondary" href="/users/@user.UserId/edit">Edit</a>
+                                    @if (user.CanDelete)
+                                    {
+                                        <a class="button-danger" href="/users/@user.UserId/delete">Delete</a>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(user.DeleteBlockedReason))
+                                    {
+                                        <span class="muted">@user.DeleteBlockedReason</span>
+                                    }
+                                </div>
+                            </td>
                         </tr>
                     }
                     </tbody>
