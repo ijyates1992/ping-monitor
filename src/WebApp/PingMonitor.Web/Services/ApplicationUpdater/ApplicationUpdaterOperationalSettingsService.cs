@@ -67,6 +67,7 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
                 DegradedCurrentWindowMinutes = 60,
                 DegradedPacketLossIncreasePercentagePoints = 20d,
                 DegradedRttIncreasePercent = 20d,
+                DegradedJitterIncreasePercent = 20d,
                 DegradedMinimumSamples = 10,
                 EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
                 AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes),

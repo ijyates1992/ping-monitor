@@ -22,6 +22,8 @@ public sealed class DegradedEndpointQueryTranslationTests
                 && x.CheckedAtUtc >= windowStartUtc
                 && x.CheckedAtUtc <= nowUtc)
             .OrderBy(x => x.CheckedAtUtc)
+            .ThenBy(x => x.ReceivedAtUtc)
+            .ThenBy(x => x.CheckResultId)
             .Select(x => new
             {
                 x.AssignmentId,
@@ -34,5 +36,7 @@ public sealed class DegradedEndpointQueryTranslationTests
         Assert.Contains("CheckResults", sql);
         Assert.Contains("AssignmentId", sql);
         Assert.Contains("CheckedAtUtc", sql);
+        Assert.Contains("ReceivedAtUtc", sql);
+        Assert.Contains("CheckResultId", sql);
     }
 }

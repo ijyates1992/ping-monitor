@@ -48,6 +48,7 @@ public sealed class AdminDefaultEndpointValuesController : Controller
                 DegradedCurrentWindowMinutes = model.DegradedCurrentWindowMinutes,
                 DegradedPacketLossIncreasePercentagePoints = model.DegradedPacketLossIncreasePercentagePoints,
                 DegradedRttIncreasePercent = model.DegradedRttIncreasePercent,
+                DegradedJitterIncreasePercent = model.DegradedJitterIncreasePercent,
                 DegradedMinimumSamples = model.DegradedMinimumSamples
             },
             cancellationToken);
@@ -69,6 +70,7 @@ public sealed class AdminDefaultEndpointValuesController : Controller
             DegradedCurrentWindowMinutes = settings.DegradedCurrentWindowMinutes,
             DegradedPacketLossIncreasePercentagePoints = settings.DegradedPacketLossIncreasePercentagePoints,
             DegradedRttIncreasePercent = settings.DegradedRttIncreasePercent,
+            DegradedJitterIncreasePercent = settings.DegradedJitterIncreasePercent,
             DegradedMinimumSamples = settings.DegradedMinimumSamples,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             Saved = saved

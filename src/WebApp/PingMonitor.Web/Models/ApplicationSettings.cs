@@ -28,6 +28,8 @@ public sealed class ApplicationSettings
 
     public double DegradedRttIncreasePercent { get; set; } = 20d;
 
+    public double DegradedJitterIncreasePercent { get; set; } = 20d;
+
     public int DegradedMinimumSamples { get; set; } = 10;
 
     public bool EnableAutomaticUpdateChecks { get; set; } = true;

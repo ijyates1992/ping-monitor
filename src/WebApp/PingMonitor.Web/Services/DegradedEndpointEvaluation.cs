@@ -9,6 +9,7 @@ internal sealed class DegradedEndpointEvaluationSettings
     public int CurrentWindowMinutes { get; init; } = 60;
     public double PacketLossIncreasePercentagePoints { get; init; } = 20d;
     public double RttIncreasePercent { get; init; } = 20d;
+    public double JitterIncreasePercent { get; init; } = 20d;
     public int MinimumSamples { get; init; } = 10;
 }
 
@@ -22,8 +23,13 @@ internal sealed class DegradedEndpointEvaluationResult
     public double CurrentPacketLossPercent { get; init; }
     public double? BaselineAverageRttMs { get; init; }
     public double? CurrentAverageRttMs { get; init; }
+    public double? BaselineJitterMs { get; init; }
+    public double? CurrentJitterMs { get; init; }
+    public int BaselineJitterSampleCount { get; init; }
+    public int CurrentJitterSampleCount { get; init; }
     public bool PacketLossDegraded { get; init; }
     public bool RttDegraded { get; init; }
+    public bool JitterDegraded { get; init; }
 
     public static DegradedEndpointEvaluationResult NotDegraded { get; } = new();
 }
@@ -66,14 +72,20 @@ internal static class DegradedEndpointEvaluator
         var currentLoss = CalculatePacketLossPercent(currentResults);
         var baselineRtt = CalculateAverageSuccessfulRttMs(baselineResults);
         var currentRtt = CalculateAverageSuccessfulRttMs(currentResults);
+        var baselineJitter = CalculateAverageSuccessfulJitterMs(baselineResults, settings.MinimumSamples);
+        var currentJitter = CalculateAverageSuccessfulJitterMs(currentResults, settings.MinimumSamples);
 
         var lossDegraded = currentLoss >= baselineLoss + settings.PacketLossIncreasePercentagePoints;
         var rttDegraded = baselineRtt.HasValue
             && baselineRtt.Value > 0d
             && currentRtt.HasValue
             && currentRtt.Value >= baselineRtt.Value * (1d + (settings.RttIncreasePercent / 100d));
+        var jitterDegraded = baselineJitter.JitterMs.HasValue
+            && baselineJitter.JitterMs.Value > 0d
+            && currentJitter.JitterMs.HasValue
+            && currentJitter.JitterMs.Value >= baselineJitter.JitterMs.Value * (1d + (settings.JitterIncreasePercent / 100d));
 
-        if (!lossDegraded && !rttDegraded)
+        if (!lossDegraded && !rttDegraded && !jitterDegraded)
         {
             return new DegradedEndpointEvaluationResult
             {
@@ -82,11 +94,15 @@ internal static class DegradedEndpointEvaluator
                 BaselinePacketLossPercent = baselineLoss,
                 CurrentPacketLossPercent = currentLoss,
                 BaselineAverageRttMs = baselineRtt,
-                CurrentAverageRttMs = currentRtt
+                CurrentAverageRttMs = currentRtt,
+                BaselineJitterMs = baselineJitter.JitterMs,
+                CurrentJitterMs = currentJitter.JitterMs,
+                BaselineJitterSampleCount = baselineJitter.SampleCount,
+                CurrentJitterSampleCount = currentJitter.SampleCount
             };
         }
 
-        var reasons = new List<string>(capacity: 2);
+        var reasons = new List<string>(capacity: 3);
         if (rttDegraded)
         {
             reasons.Add($"RTT increased from {baselineRtt!.Value:F1} ms baseline to {currentRtt!.Value:F1} ms current");
@@ -95,6 +111,11 @@ internal static class DegradedEndpointEvaluator
         if (lossDegraded)
         {
             reasons.Add($"packet loss increased from {baselineLoss:F1}% baseline to {currentLoss:F1}% current");
+        }
+
+        if (jitterDegraded)
+        {
+            reasons.Add($"jitter increased from {baselineJitter.JitterMs!.Value:F1} ms baseline to {currentJitter.JitterMs!.Value:F1} ms current");
         }
 
         return new DegradedEndpointEvaluationResult
@@ -107,8 +128,13 @@ internal static class DegradedEndpointEvaluator
             CurrentPacketLossPercent = currentLoss,
             BaselineAverageRttMs = baselineRtt,
             CurrentAverageRttMs = currentRtt,
+            BaselineJitterMs = baselineJitter.JitterMs,
+            CurrentJitterMs = currentJitter.JitterMs,
+            BaselineJitterSampleCount = baselineJitter.SampleCount,
+            CurrentJitterSampleCount = currentJitter.SampleCount,
             PacketLossDegraded = lossDegraded,
-            RttDegraded = rttDegraded
+            RttDegraded = rttDegraded,
+            JitterDegraded = jitterDegraded
         };
     }
 
@@ -132,6 +158,28 @@ internal static class DegradedEndpointEvaluator
 
         return successfulRtts.Length == 0 ? null : (double)successfulRtts.Average();
     }
+
+    private static JitterEvaluationWindow CalculateAverageSuccessfulJitterMs(
+        IReadOnlyCollection<CheckResult> results,
+        int minimumSamples)
+    {
+        var successfulRttSamples = results
+            .Where(static x => x.Success && x.RoundTripMs.HasValue)
+            .OrderBy(static x => x.CheckedAtUtc)
+            .Select(static x => new RttJitterSample(x.CheckedAtUtc, (double)x.RoundTripMs!.Value))
+            .ToArray();
+
+        if (successfulRttSamples.Length < Math.Max(2, minimumSamples))
+        {
+            return new JitterEvaluationWindow(null, successfulRttSamples.Length);
+        }
+
+        return new JitterEvaluationWindow(
+            RttJitterCalculator.CalculateAverageAbsoluteDeltaMs(successfulRttSamples),
+            successfulRttSamples.Length);
+    }
+
+    private readonly record struct JitterEvaluationWindow(double? JitterMs, int SampleCount);
 }
 
 internal static class DegradedEndpointStatePriority

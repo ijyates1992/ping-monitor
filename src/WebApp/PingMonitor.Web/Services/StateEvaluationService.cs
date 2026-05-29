@@ -185,7 +185,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                     AgentId = assignmentContext.AgentId,
                     EndpointId = assignmentContext.EndpointId,
                     AssignmentId = assignmentContext.AssignmentId,
-                    Message = BuildStateChangeMessage(
+                    Message = StateChangeEventLogMessageBuilder.Build(
                         assignmentContext.EndpointName,
                         previousState,
                         nextState,
@@ -211,8 +211,13 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                             degradedEvaluation.CurrentPacketLossPercent,
                             degradedEvaluation.BaselineAverageRttMs,
                             degradedEvaluation.CurrentAverageRttMs,
+                            degradedEvaluation.BaselineJitterMs,
+                            degradedEvaluation.CurrentJitterMs,
+                            degradedEvaluation.BaselineJitterSampleCount,
+                            degradedEvaluation.CurrentJitterSampleCount,
                             degradedEvaluation.PacketLossDegraded,
-                            degradedEvaluation.RttDegraded
+                            degradedEvaluation.RttDegraded,
+                            degradedEvaluation.JitterDegraded
                         }
                     })
                 },
@@ -336,6 +341,8 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                 && x.CheckedAtUtc >= windowStartUtc
                 && x.CheckedAtUtc <= nowUtc)
             .OrderBy(x => x.CheckedAtUtc)
+            .ThenBy(x => x.ReceivedAtUtc)
+            .ThenBy(x => x.CheckResultId)
             .Select(x => new CheckResult
             {
                 AssignmentId = x.AssignmentId,
@@ -365,6 +372,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             CurrentWindowMinutes = Math.Max(1, settings.DegradedCurrentWindowMinutes),
             PacketLossIncreasePercentagePoints = Math.Clamp(settings.DegradedPacketLossIncreasePercentagePoints, 0d, 100d),
             RttIncreasePercent = Math.Max(0d, settings.DegradedRttIncreasePercent),
+            JitterIncreasePercent = Math.Max(0d, settings.DegradedJitterIncreasePercent),
             MinimumSamples = Math.Max(1, settings.DegradedMinimumSamples)
         };
     }
@@ -418,45 +426,6 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         var previousWasDown = previousState == EndpointStateKind.Down;
         var newIsDown = newState == EndpointStateKind.Down;
         return previousWasDown != newIsDown;
-    }
-
-    private static string BuildStateChangeMessage(
-        string endpointName,
-        EndpointStateKind previousState,
-        EndpointStateKind nextState,
-        DateTimeOffset transitionAtUtc,
-        DateTimeOffset previousStateChangedAtUtc,
-        DegradedEndpointEvaluationResult degradedEvaluation)
-    {
-        if (nextState == EndpointStateKind.Down)
-        {
-            return $"Endpoint \"{endpointName}\" went down.";
-        }
-
-        if (previousState == EndpointStateKind.Down && nextState == EndpointStateKind.Up)
-        {
-            var downtime = transitionAtUtc - previousStateChangedAtUtc;
-            return $"Endpoint \"{endpointName}\" recovered after {FormatDuration(downtime)} downtime.";
-        }
-
-        if (nextState == EndpointStateKind.Degraded && degradedEvaluation.IsDegraded && !string.IsNullOrWhiteSpace(degradedEvaluation.ReasonSummary))
-        {
-            return $"Endpoint \"{endpointName}\" is degraded: {degradedEvaluation.ReasonSummary}.";
-        }
-
-        if (previousState == EndpointStateKind.Degraded && nextState == EndpointStateKind.Up)
-        {
-            return $"Endpoint \"{endpointName}\" recovered from degraded performance; current RTT and packet loss no longer exceed configured thresholds or there is insufficient comparison data.";
-        }
-
-        return $"Endpoint \"{endpointName}\" state changed from {previousState} to {nextState}.";
-    }
-
-    private static string FormatDuration(TimeSpan duration)
-    {
-        var safeDuration = duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
-        var hours = (int)safeDuration.TotalHours;
-        return $"{hours:D2}:{safeDuration.Minutes:D2}:{safeDuration.Seconds:D2}";
     }
 
     private static CachedAssignmentState CloneState(CachedAssignmentState state)

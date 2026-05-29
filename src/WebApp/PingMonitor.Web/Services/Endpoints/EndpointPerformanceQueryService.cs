@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
+using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.ViewModels.Endpoints;
 
@@ -111,24 +112,17 @@ internal sealed class EndpointPerformanceQueryService : IEndpointPerformanceQuer
 
     private static IReadOnlyList<JitterPointViewModel> BuildJitterSeries(IReadOnlyList<TimeSeriesPointViewModel> successfulRttSamples)
     {
-        if (successfulRttSamples.Count < 2)
-        {
-            return [];
-        }
+        var orderedSamples = successfulRttSamples
+            .Select(x => new RttJitterSample(x.TimestampUtc, x.Value))
+            .ToArray();
 
-        var jitterPoints = new List<JitterPointViewModel>(successfulRttSamples.Count - 1);
-        for (var index = 1; index < successfulRttSamples.Count; index++)
-        {
-            var current = successfulRttSamples[index];
-            var previous = successfulRttSamples[index - 1];
-            jitterPoints.Add(new JitterPointViewModel
+        return RttJitterCalculator.CalculateAbsoluteDeltas(orderedSamples)
+            .Select(x => new JitterPointViewModel
             {
-                TimestampUtc = current.TimestampUtc,
-                JitterMs = Math.Abs(current.Value - previous.Value)
-            });
-        }
-
-        return jitterPoints;
+                TimestampUtc = x.TimestampUtc,
+                JitterMs = x.JitterMs
+            })
+            .ToArray();
     }
 
     private static IReadOnlyList<FailureBucketViewModel> BuildFailureSeries(
