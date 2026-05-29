@@ -452,6 +452,13 @@ public sealed class AdminDatabaseController : Controller
             TotalIndexBytes = snapshot.TotalIndexBytes,
             Tables = tables,
             DbActivityBySubsystem = dbActivityBySubsystem,
+            RollingWindowHydration = new DatabaseStatusRollingWindowHydrationViewModel
+            {
+                Status = snapshot.RollingWindowHydration.Status,
+                StartedAtUtc = snapshot.RollingWindowHydration.StartedAtUtc,
+                CompletedAtUtc = snapshot.RollingWindowHydration.CompletedAtUtc,
+                FailureMessage = snapshot.RollingWindowHydration.FailureMessage
+            },
             RuntimeBuffer = new DatabaseStatusRuntimeBufferViewModel
             {
                 BufferingEnabled = runtimeBuffer.BufferingEnabled,

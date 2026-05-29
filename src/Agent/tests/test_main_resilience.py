@@ -133,6 +133,48 @@ class MainResilienceTests(unittest.TestCase):
         self.assertGreaterEqual(fake_client.heartbeat_calls, 1)
         self.assertGreaterEqual(fake_client.submit_calls, 1)
 
+
+    def test_hydration_503_submission_requeues_batch_non_fatally(self) -> None:
+        from app.result_queue import ResultQueue
+        import httpx
+
+        class _HydrationUnavailableClient:
+            def submit_results(self, _request):
+                request = httpx.Request("POST", "https://example.test/api/v1/agent/results")
+                response = httpx.Response(
+                    503,
+                    request=request,
+                    json={
+                        "error": {
+                            "code": "ingestion_temporarily_unavailable",
+                            "message": "Agent result ingestion is temporarily unavailable while rolling-window metrics hydration completes.",
+                        }
+                    },
+                )
+                raise httpx.HTTPStatusError("server unavailable", request=request, response=response)
+
+        queue = ResultQueue()
+        queue.extend(
+            [
+                ResultItem(
+                    assignment_id="a1",
+                    endpoint_id="e1",
+                    check_type="icmp",
+                    checked_at_utc="2026-01-01T00:00:00Z",
+                    success=False,
+                    round_trip_ms=None,
+                    error_code="ERR",
+                    error_message="failed",
+                )
+            ]
+        )
+
+        with self.assertLogs(level="INFO") as logs:
+            main_module._submit_result_batch(_HydrationUnavailableClient(), queue, "agent-1", 1.0, 10)
+
+        self.assertEqual(1, len(queue))
+        self.assertTrue(any("hydrates rolling metrics" in entry for entry in logs.output))
+
     def test_failed_result_submission_requeues_batch(self) -> None:
         from app.result_queue import ResultQueue
 

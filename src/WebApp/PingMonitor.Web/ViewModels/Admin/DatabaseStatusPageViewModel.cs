@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
 using PingMonitor.Web.Services.DatabaseStatus;
+using PingMonitor.Web.Services.Metrics;
 
 namespace PingMonitor.Web.ViewModels.Admin;
 
@@ -18,6 +19,7 @@ public sealed class DatabaseStatusPageViewModel
     public long TotalIndexBytes { get; init; }
     public IReadOnlyList<DatabaseStatusTableViewModel> Tables { get; init; } = Array.Empty<DatabaseStatusTableViewModel>();
     public IReadOnlyList<DatabaseSubsystemActivityViewModel> DbActivityBySubsystem { get; init; } = Array.Empty<DatabaseSubsystemActivityViewModel>();
+    public DatabaseStatusRollingWindowHydrationViewModel RollingWindowHydration { get; init; } = new();
     public DatabaseStatusRuntimeBufferViewModel RuntimeBuffer { get; init; } = new();
 }
 
@@ -41,6 +43,15 @@ public sealed class DatabaseStatusTableViewModel
     public long DataBytes { get; init; }
     public long IndexBytes { get; init; }
     public long TotalBytes { get; init; }
+}
+
+public sealed class DatabaseStatusRollingWindowHydrationViewModel
+{
+    public RollingWindowHydrationStatus Status { get; init; } = RollingWindowHydrationStatus.NotStarted;
+    public DateTimeOffset? StartedAtUtc { get; init; }
+    public DateTimeOffset? CompletedAtUtc { get; init; }
+    public string? FailureMessage { get; init; }
+    public bool AllowsResultIngestion => Status == RollingWindowHydrationStatus.Complete;
 }
 
 public sealed class DatabaseStatusRuntimeBufferViewModel

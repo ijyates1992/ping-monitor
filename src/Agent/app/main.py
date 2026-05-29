@@ -147,12 +147,26 @@ def _submit_result_batch(
             )
         )
     except _retryable_api_exceptions() as ex:
-        logging.error("Result submission failed and will be retried: %s", _format_api_error(ex))
+        if _is_hydration_ingestion_unavailable(ex):
+            logging.info("Result submission deferred while server hydrates rolling metrics. Batch will be retried: %s", _format_api_error(ex))
+        else:
+            logging.error("Result submission failed and will be retried: %s", _format_api_error(ex))
         queue.requeue_front(batch)
 
 
 def _retryable_api_exceptions() -> tuple[type[BaseException], ...]:
     return httpx.HTTPError, AgentApiError, ValueError, JSONDecodeError
+
+
+def _is_hydration_ingestion_unavailable(error: BaseException) -> bool:
+    if not isinstance(error, httpx.HTTPStatusError):
+        return False
+
+    if error.response.status_code != 503:
+        return False
+
+    response_body = error.response.text.lower()
+    return "hydration" in response_body and "ingestion" in response_body
 
 
 def _format_api_error(error: BaseException) -> str:

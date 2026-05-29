@@ -90,6 +90,22 @@
             </div>
         </section>
 
+
+        <section class="card">
+            <h2>Rolling-window hydration</h2>
+            <p class="muted">Agent result ingestion is accepted only after the in-memory rolling metrics window has completed hydration.</p>
+            <div class="overview-grid">
+                <div class="metric"><div class="label">Hydration status</div><div class="value">@Model.RollingWindowHydration.Status</div></div>
+                <div class="metric"><div class="label">Result ingestion</div><div class="value">@(Model.RollingWindowHydration.AllowsResultIngestion ? "Accepting" : "Temporarily blocked")</div></div>
+                <div class="metric"><div class="label">Started at</div><div class="value">@(Model.RollingWindowHydration.StartedAtUtc is null ? "n/a" : await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RollingWindowHydration.StartedAtUtc.Value))</div></div>
+                <div class="metric"><div class="label">Completed at</div><div class="value">@(Model.RollingWindowHydration.CompletedAtUtc is null ? "n/a" : await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.RollingWindowHydration.CompletedAtUtc.Value))</div></div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.RollingWindowHydration.FailureMessage))
+            {
+                <p class="muted">Hydration failure: @Model.RollingWindowHydration.FailureMessage</p>
+            }
+        </section>
+
         <section class="card">
             <h2>DB buffer status</h2>
             <p class="muted">Runtime metrics for in-memory buffering of agent-ingested raw check results.</p>

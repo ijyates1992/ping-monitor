@@ -24,6 +24,11 @@ public static class ApiErrorResponses
         return Create(httpContext, StatusCodes.Status500InternalServerError, code, message, details);
     }
 
+    public static ObjectResult ServiceUnavailable(HttpContext httpContext, string code, string message, IReadOnlyList<ApiErrorDetail>? details = null)
+    {
+        return Create(httpContext, StatusCodes.Status503ServiceUnavailable, code, message, details);
+    }
+
     private static ObjectResult Create(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyList<ApiErrorDetail>? details)
     {
         var response = new ApiErrorResponse(new ApiErrorBody(
