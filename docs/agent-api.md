@@ -477,7 +477,7 @@ Used by the agent to submit raw check results in batches.
       "checkType": "icmp",
       "checkedAtUtc": "2026-03-21T21:31:09Z",
       "success": true,
-      "roundTripMs": 2,
+      "roundTripMs": 2.345,
       "errorCode": null,
       "errorMessage": null
     },
@@ -512,7 +512,7 @@ Used by the agent to submit raw check results in batches.
 | `checkType` | string | yes | initially `icmp` |
 | `checkedAtUtc` | string | yes | actual completion time |
 | `success` | boolean | yes | success/failure |
-| `roundTripMs` | integer or null | yes | null on failure |
+| `roundTripMs` | number or null | yes | null on failure; older integer values remain valid |
 | `errorCode` | string or null | yes | null on success |
 | `errorMessage` | string or null | yes | null on success, optional on failure |
 
@@ -522,7 +522,7 @@ Used by the agent to submit raw check results in batches.
 - `results` must contain at least one record
 - each result must reference a valid assignment owned by the agent
 - `checkedAtUtc` must be a valid UTC timestamp
-- `roundTripMs` must be `>= 0` when present
+- `roundTripMs` must be `>= 0` when present; decimal millisecond precision is accepted
 - `roundTripMs` must be null on failure
 - `errorCode` must be null on success
 - `errorMessage` may be null on failure but should be populated when useful

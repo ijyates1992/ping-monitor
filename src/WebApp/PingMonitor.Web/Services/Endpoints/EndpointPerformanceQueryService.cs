@@ -11,7 +11,7 @@ internal sealed class EndpointPerformanceQueryService : IEndpointPerformanceQuer
     {
         public required DateTimeOffset CheckedAtUtc { get; init; }
         public required bool Success { get; init; }
-        public int? RoundTripMs { get; init; }
+        public decimal? RoundTripMs { get; init; }
     }
 
     private readonly PingMonitorDbContext _dbContext;
@@ -85,7 +85,7 @@ internal sealed class EndpointPerformanceQueryService : IEndpointPerformanceQuer
             .Select(x => new TimeSeriesPointViewModel
             {
                 TimestampUtc = x.CheckedAtUtc,
-                Value = x.RoundTripMs!.Value
+                Value = (double)x.RoundTripMs!.Value
             })
             .ToArray();
 

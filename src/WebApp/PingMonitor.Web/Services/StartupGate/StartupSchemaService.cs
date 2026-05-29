@@ -608,9 +608,9 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `DowntimeSeconds` bigint NOT NULL,
                 `UnknownSeconds` bigint NOT NULL,
                 `SuppressedSeconds` bigint NOT NULL,
-                `LastRttMs` int NULL,
-                `HighestRttMs` int NULL,
-                `LowestRttMs` int NULL,
+                `LastRttMs` double NULL,
+                `HighestRttMs` double NULL,
+                `LowestRttMs` double NULL,
                 `AverageRttMs` double NULL,
                 `JitterMs` double NULL,
                 `LastSuccessfulCheckUtc` datetime(6) NULL,
@@ -623,11 +623,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `AssignmentId` varchar(64) NOT NULL,
                 `BucketStartUtc` datetime(6) NOT NULL,
                 `SampleCount` int NOT NULL,
-                `SumRttMs` bigint NOT NULL,
-                `MinRttMs` int NOT NULL,
-                `MaxRttMs` int NOT NULL,
-                `FirstRttMs` int NOT NULL,
-                `LastRttMs` int NOT NULL,
+                `SumRttMs` double NOT NULL,
+                `MinRttMs` double NOT NULL,
+                `MaxRttMs` double NOT NULL,
+                `FirstRttMs` double NOT NULL,
+                `LastRttMs` double NOT NULL,
                 `FirstSampleUtc` datetime(6) NOT NULL,
                 `LastSampleUtc` datetime(6) NOT NULL,
                 `IntraBucketDeltaSumMs` double NOT NULL,
@@ -785,6 +785,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
         await EnsureAspNetUsersColumnsAsync(dbContext, cancellationToken);
         await EnsureCheckResultsNormalizedSchemaAsync(dbContext, cancellationToken);
+        await EnsureRttPrecisionSchemaAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }
@@ -804,6 +805,64 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             "IX_StateTransitions_AssignmentId_TransitionAtUtc",
             "CREATE INDEX `IX_StateTransitions_AssignmentId_TransitionAtUtc` ON `StateTransitions` (`AssignmentId`, `TransitionAtUtc`);",
             cancellationToken);
+    }
+
+
+    private static async Task EnsureRttPrecisionSchemaAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+
+        if (!await IsColumnDecimalAsync(connection, "CheckResults", "RoundTripMs", scale: 3, cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("""
+                ALTER TABLE `CheckResults`
+                MODIFY COLUMN `RoundTripMs` decimal(10,3) NULL;
+                """, cancellationToken);
+        }
+
+        foreach (var column in new[] { "LastRttMs", "HighestRttMs", "LowestRttMs" })
+        {
+            if (!await IsColumnDoubleAsync(connection, "AssignmentMetrics24h", column, cancellationToken))
+            {
+                await AlterAssignmentMetricsRttColumnToDoubleAsync(dbContext, column, cancellationToken);
+            }
+        }
+
+        foreach (var column in new[] { "SumRttMs", "MinRttMs", "MaxRttMs", "FirstRttMs", "LastRttMs" })
+        {
+            if (!await IsColumnDoubleAsync(connection, "AssignmentRttMinuteBuckets", column, cancellationToken))
+            {
+                await AlterAssignmentRttMinuteBucketColumnToDoubleAsync(dbContext, column, cancellationToken);
+            }
+        }
+    }
+
+    private static Task AlterAssignmentMetricsRttColumnToDoubleAsync(PingMonitorDbContext dbContext, string column, CancellationToken cancellationToken)
+    {
+        var sql = column switch
+        {
+            "LastRttMs" => "ALTER TABLE `AssignmentMetrics24h` MODIFY COLUMN `LastRttMs` double NULL;",
+            "HighestRttMs" => "ALTER TABLE `AssignmentMetrics24h` MODIFY COLUMN `HighestRttMs` double NULL;",
+            "LowestRttMs" => "ALTER TABLE `AssignmentMetrics24h` MODIFY COLUMN `LowestRttMs` double NULL;",
+            _ => throw new ArgumentOutOfRangeException(nameof(column), column, "Unsupported AssignmentMetrics24h RTT column.")
+        };
+
+        return dbContext.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+    }
+
+    private static Task AlterAssignmentRttMinuteBucketColumnToDoubleAsync(PingMonitorDbContext dbContext, string column, CancellationToken cancellationToken)
+    {
+        var sql = column switch
+        {
+            "SumRttMs" => "ALTER TABLE `AssignmentRttMinuteBuckets` MODIFY COLUMN `SumRttMs` double NOT NULL;",
+            "MinRttMs" => "ALTER TABLE `AssignmentRttMinuteBuckets` MODIFY COLUMN `MinRttMs` double NOT NULL;",
+            "MaxRttMs" => "ALTER TABLE `AssignmentRttMinuteBuckets` MODIFY COLUMN `MaxRttMs` double NOT NULL;",
+            "FirstRttMs" => "ALTER TABLE `AssignmentRttMinuteBuckets` MODIFY COLUMN `FirstRttMs` double NOT NULL;",
+            "LastRttMs" => "ALTER TABLE `AssignmentRttMinuteBuckets` MODIFY COLUMN `LastRttMs` double NOT NULL;",
+            _ => throw new ArgumentOutOfRangeException(nameof(column), column, "Unsupported AssignmentRttMinuteBuckets RTT column.")
+        };
+
+        return dbContext.Database.ExecuteSqlRawAsync(sql, cancellationToken);
     }
 
     private static async Task EnsureCheckResultsNormalizedSchemaAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
@@ -1899,6 +1958,68 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         command.Parameters.Add(parameter);
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+    }
+
+
+    private static void AddParameter(System.Data.Common.DbCommand command, string name, object value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value;
+        command.Parameters.Add(parameter);
+    }
+
+    private static async Task<bool> IsColumnDecimalAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, int scale, CancellationToken cancellationToken)
+    {
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT data_type, numeric_scale
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = @tableName
+              AND column_name = @columnName
+            LIMIT 1;
+            """;
+        AddParameter(command, "@tableName", tableName);
+        AddParameter(command, "@columnName", columnName);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return false;
+        }
+
+        var dataType = reader.GetString(0);
+        var numericScale = reader.IsDBNull(1) ? -1 : Convert.ToInt32(reader.GetValue(1));
+        return string.Equals(dataType, "decimal", StringComparison.OrdinalIgnoreCase) && numericScale >= scale;
+    }
+
+    private static async Task<bool> IsColumnDoubleAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, CancellationToken cancellationToken)
+    {
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = @tableName
+              AND column_name = @columnName
+            LIMIT 1;
+            """;
+        AddParameter(command, "@tableName", tableName);
+        AddParameter(command, "@columnName", columnName);
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is string dataType && string.Equals(dataType, "double", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<bool> HasCheckResultsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)

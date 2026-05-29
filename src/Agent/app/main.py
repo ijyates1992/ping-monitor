@@ -28,7 +28,7 @@ def main() -> None:
 
     client = AgentApiClient(config)
     queue = ResultQueue()
-    scheduler = AssignmentScheduler(CheckRunner())
+    scheduler = AssignmentScheduler(CheckRunner(getattr(config, "icmp_backend", "auto")))
 
     started_at = _utc_now()
     hello_response = _send_hello_with_retry(client, config.instance_id, started_at)

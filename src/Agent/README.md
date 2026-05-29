@@ -8,7 +8,7 @@ This directory contains the phase 1 outbound-only Python agent skeleton.
 - prepares authenticated HTTPS calls to the web application
 - fetches hello/config/heartbeat/results using the documented v1 API paths
 - keeps result handling as raw fact submission only
-- executes real ICMP checks using the system `ping` command
+- executes real ICMP checks using `pythonping` when available, with automatic fallback to the system `ping` command
 - uses each assignment's configured `target` and `timeoutMs` when running ICMP
 - keeps scheduling behaviour intentionally minimal
 - remains running when the server currently returns zero assignments, continues heartbeat/config refresh, and automatically starts monitoring when assignments are later added (no restart required)
@@ -18,6 +18,14 @@ This directory contains the phase 1 outbound-only Python agent skeleton.
 - persistent queue storage
 - retry/backoff implementation
 - agent-side state, suppression, or alert logic
+
+## ICMP backend
+
+`ICMP_BACKEND` is optional and defaults to `auto`. Supported values:
+
+- `auto`: try `pythonping` first for high-resolution RTT, then fall back to the subprocess `ping` backend when unavailable or not permitted.
+- `pythonping`: prefer `pythonping`; expected privilege/platform/runtime failures still fall back so normal operation does not require Administrator/root.
+- `subprocess`: always use the existing operating system `ping` command backend.
 
 ## Windows startup helper
 

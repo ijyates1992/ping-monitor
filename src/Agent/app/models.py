@@ -72,7 +72,7 @@ class ResultItem:
     check_type: str
     checked_at_utc: str
     success: bool
-    round_trip_ms: Optional[int]
+    round_trip_ms: Optional[float]
     error_code: Optional[str]
     error_message: Optional[str]
 
