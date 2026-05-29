@@ -5,12 +5,14 @@ using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.State;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace PingMonitor.Web.Services;
 
 internal sealed class StateEvaluationService : IStateEvaluationService
 {
+    private const int RollingMetricsWindowMinutes = 1440;
     private readonly PingMonitorDbContext _dbContext;
     private readonly ILogger<StateEvaluationService> _logger;
     private readonly IEventLogService _eventLogService;
@@ -19,6 +21,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
     private readonly IAssignmentCurrentStateCache _currentStateCache;
     private readonly IRollingAssignmentWindowStore _rollingAssignmentWindowStore;
     private readonly IDbActivityScope _dbActivityScope;
+    private DegradedEndpointEvaluationSettings? _degradedSettings;
 
     public StateEvaluationService(
         PingMonitorDbContext dbContext,
@@ -42,11 +45,14 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 
     public async Task EvaluateAssignmentsAsync(IEnumerable<string> assignmentIds, CancellationToken cancellationToken)
     {
+        var stopwatch = Stopwatch.StartNew();
         var pendingAssignmentIds = new Queue<string>(assignmentIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())
             .Distinct(StringComparer.Ordinal));
         var processedAssignmentIds = new HashSet<string>(StringComparer.Ordinal);
+        var stateChangeCount = 0;
+        var degradedCacheEvaluationCount = 0;
 
         while (pendingAssignmentIds.Count > 0)
         {
@@ -56,13 +62,23 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                 continue;
             }
 
-            var transitionedAcrossDownBoundary = await EvaluateInternalAsync(assignmentId, cancellationToken);
-            if (transitionedAcrossDownBoundary.Count == 0)
+            var evaluation = await EvaluateInternalAsync(assignmentId, cancellationToken);
+            if (evaluation.StateChanged)
+            {
+                stateChangeCount += 1;
+            }
+
+            if (evaluation.UsedDegradedMetricsCache)
+            {
+                degradedCacheEvaluationCount += 1;
+            }
+
+            if (evaluation.TransitionedChildAssignmentIds.Count == 0)
             {
                 continue;
             }
 
-            foreach (var childAssignmentId in transitionedAcrossDownBoundary)
+            foreach (var childAssignmentId in evaluation.TransitionedChildAssignmentIds)
             {
                 if (!processedAssignmentIds.Contains(childAssignmentId))
                 {
@@ -70,6 +86,15 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                 }
             }
         }
+
+        stopwatch.Stop();
+        _logger.LogDebug(
+            "State evaluation completed for {EvaluatedAssignmentCount} assignments in {ElapsedMs} ms. StateChanges={StateChangeCount}; DegradedMetricsSource={DegradedMetricsSource}; DegradedCacheEvaluations={DegradedCacheEvaluationCount}.",
+            processedAssignmentIds.Count,
+            stopwatch.ElapsedMilliseconds,
+            stateChangeCount,
+            degradedCacheEvaluationCount > 0 ? "RollingCache" : "NotEvaluated",
+            degradedCacheEvaluationCount);
     }
 
     public Task EvaluateAssignmentStateAsync(string assignmentId, CancellationToken cancellationToken)
@@ -77,14 +102,14 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         return EvaluateAssignmentsAsync([assignmentId], cancellationToken);
     }
 
-    private async Task<IReadOnlyCollection<string>> EvaluateInternalAsync(string assignmentId, CancellationToken cancellationToken)
+    private async Task<AssignmentEvaluationOutcome> EvaluateInternalAsync(string assignmentId, CancellationToken cancellationToken)
     {
         using var scope = _dbActivityScope.BeginScope("StateEvaluation");
         var assignmentContext = await _topologyCache.GetAssignmentContextAsync(assignmentId, cancellationToken);
         if (assignmentContext is null)
         {
             _logger.LogWarning("State evaluation skipped because assignment {AssignmentId} was not found in topology cache.", assignmentId);
-            return Array.Empty<string>();
+            return AssignmentEvaluationOutcome.NoChange;
         }
 
         var state = await _currentStateCache.GetStateAsync(
@@ -128,7 +153,8 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         var previousState = mutableState.CurrentState;
         var previousStateChangedAtUtc = mutableState.LastStateChangeUtc ?? DateTimeOffset.UtcNow;
         var baseNextState = DetermineNextState(assignmentContext, mutableState, parentContext);
-        var degradedEvaluation = baseNextState == EndpointStateKind.Up
+        var usedDegradedMetricsCache = baseNextState == EndpointStateKind.Up;
+        var degradedEvaluation = usedDegradedMetricsCache
             ? await EvaluateDegradedAsync(assignmentContext.AssignmentId, DateTimeOffset.UtcNow, cancellationToken)
             : DegradedEndpointEvaluationResult.NotDegraded;
         var nextState = DegradedEndpointStatePriority.Apply(baseNextState, degradedEvaluation);
@@ -262,10 +288,16 @@ internal sealed class StateEvaluationService : IStateEvaluationService
 
         if (CrossedDownBoundary(previousState, nextState))
         {
-            return assignmentContext.ChildAssignmentIds;
+            return new AssignmentEvaluationOutcome(
+                assignmentContext.ChildAssignmentIds,
+                previousState != nextState,
+                usedDegradedMetricsCache);
         }
 
-        return Array.Empty<string>();
+        return new AssignmentEvaluationOutcome(
+            Array.Empty<string>(),
+            previousState != nextState,
+            usedDegradedMetricsCache);
     }
 
     private static ParentStateContext GetParentContext(
@@ -335,46 +367,44 @@ internal sealed class StateEvaluationService : IStateEvaluationService
             return DegradedEndpointEvaluationResult.NotDegraded;
         }
 
-        var windowStartUtc = nowUtc.AddMinutes(-settings.BaselineLookbackMinutes);
-        var results = await _dbContext.CheckResults.AsNoTracking()
-            .Where(x => x.AssignmentId == assignmentId
-                && x.CheckedAtUtc >= windowStartUtc
-                && x.CheckedAtUtc <= nowUtc)
-            .OrderBy(x => x.CheckedAtUtc)
-            .ThenBy(x => x.ReceivedAtUtc)
-            .ThenBy(x => x.CheckResultId)
-            .Select(x => new CheckResult
-            {
-                AssignmentId = x.AssignmentId,
-                CheckedAtUtc = x.CheckedAtUtc,
-                Success = x.Success,
-                RoundTripMs = x.RoundTripMs
-            })
-            .ToArrayAsync(cancellationToken);
+        var metrics = await _rollingAssignmentWindowStore.GetDegradedMetricsAsync(
+            assignmentId,
+            nowUtc,
+            settings.BaselineLookbackMinutes,
+            settings.CurrentWindowMinutes,
+            settings.MinimumSamples,
+            cancellationToken);
 
-        return DegradedEndpointEvaluator.Evaluate(results, nowUtc, settings);
+        return DegradedEndpointEvaluator.Evaluate(metrics, settings);
     }
 
     private async Task<DegradedEndpointEvaluationSettings> GetDegradedSettingsAsync(CancellationToken cancellationToken)
     {
+        if (_degradedSettings is not null)
+        {
+            return _degradedSettings;
+        }
+
         var settings = await _dbContext.ApplicationSettings.AsNoTracking()
             .SingleOrDefaultAsync(x => x.ApplicationSettingsId == ApplicationSettings.SingletonId, cancellationToken);
 
         if (settings is null)
         {
-            return new DegradedEndpointEvaluationSettings();
+            _degradedSettings = new DegradedEndpointEvaluationSettings();
+            return _degradedSettings;
         }
 
-        return new DegradedEndpointEvaluationSettings
+        _degradedSettings = new DegradedEndpointEvaluationSettings
         {
             Enabled = settings.DegradedEvaluationEnabled,
-            BaselineLookbackMinutes = Math.Max(1, settings.DegradedBaselineLookbackMinutes),
-            CurrentWindowMinutes = Math.Max(1, settings.DegradedCurrentWindowMinutes),
+            BaselineLookbackMinutes = Math.Clamp(settings.DegradedBaselineLookbackMinutes, 1, RollingMetricsWindowMinutes),
+            CurrentWindowMinutes = Math.Clamp(settings.DegradedCurrentWindowMinutes, 1, RollingMetricsWindowMinutes),
             PacketLossIncreasePercentagePoints = Math.Clamp(settings.DegradedPacketLossIncreasePercentagePoints, 0d, 100d),
             RttIncreasePercent = Math.Max(0d, settings.DegradedRttIncreasePercent),
             JitterIncreasePercent = Math.Max(0d, settings.DegradedJitterIncreasePercent),
             MinimumSamples = Math.Max(1, settings.DegradedMinimumSamples)
         };
+        return _degradedSettings;
     }
 
     private static string? GetReasonCode(EndpointStateKind previousState, EndpointStateKind newState, bool dependencyDown, bool degraded)
@@ -448,5 +478,13 @@ internal sealed class StateEvaluationService : IStateEvaluationService
     private readonly record struct ParentStateContext(string? ParentEndpointId, bool DependencyDown)
     {
         public static ParentStateContext None => new(null, false);
+    }
+
+    private sealed record AssignmentEvaluationOutcome(
+        IReadOnlyCollection<string> TransitionedChildAssignmentIds,
+        bool StateChanged,
+        bool UsedDegradedMetricsCache)
+    {
+        public static AssignmentEvaluationOutcome NoChange { get; } = new(Array.Empty<string>(), false, false);
     }
 }

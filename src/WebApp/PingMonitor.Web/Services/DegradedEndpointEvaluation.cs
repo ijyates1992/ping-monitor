@@ -1,4 +1,5 @@
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.Metrics;
 
 namespace PingMonitor.Web.Services;
 
@@ -63,42 +64,68 @@ internal static class DegradedEndpointEvaluator
             .Where(x => x.CheckedAtUtc >= currentWindowStartUtc && x.CheckedAtUtc <= nowUtc)
             .ToArray();
 
-        if (baselineResults.Length < settings.MinimumSamples || currentResults.Length < settings.MinimumSamples)
+        var metrics = new DegradedAssignmentMetricsSnapshot
+        {
+            AssignmentId = results.FirstOrDefault()?.AssignmentId ?? string.Empty,
+            Baseline = BuildMetricsWindow(baselineResults, settings.MinimumSamples),
+            Current = BuildMetricsWindow(currentResults, settings.MinimumSamples)
+        };
+
+        return Evaluate(metrics, settings);
+    }
+
+    public static DegradedEndpointEvaluationResult Evaluate(
+        DegradedAssignmentMetricsSnapshot metrics,
+        DegradedEndpointEvaluationSettings settings)
+    {
+        if (!settings.Enabled)
         {
             return DegradedEndpointEvaluationResult.NotDegraded;
         }
 
-        var baselineLoss = CalculatePacketLossPercent(baselineResults);
-        var currentLoss = CalculatePacketLossPercent(currentResults);
-        var baselineRtt = CalculateAverageSuccessfulRttMs(baselineResults);
-        var currentRtt = CalculateAverageSuccessfulRttMs(currentResults);
-        var baselineJitter = CalculateAverageSuccessfulJitterMs(baselineResults, settings.MinimumSamples);
-        var currentJitter = CalculateAverageSuccessfulJitterMs(currentResults, settings.MinimumSamples);
+        if (settings.BaselineLookbackMinutes <= settings.CurrentWindowMinutes
+            || settings.CurrentWindowMinutes < 1
+            || settings.MinimumSamples < 1)
+        {
+            return DegradedEndpointEvaluationResult.NotDegraded;
+        }
+
+        if (metrics.Baseline.SampleCount < settings.MinimumSamples || metrics.Current.SampleCount < settings.MinimumSamples)
+        {
+            return DegradedEndpointEvaluationResult.NotDegraded;
+        }
+
+        var baselineLoss = metrics.Baseline.PacketLossPercent;
+        var currentLoss = metrics.Current.PacketLossPercent;
+        var baselineRtt = metrics.Baseline.AverageRttMs;
+        var currentRtt = metrics.Current.AverageRttMs;
+        var baselineJitter = metrics.Baseline.JitterMs;
+        var currentJitter = metrics.Current.JitterMs;
 
         var lossDegraded = currentLoss >= baselineLoss + settings.PacketLossIncreasePercentagePoints;
         var rttDegraded = baselineRtt.HasValue
             && baselineRtt.Value > 0d
             && currentRtt.HasValue
             && currentRtt.Value >= baselineRtt.Value * (1d + (settings.RttIncreasePercent / 100d));
-        var jitterDegraded = baselineJitter.JitterMs.HasValue
-            && baselineJitter.JitterMs.Value > 0d
-            && currentJitter.JitterMs.HasValue
-            && currentJitter.JitterMs.Value >= baselineJitter.JitterMs.Value * (1d + (settings.JitterIncreasePercent / 100d));
+        var jitterDegraded = baselineJitter.HasValue
+            && baselineJitter.Value > 0d
+            && currentJitter.HasValue
+            && currentJitter.Value >= baselineJitter.Value * (1d + (settings.JitterIncreasePercent / 100d));
 
         if (!lossDegraded && !rttDegraded && !jitterDegraded)
         {
             return new DegradedEndpointEvaluationResult
             {
-                BaselineSampleCount = baselineResults.Length,
-                CurrentSampleCount = currentResults.Length,
+                BaselineSampleCount = metrics.Baseline.SampleCount,
+                CurrentSampleCount = metrics.Current.SampleCount,
                 BaselinePacketLossPercent = baselineLoss,
                 CurrentPacketLossPercent = currentLoss,
                 BaselineAverageRttMs = baselineRtt,
                 CurrentAverageRttMs = currentRtt,
-                BaselineJitterMs = baselineJitter.JitterMs,
-                CurrentJitterMs = currentJitter.JitterMs,
-                BaselineJitterSampleCount = baselineJitter.SampleCount,
-                CurrentJitterSampleCount = currentJitter.SampleCount
+                BaselineJitterMs = baselineJitter,
+                CurrentJitterMs = currentJitter,
+                BaselineJitterSampleCount = metrics.Baseline.JitterSampleCount,
+                CurrentJitterSampleCount = metrics.Current.JitterSampleCount
             };
         }
 
@@ -115,26 +142,41 @@ internal static class DegradedEndpointEvaluator
 
         if (jitterDegraded)
         {
-            reasons.Add($"jitter increased from {baselineJitter.JitterMs!.Value:F1} ms baseline to {currentJitter.JitterMs!.Value:F1} ms current");
+            reasons.Add($"jitter increased from {baselineJitter!.Value:F1} ms baseline to {currentJitter!.Value:F1} ms current");
         }
 
         return new DegradedEndpointEvaluationResult
         {
             IsDegraded = true,
             ReasonSummary = string.Join("; ", reasons),
-            BaselineSampleCount = baselineResults.Length,
-            CurrentSampleCount = currentResults.Length,
+            BaselineSampleCount = metrics.Baseline.SampleCount,
+            CurrentSampleCount = metrics.Current.SampleCount,
             BaselinePacketLossPercent = baselineLoss,
             CurrentPacketLossPercent = currentLoss,
             BaselineAverageRttMs = baselineRtt,
             CurrentAverageRttMs = currentRtt,
-            BaselineJitterMs = baselineJitter.JitterMs,
-            CurrentJitterMs = currentJitter.JitterMs,
-            BaselineJitterSampleCount = baselineJitter.SampleCount,
-            CurrentJitterSampleCount = currentJitter.SampleCount,
+            BaselineJitterMs = baselineJitter,
+            CurrentJitterMs = currentJitter,
+            BaselineJitterSampleCount = metrics.Baseline.JitterSampleCount,
+            CurrentJitterSampleCount = metrics.Current.JitterSampleCount,
             PacketLossDegraded = lossDegraded,
             RttDegraded = rttDegraded,
             JitterDegraded = jitterDegraded
+        };
+    }
+
+    private static DegradedAssignmentMetricsWindow BuildMetricsWindow(
+        IReadOnlyCollection<CheckResult> results,
+        int minimumSamples)
+    {
+        var jitter = CalculateAverageSuccessfulJitterMs(results, minimumSamples);
+        return new DegradedAssignmentMetricsWindow
+        {
+            SampleCount = results.Count,
+            PacketLossPercent = CalculatePacketLossPercent(results),
+            AverageRttMs = CalculateAverageSuccessfulRttMs(results),
+            JitterMs = jitter.JitterMs,
+            JitterSampleCount = jitter.SampleCount
         };
     }
 

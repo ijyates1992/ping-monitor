@@ -6,6 +6,13 @@ public interface IRollingAssignmentWindowStore
 {
     Task ApplyCheckResultsBatchAsync(IReadOnlyCollection<CheckResult> checkResults, DateTimeOffset nowUtc, CancellationToken cancellationToken);
     Task<LatestAssignmentResultContext?> GetLatestResultAsync(string assignmentId, CancellationToken cancellationToken);
+    Task<DegradedAssignmentMetricsSnapshot> GetDegradedMetricsAsync(
+        string assignmentId,
+        DateTimeOffset nowUtc,
+        int baselineLookbackMinutes,
+        int currentWindowMinutes,
+        int minimumSamples,
+        CancellationToken cancellationToken);
 
     Task ApplyStateEvaluationAsync(
         string assignmentId,
@@ -54,4 +61,20 @@ public sealed class AssignmentWindowSnapshot
     public required long UnknownDurationSeconds24h { get; init; }
     public required long SuppressedDurationSeconds24h { get; init; }
     public required DateTimeOffset UpdatedUtc { get; init; }
+}
+
+public sealed class DegradedAssignmentMetricsSnapshot
+{
+    public required string AssignmentId { get; init; }
+    public required DegradedAssignmentMetricsWindow Baseline { get; init; }
+    public required DegradedAssignmentMetricsWindow Current { get; init; }
+}
+
+public sealed class DegradedAssignmentMetricsWindow
+{
+    public required int SampleCount { get; init; }
+    public required double PacketLossPercent { get; init; }
+    public required double? AverageRttMs { get; init; }
+    public required double? JitterMs { get; init; }
+    public required int JitterSampleCount { get; init; }
 }

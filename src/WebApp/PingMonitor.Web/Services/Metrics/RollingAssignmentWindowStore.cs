@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
+using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Diagnostics;
 
 namespace PingMonitor.Web.Services.Metrics;
@@ -25,23 +26,27 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
             TryUpdateLatestResult(checkResult);
         }
 
-        var successfulByAssignment = checkResults
-            .Where(x => x.Success && x.RoundTripMs.HasValue && !string.IsNullOrWhiteSpace(x.AssignmentId))
+        var resultsByAssignment = checkResults
+            .Where(x => !string.IsNullOrWhiteSpace(x.AssignmentId))
             .GroupBy(x => x.AssignmentId.Trim(), StringComparer.Ordinal);
 
-        foreach (var group in successfulByAssignment)
+        foreach (var group in resultsByAssignment)
         {
             var window = await GetWindowAsync(group.Key, nowUtc, cancellationToken);
-            var ordered = group
-                .Select(x => new RttSamplePoint(x.CheckedAtUtc, (double)x.RoundTripMs!.Value))
+            var orderedResults = group
+                .Select(x => new ResultSamplePoint(x.CheckedAtUtc, x.Success, x.RoundTripMs.HasValue ? (double)x.RoundTripMs.Value : null))
                 .OrderBy(x => x.CheckedAtUtc)
                 .ToArray();
 
             await window.WithLockAsync(() =>
             {
-                foreach (var sample in ordered)
+                foreach (var sample in orderedResults)
                 {
-                    window.AppendRttSample(sample, nowUtc - Window);
+                    window.AppendResultSample(sample, nowUtc - Window);
+                    if (sample.Success && sample.RttMs.HasValue)
+                    {
+                        window.AppendRttSample(new RttSamplePoint(sample.CheckedAtUtc, sample.RttMs.Value), nowUtc - Window);
+                    }
                 }
             }, cancellationToken);
         }
@@ -137,6 +142,20 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
         return await window.WithLockAsync(() => window.BuildSnapshot(nowUtc - Window, nowUtc), cancellationToken);
     }
 
+    public async Task<DegradedAssignmentMetricsSnapshot> GetDegradedMetricsAsync(
+        string assignmentId,
+        DateTimeOffset nowUtc,
+        int baselineLookbackMinutes,
+        int currentWindowMinutes,
+        int minimumSamples,
+        CancellationToken cancellationToken)
+    {
+        var window = await GetWindowAsync(assignmentId, nowUtc, cancellationToken);
+        return await window.WithLockAsync(
+            () => window.BuildDegradedMetrics(nowUtc, baselineLookbackMinutes, currentWindowMinutes, minimumSamples),
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyDictionary<string, AssignmentWindowSnapshot>> GetSnapshotsAsync(
         IReadOnlyCollection<string> assignmentIds,
         DateTimeOffset nowUtc,
@@ -193,16 +212,17 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
         using var dbScope = dbActivityScope.BeginScope("RollingWindowHydration");
         var dbContext = scope.ServiceProvider.GetRequiredService<PingMonitorDbContext>();
 
-        var samples = await dbContext.CheckResults.AsNoTracking()
+        var resultSamples = await dbContext.CheckResults.AsNoTracking()
             .Where(x => x.AssignmentId == window.AssignmentId
-                && x.Success
-                && x.RoundTripMs.HasValue
                 && x.CheckedAtUtc >= windowStartUtc
                 && x.CheckedAtUtc <= nowUtc)
             .OrderBy(x => x.CheckedAtUtc)
             .ThenBy(x => x.ReceivedAtUtc)
             .ThenBy(x => x.CheckResultId)
-            .Select(x => new RttSamplePoint(x.CheckedAtUtc, (double)x.RoundTripMs!.Value))
+            .Select(x => new ResultSamplePoint(
+                x.CheckedAtUtc,
+                x.Success,
+                x.RoundTripMs.HasValue ? (double?)x.RoundTripMs.Value : null))
             .ToArrayAsync(cancellationToken);
 
         var transitionsInWindow = await dbContext.StateTransitions.AsNoTracking()
@@ -226,9 +246,13 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
 
         window.Reset();
 
-        foreach (var sample in samples)
+        foreach (var sample in resultSamples)
         {
-            window.AppendRttSample(sample, windowStartUtc);
+            window.AppendResultSample(sample, windowStartUtc);
+            if (sample.Success && sample.RttMs.HasValue)
+            {
+                window.AppendRttSample(new RttSamplePoint(sample.CheckedAtUtc, sample.RttMs.Value), windowStartUtc);
+            }
         }
 
         if (latestBeforeWindow.Length > 0)
@@ -259,6 +283,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
     }
 
     private readonly record struct RttSamplePoint(DateTimeOffset CheckedAtUtc, double RttMs);
+    private readonly record struct ResultSamplePoint(DateTimeOffset CheckedAtUtc, bool Success, double? RttMs);
     private readonly record struct StateTransitionPoint(DateTimeOffset TransitionAtUtc, EndpointStateKind State);
 
     private void TryUpdateLatestResult(CheckResult checkResult)
@@ -305,6 +330,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
     private sealed class AssignmentWindow
     {
         private readonly SemaphoreSlim _gate = new(1, 1);
+        private readonly LinkedList<ResultSamplePoint> _resultSamples = [];
         private readonly LinkedList<RttSamplePoint> _rttSamples = [];
         private readonly LinkedList<StateTransitionPoint> _stateTransitions = [];
         private double _rttSum;
@@ -324,6 +350,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
 
         public void Reset()
         {
+            _resultSamples.Clear();
             _rttSamples.Clear();
             _stateTransitions.Clear();
             _rttSum = 0;
@@ -390,6 +417,12 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
             PruneRttWindow(windowStartUtc);
         }
 
+        public void AppendResultSample(ResultSamplePoint sample, DateTimeOffset windowStartUtc)
+        {
+            _resultSamples.AddLast(sample);
+            PruneResultWindow(windowStartUtc);
+        }
+
         public void AddHydratedTransition(StateTransitionPoint transition)
         {
             if (_stateTransitions.Last is not null && _stateTransitions.Last.Value.TransitionAtUtc == transition.TransitionAtUtc)
@@ -453,6 +486,7 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
 
         public AssignmentWindowSnapshot BuildSnapshot(DateTimeOffset windowStartUtc, DateTimeOffset nowUtc)
         {
+            PruneResultWindow(windowStartUtc);
             PruneRttWindow(windowStartUtc);
             PruneStateWindow(windowStartUtc);
             EnsureRttBounds();
@@ -481,6 +515,62 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
                 UnknownDurationSeconds24h = durations.UnknownSeconds,
                 SuppressedDurationSeconds24h = durations.SuppressedSeconds,
                 UpdatedUtc = nowUtc
+            };
+        }
+
+        public DegradedAssignmentMetricsSnapshot BuildDegradedMetrics(
+            DateTimeOffset nowUtc,
+            int baselineLookbackMinutes,
+            int currentWindowMinutes,
+            int minimumSamples)
+        {
+            var baselineWindowStartUtc = nowUtc.AddMinutes(-baselineLookbackMinutes);
+            var currentWindowStartUtc = nowUtc.AddMinutes(-currentWindowMinutes);
+            PruneResultWindow(baselineWindowStartUtc);
+
+            var ordered = _resultSamples
+                .Where(x => x.CheckedAtUtc >= baselineWindowStartUtc && x.CheckedAtUtc <= nowUtc)
+                .OrderBy(x => x.CheckedAtUtc)
+                .ToArray();
+
+            return new DegradedAssignmentMetricsSnapshot
+            {
+                AssignmentId = AssignmentId,
+                Baseline = BuildMetricsWindow(
+                    ordered.Where(x => x.CheckedAtUtc >= baselineWindowStartUtc && x.CheckedAtUtc < currentWindowStartUtc),
+                    minimumSamples),
+                Current = BuildMetricsWindow(
+                    ordered.Where(x => x.CheckedAtUtc >= currentWindowStartUtc && x.CheckedAtUtc <= nowUtc),
+                    minimumSamples)
+            };
+        }
+
+        private static DegradedAssignmentMetricsWindow BuildMetricsWindow(
+            IEnumerable<ResultSamplePoint> samples,
+            int minimumSamples)
+        {
+            var sampleArray = samples.ToArray();
+            var successfulRtts = sampleArray
+                .Where(x => x.Success && x.RttMs.HasValue)
+                .OrderBy(x => x.CheckedAtUtc)
+                .Select(x => new RttJitterSample(x.CheckedAtUtc, x.RttMs!.Value))
+                .ToArray();
+            var jitterMinimumSamples = Math.Max(2, minimumSamples);
+            var jitter = successfulRtts.Length < jitterMinimumSamples
+                ? null
+                : RttJitterCalculator.CalculateAverageAbsoluteDeltaMs(successfulRtts);
+
+            return new DegradedAssignmentMetricsWindow
+            {
+                SampleCount = sampleArray.Length,
+                PacketLossPercent = sampleArray.Length == 0
+                    ? 0d
+                    : sampleArray.Count(x => !x.Success) * 100d / sampleArray.Length,
+                AverageRttMs = successfulRtts.Length == 0
+                    ? null
+                    : successfulRtts.Average(x => x.RttMs),
+                JitterMs = jitter,
+                JitterSampleCount = successfulRtts.Length
             };
         }
 
@@ -519,6 +609,14 @@ internal sealed class RollingAssignmentWindowStore : IRollingAssignmentWindowSto
                 _rttMinDirty = false;
                 _rttMaxDirty = false;
                 _rttDeltaSum = 0;
+            }
+        }
+
+        private void PruneResultWindow(DateTimeOffset windowStartUtc)
+        {
+            while (_resultSamples.First is not null && _resultSamples.First.Value.CheckedAtUtc < windowStartUtc)
+            {
+                _resultSamples.RemoveFirst();
             }
         }
 
