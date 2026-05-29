@@ -1,5 +1,6 @@
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
+using PingMonitor.Web.Services.Metrics;
 using Xunit;
 
 namespace PingMonitor.Web.Tests;
@@ -29,6 +30,40 @@ public sealed class DegradedEndpointEvaluatorTests
         Assert.True(evaluation.IsDegraded);
         Assert.True(evaluation.RttDegraded);
         Assert.Contains("RTT increased", evaluation.ReasonSummary);
+    }
+
+    [Fact]
+    public void Evaluate_Degrades_UsingCacheProvidedMetrics()
+    {
+        var metrics = new DegradedAssignmentMetricsSnapshot
+        {
+            AssignmentId = "assignment-1",
+            Baseline = new DegradedAssignmentMetricsWindow
+            {
+                SampleCount = 100,
+                PacketLossPercent = 1,
+                AverageRttMs = 50,
+                JitterMs = 1,
+                JitterSampleCount = 99
+            },
+            Current = new DegradedAssignmentMetricsWindow
+            {
+                SampleCount = 100,
+                PacketLossPercent = 25,
+                AverageRttMs = 65,
+                JitterMs = 2,
+                JitterSampleCount = 77
+            }
+        };
+
+        var evaluation = DegradedEndpointEvaluator.Evaluate(metrics, DefaultSettings);
+
+        Assert.True(evaluation.IsDegraded);
+        Assert.True(evaluation.RttDegraded);
+        Assert.True(evaluation.PacketLossDegraded);
+        Assert.True(evaluation.JitterDegraded);
+        Assert.Equal(100, evaluation.BaselineSampleCount);
+        Assert.Equal(100, evaluation.CurrentSampleCount);
     }
 
     [Fact]

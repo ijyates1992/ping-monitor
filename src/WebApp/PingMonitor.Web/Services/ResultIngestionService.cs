@@ -16,6 +16,7 @@ internal sealed class ResultIngestionService : IResultIngestionService
     private readonly PingMonitorDbContext _dbContext;
     private readonly IStateEvaluationService _stateEvaluationService;
     private readonly IBufferedResultIngestionService _bufferedResultIngestionService;
+    private readonly IAssignmentMetrics24hService _assignmentMetrics24hService;
     private readonly IEventLogService _eventLogService;
     private readonly IngestRateTracker _ingestRateTracker;
     private readonly ILogger<ResultIngestionService> _logger;
@@ -25,6 +26,7 @@ internal sealed class ResultIngestionService : IResultIngestionService
         PingMonitorDbContext dbContext,
         IStateEvaluationService stateEvaluationService,
         IBufferedResultIngestionService bufferedResultIngestionService,
+        IAssignmentMetrics24hService assignmentMetrics24hService,
         IEventLogService eventLogService,
         IngestRateTracker ingestRateTracker,
         IOptions<ResultBufferOptions> resultBufferOptions,
@@ -33,6 +35,7 @@ internal sealed class ResultIngestionService : IResultIngestionService
         _dbContext = dbContext;
         _stateEvaluationService = stateEvaluationService;
         _bufferedResultIngestionService = bufferedResultIngestionService;
+        _assignmentMetrics24hService = assignmentMetrics24hService;
         _eventLogService = eventLogService;
         _ingestRateTracker = ingestRateTracker;
         _resultBufferOptions = resultBufferOptions.Value;
@@ -175,6 +178,7 @@ internal sealed class ResultIngestionService : IResultIngestionService
             {
                 _dbContext.CheckResults.AddRange(storedResults);
                 await _dbContext.SaveChangesAsync(cancellationToken);
+                await _assignmentMetrics24hService.ApplyCheckResultsBatchAsync(storedResults, cancellationToken);
             }
 
             if (!wasOnline)

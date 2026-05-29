@@ -106,17 +106,6 @@ internal sealed class EndpointManagementQueryService : IEndpointManagementQueryS
             assignmentIds,
             cancellationToken);
 
-        var missingSummaryAssignmentIds = assignmentIds
-            .Where(assignmentId => !metricsByAssignmentId.ContainsKey(assignmentId))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        if (missingSummaryAssignmentIds.Length > 0)
-        {
-            await _assignmentMetrics24hService.RefreshAssignmentsAsync(missingSummaryAssignmentIds, cancellationToken);
-            metricsByAssignmentId = await _assignmentMetrics24hService.GetSummariesAsync(assignmentIds, cancellationToken);
-        }
-
         return new ManageEndpointsPageViewModel
         {
             GroupId = normalizedGroupId,

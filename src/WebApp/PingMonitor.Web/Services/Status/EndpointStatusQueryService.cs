@@ -194,17 +194,6 @@ internal sealed class EndpointStatusQueryService : IEndpointStatusQueryService
             projectedAssignmentIds,
             cancellationToken);
 
-        var missingSummaryAssignmentIds = projectedAssignmentIds
-            .Where(assignmentId => !endpointMetricsByAssignmentId.ContainsKey(assignmentId))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        if (missingSummaryAssignmentIds.Length > 0)
-        {
-            await _assignmentMetrics24hService.RefreshAssignmentsAsync(missingSummaryAssignmentIds, cancellationToken);
-            endpointMetricsByAssignmentId = await _assignmentMetrics24hService.GetSummariesAsync(projectedAssignmentIds, cancellationToken);
-        }
-
         var rowsWithMetrics = projectedRows.Select(row =>
         {
             endpointMetricsByAssignmentId.TryGetValue(row.AssignmentId, out var metrics);
