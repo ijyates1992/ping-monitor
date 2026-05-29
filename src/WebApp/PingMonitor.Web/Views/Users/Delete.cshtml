@@ -1,0 +1,73 @@
+@model PingMonitor.Web.ViewModels.Users.UserDeletePageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Delete user</title>
+    @await Html.PartialAsync("_UiConsistencyStyles")
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main class="page-shell-narrow">
+    <div class="stack">
+        <section class="card stack">
+            <h1 class="section-title">Delete user</h1>
+            <p class="muted">Confirm removal of this Identity user account. Monitoring history, event logs, check results, endpoints, agents, and configuration history are not deleted.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/users">Back to users</a>
+            </div>
+        </section>
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="errors" asp-validation-summary="All"></div>
+        }
+
+        @if (!Model.CanDelete && !string.IsNullOrWhiteSpace(Model.DeleteBlockedReason))
+        {
+            <div class="errors">@Model.DeleteBlockedReason</div>
+        }
+
+        <section class="card stack">
+            <h2 class="section-title">User to delete</h2>
+            <dl class="detail-list">
+                <dt>Username</dt>
+                <dd>@Model.UserName</dd>
+                <dt>Email</dt>
+                <dd>@Model.Email</dd>
+                <dt>Roles</dt>
+                <dd>@string.Join(", ", Model.Roles)</dd>
+            </dl>
+
+            <div class="warning-box">
+                <strong>Warning:</strong> This deletes the user account and cannot be undone. The deleted user will no longer be able to sign in.
+            </div>
+
+            @if (Model.CanDelete)
+            {
+                <form method="post" class="stack">
+                    @Html.AntiForgeryToken()
+                    <div class="field-group">
+                        <label asp-for="ConfirmationText">Type DELETE to confirm</label>
+                        <input asp-for="ConfirmationText" autocomplete="off" />
+                        <div class="field-error"><span asp-validation-for="ConfirmationText"></span></div>
+                    </div>
+                    <div class="button-row">
+                        <button class="button-danger" type="submit">Delete user</button>
+                        <a class="button-secondary" href="/users">Cancel</a>
+                    </div>
+                </form>
+            }
+            else
+            {
+                <div class="button-row">
+                    <a class="button-secondary" href="/users">Return to users</a>
+                </div>
+            }
+        </section>
+    </div>
+</main>
+</body>
+</html>
