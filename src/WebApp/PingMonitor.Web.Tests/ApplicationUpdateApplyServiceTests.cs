@@ -220,6 +220,156 @@ public sealed class ApplicationUpdateApplyServiceTests
         }
     }
 
+
+    [Fact]
+    public async Task RefreshApplyStateAsync_ReconcilesStaleInProgressSuccess_WhenCurrentVersionMatchesTarget()
+    {
+        var contentRoot = CreateTempRoot();
+        try
+        {
+            var stagingRoot = Path.Combine(contentRoot, "App_Data", "Updater");
+            Directory.CreateDirectory(Path.Combine(stagingRoot, "state"));
+
+            var statusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
+            await File.WriteAllTextAsync(statusPath, JsonSerializer.Serialize(new
+            {
+                stage = "copy_payload",
+                succeeded = true,
+                resultCode = "in_progress"
+            }));
+
+            var oldTimestamp = DateTime.UtcNow.AddMinutes(-20);
+            File.SetLastWriteTimeUtc(statusPath, oldTimestamp);
+
+            var store = BuildStateStore(contentRoot);
+            await store.WriteAsync(new ApplicationUpdateStagingState
+            {
+                SourceRepository = "ijyates1992/ping-monitor",
+                ReleaseTag = "V1.2.3",
+                ChecksumVerified = true,
+                StagingInProgress = true,
+                Status = ApplicationUpdateStagingStatus.ApplyHandoffStarted,
+                ExternalUpdaterStatusPath = statusPath,
+                LastUpdatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-20)
+            }, CancellationToken.None);
+
+            var service = BuildService(
+                contentRoot,
+                store,
+                new RecordingLauncher(),
+                currentVersion: "V1.2.3",
+                startupMode: StartupMode.Normal);
+
+            var refreshed = await service.RefreshApplyStateAsync(CancellationToken.None);
+
+            Assert.NotNull(refreshed);
+            Assert.Equal(ApplicationUpdateStagingStatus.ApplySucceeded, refreshed!.Status);
+            Assert.False(refreshed.StagingInProgress);
+            Assert.Null(refreshed.FailureMessage);
+            Assert.Contains("Stale in-progress updater state was reconciled", refreshed.ApplyOperationMessage);
+        }
+        finally
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshApplyStateAsync_MarksStaleInProgressNeedsAttention_WhenSuccessCannotBeConfirmed()
+    {
+        var contentRoot = CreateTempRoot();
+        try
+        {
+            var stagingRoot = Path.Combine(contentRoot, "App_Data", "Updater");
+            Directory.CreateDirectory(Path.Combine(stagingRoot, "state"));
+
+            var statusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
+            await File.WriteAllTextAsync(statusPath, JsonSerializer.Serialize(new
+            {
+                stage = "stop_site",
+                succeeded = false,
+                resultCode = "in_progress"
+            }));
+            File.SetLastWriteTimeUtc(statusPath, DateTime.UtcNow.AddMinutes(-20));
+
+            var store = BuildStateStore(contentRoot);
+            await store.WriteAsync(new ApplicationUpdateStagingState
+            {
+                SourceRepository = "ijyates1992/ping-monitor",
+                ReleaseTag = "V1.2.3",
+                ChecksumVerified = true,
+                Status = ApplicationUpdateStagingStatus.ApplyHandoffStarted,
+                ExternalUpdaterStatusPath = statusPath,
+                LastUpdatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-20)
+            }, CancellationToken.None);
+
+            var service = BuildService(
+                contentRoot,
+                store,
+                new RecordingLauncher(),
+                currentVersion: "V1.0.0",
+                startupMode: StartupMode.Normal);
+
+            var refreshed = await service.RefreshApplyStateAsync(CancellationToken.None);
+
+            Assert.NotNull(refreshed);
+            Assert.Equal(ApplicationUpdateStagingStatus.ApplyInterruptedNeedsAttention, refreshed!.Status);
+            Assert.Contains("success cannot be confirmed", refreshed.FailureMessage);
+            Assert.False(refreshed.StagingInProgress);
+        }
+        finally
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshApplyStateAsync_DoesNotMarkFreshInProgressStateAsInterrupted()
+    {
+        var contentRoot = CreateTempRoot();
+        try
+        {
+            var stagingRoot = Path.Combine(contentRoot, "App_Data", "Updater");
+            Directory.CreateDirectory(Path.Combine(stagingRoot, "state"));
+
+            var statusPath = Path.Combine(stagingRoot, "state", "external-updater-status.json");
+            await File.WriteAllTextAsync(statusPath, JsonSerializer.Serialize(new
+            {
+                stage = "stop_site",
+                succeeded = false,
+                resultCode = "in_progress"
+            }));
+
+            var store = BuildStateStore(contentRoot);
+            await store.WriteAsync(new ApplicationUpdateStagingState
+            {
+                SourceRepository = "ijyates1992/ping-monitor",
+                ReleaseTag = "V1.2.3",
+                ChecksumVerified = true,
+                Status = ApplicationUpdateStagingStatus.ApplyHandoffStarted,
+                ExternalUpdaterStatusPath = statusPath,
+                LastUpdatedAtUtc = DateTimeOffset.UtcNow
+            }, CancellationToken.None);
+
+            var service = BuildService(
+                contentRoot,
+                store,
+                new RecordingLauncher(),
+                currentVersion: "V1.0.0",
+                startupMode: StartupMode.Normal);
+
+            var refreshed = await service.RefreshApplyStateAsync(CancellationToken.None);
+
+            Assert.NotNull(refreshed);
+            Assert.Equal(ApplicationUpdateStagingStatus.Applying, refreshed!.Status);
+            Assert.Null(refreshed.FailureMessage);
+        }
+        finally
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task RequestApplyAsync_ThrowsWhenPowerShellHostCannotBeResolved()
     {
