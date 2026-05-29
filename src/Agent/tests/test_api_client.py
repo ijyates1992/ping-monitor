@@ -5,7 +5,7 @@ import httpx
 from app.api_client import AgentApiClient, AgentApiError, _assignment_from_dict
 from app.config import AgentConfig
 from app.models import HeartbeatRequest, ResultsRequest
-
+from app.version import AGENT_VERSION
 
 class AgentApiClientTests(unittest.TestCase):
     def test_assignment_parsing_reads_dependency_id_list(self) -> None:
@@ -90,16 +90,34 @@ class AgentApiClientTests(unittest.TestCase):
 
         client.close()
 
+    def test_user_agent_uses_shared_agent_version(self) -> None:
+        client = self._build_client(lambda request: httpx.Response(204, request=request))
+
+        user_agent = client._client.headers["User-Agent"]
+
+        self.assertEqual(f"ping-agent/{AGENT_VERSION}", user_agent)
+        self.assertEqual("ping-agent/0.1.4", user_agent)
+        client.close()
+
     def _build_client(self, handler) -> AgentApiClient:
         config = AgentConfig(server_url="https://example.test", instance_id="agent-1", api_key="secret")
         client = AgentApiClient(config)
         client._client.close()
-        client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url=config.server_url)
+        client._client = httpx.Client(
+            transport=httpx.MockTransport(handler),
+            base_url=config.server_url,
+            headers={
+                "X-Instance-Id": config.instance_id,
+                "Authorization": f"Bearer {config.api_key}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": f"ping-agent/{AGENT_VERSION}",
+            },
+        )
         return client
 
     def _results_request(self) -> ResultsRequest:
         return ResultsRequest(sent_at_utc="2026-01-01T00:00:00Z", batch_id="batch-1", results=[])
-
 
 if __name__ == "__main__":
     unittest.main()
