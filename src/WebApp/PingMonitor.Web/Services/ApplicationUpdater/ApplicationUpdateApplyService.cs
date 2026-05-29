@@ -337,6 +337,8 @@ internal sealed class IisMetadataReader : IIisMetadataReader
 
 internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplyService
 {
+    private static readonly TimeSpan StaleInProgressThreshold = TimeSpan.FromMinutes(10);
+
     private static readonly JsonSerializerOptions ExternalStatusSerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -609,40 +611,52 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
         var applyMessage = current.ApplyOperationMessage;
         var failureMessage = current.FailureMessage;
         DateTimeOffset? applyCompletedAtUtc = current.ApplyCompletedAtUtc;
+        var currentVersionMatchesTarget = IsCurrentVersionMatchingRelease(current.ReleaseTag, currentVersion);
 
-        var isCompleted = !string.IsNullOrWhiteSpace(externalStatus.CompletedAtUtc) &&
-                          !string.Equals(externalStatus.ResultCode, "in_progress", StringComparison.OrdinalIgnoreCase);
+        var externalResultCode = externalStatus.ResultCode?.Trim();
+        var isInProgressResult = string.IsNullOrWhiteSpace(externalResultCode) ||
+                                 string.Equals(externalResultCode, "in_progress", StringComparison.OrdinalIgnoreCase);
+        var isCompleted = !string.IsNullOrWhiteSpace(externalStatus.CompletedAtUtc) && !isInProgressResult;
+        var hasConfirmedBootstrapperSuccess = externalStatus.Succeeded && (isCompleted || currentVersionMatchesTarget);
 
-        if (isCompleted)
+        if (hasConfirmedBootstrapperSuccess)
         {
             applyCompletedAtUtc = now;
-            if (externalStatus.Succeeded)
+            if (_startupGateRuntimeState.CurrentMode == StartupMode.Gate)
             {
-                if (_startupGateRuntimeState.CurrentMode == StartupMode.Gate)
-                {
-                    status = ApplicationUpdateStagingStatus.ApplyStartupGateActionRequired;
-                    applyMessage = "Update applied, but startup gate action is required before normal mode.";
-                    failureMessage = null;
-                }
-                else if (!string.IsNullOrWhiteSpace(current.ReleaseTag) &&
-                         string.Equals(current.ReleaseTag, currentVersion, StringComparison.OrdinalIgnoreCase))
-                {
-                    status = ApplicationUpdateStagingStatus.ApplySucceeded;
-                    applyMessage = $"Update applied successfully. Installed version is now {currentVersion}.";
-                    failureMessage = null;
-                }
-                else
-                {
-                    status = ApplicationUpdateStagingStatus.Applying;
-                    applyMessage = "External updater reported success. Waiting for updated app metadata to reflect the staged release.";
-                }
+                status = ApplicationUpdateStagingStatus.ApplyStartupGateActionRequired;
+                applyMessage = "Update applied, but startup gate action is required before normal mode.";
+                failureMessage = null;
+            }
+            else if (currentVersionMatchesTarget)
+            {
+                status = ApplicationUpdateStagingStatus.ApplySucceeded;
+                applyMessage = $"Update applied successfully. Installed version is now {currentVersion}. Stale in-progress updater state was reconciled and cleared after confirming bootstrapper success.";
+                failureMessage = null;
+                _logger.LogInformation(
+                    "Application updater reconciled stale in-progress state as successful for release '{ReleaseTag}' because bootstrapper status reported success and current version is '{CurrentVersion}'.",
+                    current.ReleaseTag,
+                    currentVersion);
             }
             else
             {
-                status = ApplicationUpdateStagingStatus.ApplyFailed;
-                failureMessage = externalStatus.Error?.Message ?? "External updater reported failure.";
-                applyMessage = "Update apply failed. Review external updater status/log for details.";
+                status = ApplicationUpdateStagingStatus.Applying;
+                applyMessage = "External updater reported success. Waiting for updated app metadata to reflect the staged release.";
+                failureMessage = null;
             }
+        }
+        else if (isCompleted)
+        {
+            applyCompletedAtUtc = now;
+            status = ApplicationUpdateStagingStatus.ApplyFailed;
+            failureMessage = externalStatus.Error?.Message ?? "External updater reported failure.";
+            applyMessage = "Update apply failed. Review external updater status/log for details.";
+        }
+        else if (IsStaleInProgressState(current, statusPath, now))
+        {
+            status = ApplicationUpdateStagingStatus.ApplyInterruptedNeedsAttention;
+            failureMessage = "External updater status is still in progress and success cannot be confirmed. Review the bootstrapper status/log, then restage the release or retry apply when safe.";
+            applyMessage = "Update apply may have been interrupted. The updater is unlocked for recovery actions, but this update was not marked successful.";
         }
         else
         {
@@ -663,6 +677,39 @@ internal sealed class ApplicationUpdateApplyService : IApplicationUpdateApplySer
 
         await _stagingStateStore.WriteAsync(updated, cancellationToken);
         return updated;
+    }
+
+
+    private static bool IsCurrentVersionMatchingRelease(string? releaseTag, string? currentVersion)
+    {
+        if (string.IsNullOrWhiteSpace(releaseTag) || string.IsNullOrWhiteSpace(currentVersion))
+        {
+            return false;
+        }
+
+        if (string.Equals(releaseTag.Trim(), currentVersion.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return ReleaseVersionParser.TryParseReleaseVersion(releaseTag, out var targetReleaseVersion) &&
+               ReleaseVersionParser.TryParseReleaseVersion(currentVersion, out var currentReleaseVersion) &&
+               targetReleaseVersion.CompareTo(currentReleaseVersion) == 0;
+    }
+
+    private static bool IsStaleInProgressState(ApplicationUpdateStagingState state, string statusPath, DateTimeOffset now)
+    {
+        var lastProgressAt = state.LastUpdatedAtUtc;
+        if (File.Exists(statusPath))
+        {
+            var statusLastWrite = File.GetLastWriteTimeUtc(statusPath);
+            if (statusLastWrite > lastProgressAt.UtcDateTime)
+            {
+                lastProgressAt = new DateTimeOffset(statusLastWrite, TimeSpan.Zero);
+            }
+        }
+
+        return now - lastProgressAt >= StaleInProgressThreshold;
     }
 
     private static void ValidateApplyPrerequisites(ApplicationUpdateStagingState state, string stagedMetadataPath)

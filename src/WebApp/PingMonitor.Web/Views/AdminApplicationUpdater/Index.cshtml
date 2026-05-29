@@ -40,12 +40,17 @@
             _ => "status-ok"
         };
 
-        var stagedStatusClass = Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready
-            ? "status-ok"
-            : Model.StagedUpdate?.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingInProgress
-                or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingBlocked
-                ? "status-warn"
-                : "status-error";
+        var stagedStatusClass = Model.StagedUpdate is null
+            ? "status-warn"
+            : Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready
+                or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplySucceeded
+                ? "status-ok"
+                : Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingInProgress
+                    or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingBlocked
+                    or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Applying
+                    or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyInterruptedNeedsAttention
+                    ? "status-warn"
+                    : "status-error";
 
         var applyStatusClass = Model.StagedUpdate?.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplySucceeded
             ? "status-ok"
@@ -55,7 +60,8 @@
 
         var checkHasError = Model.State == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateCheckState.CheckFailed;
         var stageHasError = !string.IsNullOrWhiteSpace(Model.StagedUpdate?.FailureMessage) || Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.StagingFailed;
-        var applyHasError = Model.StagedUpdate?.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyFailed;
+        var applyHasError = Model.StagedUpdate?.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyFailed
+            or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyInterruptedNeedsAttention;
         var runtimeHasError = !string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutomaticCheckFailureMessage) || !string.IsNullOrWhiteSpace(Model.RuntimeState?.LastAutoStageFailureMessage);
         var schemaStatusClass = Model.SchemaCompatibilityState switch
         {
@@ -312,8 +318,26 @@
             else
             {
                 <div class="status @stagedStatusClass" role="status">Status: @Model.StagedUpdate.Status</div>
+                @if (Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplySucceeded)
+                {
+                    <div class="status status-ok" role="status" style="margin-top:0.75rem;">Previous update succeeded. No update is currently staged for apply; run a new check/stage cycle for future updates.</div>
+                }
+                else if (Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyInterruptedNeedsAttention)
+                {
+                    <div class="status status-warn" role="status" style="margin-top:0.75rem;">Previous update failed or was interrupted and needs attention. The updater is unlocked for recovery actions, but the prior apply was not marked successful.</div>
+                }
+                else if (Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready)
+                {
+                    <div class="status status-ok" role="status" style="margin-top:0.75rem;">Update staged and ready to apply.</div>
+                }
+                else if (Model.StagedUpdate.Status is PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyRequested
+                    or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplyHandoffStarted
+                    or PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Applying)
+                {
+                    <div class="status status-warn" role="status" style="margin-top:0.75rem;">Update apply is in progress.</div>
+                }
                 <div class="summary-grid">
-                    <div><strong>Staged release tag:</strong> @(Model.StagedUpdate.ReleaseTag ?? "(none)")</div>
+                    <div><strong>Staged release tag:</strong> @(Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.ApplySucceeded ? "(none - previous update completed)" : (Model.StagedUpdate.ReleaseTag ?? "(none)"))</div>
                     <div><strong>Checksum verified:</strong> @(Model.StagedUpdate.ChecksumVerified ? "Yes" : "No")</div>
                     <div><strong>Ready to apply:</strong> @(Model.StagedUpdate.Status == PingMonitor.Web.Services.ApplicationUpdater.ApplicationUpdateStagingStatus.Ready ? "Yes" : "No")</div>
                 </div>

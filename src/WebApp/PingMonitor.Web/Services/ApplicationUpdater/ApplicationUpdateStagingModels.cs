@@ -18,7 +18,8 @@ public enum ApplicationUpdateStagingStatus
     Applying = 11,
     ApplySucceeded = 12,
     ApplyFailed = 13,
-    ApplyStartupGateActionRequired = 14
+    ApplyStartupGateActionRequired = 14,
+    ApplyInterruptedNeedsAttention = 15
 }
 
 public sealed class ApplicationUpdateStagingState
