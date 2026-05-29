@@ -5,6 +5,7 @@ import httpx
 
 from app.api_client import AgentApiError
 from app.models import AssignmentModel, ConfigResponse, HelloResponse, ResultItem
+from app.version import AGENT_VERSION
 import app.main as main_module
 
 
@@ -15,9 +16,12 @@ class _FakeClient:
         self.fetch_calls = 0
         self.submit_calls = 0
         self.heartbeat_calls = 0
+        self.last_hello_request = None
+        self.last_heartbeat_request = None
 
     def send_hello(self, request):
         self.hello_calls += 1
+        self.last_hello_request = request
         if self._fail_first_hello and self.hello_calls == 1:
             raise httpx.ConnectError("server down")
         return HelloResponse(
@@ -54,6 +58,7 @@ class _FakeClient:
 
     def send_heartbeat(self, request):
         self.heartbeat_calls += 1
+        self.last_heartbeat_request = request
         raise AgentApiError("malformed json")
 
     def submit_results(self, request):
@@ -96,6 +101,8 @@ class MainResilienceTests(unittest.TestCase):
 
         self.assertEqual("agent-1", response.agent_id)
         self.assertEqual(2, client.hello_calls)
+        self.assertEqual(AGENT_VERSION, client.last_hello_request.agent_version)
+        self.assertEqual("0.1.4", client.last_hello_request.agent_version)
         self.assertEqual([main_module.INITIAL_HELLO_RETRY_SECONDS], sleep_values)
 
     def test_config_refresh_parse_failure_keeps_previous_config(self) -> None:
@@ -131,6 +138,8 @@ class MainResilienceTests(unittest.TestCase):
             main_module.main()
 
         self.assertGreaterEqual(fake_client.heartbeat_calls, 1)
+        self.assertEqual(AGENT_VERSION, fake_client.last_heartbeat_request.agent_version)
+        self.assertEqual("0.1.4", fake_client.last_heartbeat_request.agent_version)
         self.assertGreaterEqual(fake_client.submit_calls, 1)
 
 

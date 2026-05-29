@@ -9,7 +9,8 @@ internal sealed class AgentOutdatedVersionWarningService : IAgentOutdatedVersion
     {
         ["V0.1.1"] = "this version brings a fix for a low risk vulnerability in dotenv",
         ["V0.1.2"] = "this version improves agent resilience when the web app is restarting or temporarily unavailable",
-        ["V0.1.3"] = "this version adds high-resolution pythonping ICMP checks with automatic fallback to the non-elevated subprocess ping backend"
+        ["V0.1.3"] = "this version adds high-resolution pythonping ICMP checks with automatic fallback to the non-elevated subprocess ping backend",
+        ["V0.1.4"] = "this version improves retry handling when result ingestion is temporarily unavailable during rolling-window hydration"
     };
 
     private readonly IAgentTemplateVersionProvider _agentTemplateVersionProvider;
