@@ -130,8 +130,10 @@ Important:
   - current evaluation window: 1 hour
   - packet loss increase threshold: +20 percentage points
   - RTT increase threshold: +20%
+  - jitter increase threshold: +20%
   - minimum samples: 10 completed results in both baseline and current windows
 - Baseline comparison excludes the current window so current degradation does not dilute its own baseline.
+- Jitter comparison uses successful RTT samples only and is ignored when either window has insufficient successful samples.
 - `DEGRADED` is non-failure and only applies when the assignment would otherwise be `UP`.
 
 ---
@@ -263,7 +265,7 @@ else:
     else:
         state = current state
 
-    if state == UP and degraded evaluation is enabled and recent RTT or packet loss exceeds baseline thresholds:
+    if state == UP and degraded evaluation is enabled and recent RTT, packet loss, or jitter exceeds baseline thresholds:
         state = DEGRADED
 ```
 
@@ -300,7 +302,7 @@ else:
 ### v1 degraded behaviour
 
 - `DEGRADED` does NOT trigger alerts by default.
-- State transition events are recorded when entering or leaving `DEGRADED`, including the RTT and/or packet-loss reason.
+- State transition events are recorded when entering or leaving `DEGRADED`, including the RTT, packet-loss, and/or jitter reason.
 
 ---
 

@@ -69,7 +69,7 @@
 
             <section class="card">
                 <h2>Degraded evaluation</h2>
-                <p class="muted">Mark endpoint Degraded when recent RTT or packet loss is significantly worse than its baseline.</p>
+                <p class="muted">Mark endpoint Degraded when recent RTT, packet loss, or jitter is significantly worse than its baseline.</p>
                 <div class="field-grid">
                     <div>
                         <div class="checkbox-row">
@@ -107,6 +107,12 @@
                         <input asp-for="DegradedRttIncreasePercent" type="number" min="0" step="0.1" />
                         <p class="field-help">Default: +20% over baseline average successful RTT.</p>
                         <div class="field-error"><span asp-validation-for="DegradedRttIncreasePercent"></span></div>
+                    </div>
+                    <div>
+                        <label asp-for="DegradedJitterIncreasePercent"></label>
+                        <input asp-for="DegradedJitterIncreasePercent" type="number" min="0" step="0.1" />
+                        <p class="field-help">Marks an endpoint Degraded when recent RTT variation is significantly worse than baseline.</p>
+                        <div class="field-error"><span asp-validation-for="DegradedJitterIncreasePercent"></span></div>
                     </div>
                 </div>
             </section>

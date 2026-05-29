@@ -317,6 +317,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         appSettings.Property(x => x.DegradedCurrentWindowMinutes).IsRequired();
         appSettings.Property(x => x.DegradedPacketLossIncreasePercentagePoints).IsRequired();
         appSettings.Property(x => x.DegradedRttIncreasePercent).IsRequired();
+        appSettings.Property(x => x.DegradedJitterIncreasePercent).IsRequired();
         appSettings.Property(x => x.DegradedMinimumSamples).IsRequired();
         appSettings.Property(x => x.UpdatedAtUtc).IsRequired();
 

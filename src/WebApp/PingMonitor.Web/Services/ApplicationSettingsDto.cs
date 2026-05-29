@@ -13,6 +13,7 @@ public sealed class ApplicationSettingsDto
     public int DegradedCurrentWindowMinutes { get; init; } = 60;
     public double DegradedPacketLossIncreasePercentagePoints { get; init; } = 20d;
     public double DegradedRttIncreasePercent { get; init; } = 20d;
+    public double DegradedJitterIncreasePercent { get; init; } = 20d;
     public int DegradedMinimumSamples { get; init; } = 10;
     public DateTimeOffset UpdatedAtUtc { get; init; }
 }

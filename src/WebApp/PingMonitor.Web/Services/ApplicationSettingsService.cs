@@ -43,6 +43,7 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
         settings.DegradedCurrentWindowMinutes = command.DegradedCurrentWindowMinutes;
         settings.DegradedPacketLossIncreasePercentagePoints = command.DegradedPacketLossIncreasePercentagePoints;
         settings.DegradedRttIncreasePercent = command.DegradedRttIncreasePercent;
+        settings.DegradedJitterIncreasePercent = command.DegradedJitterIncreasePercent;
         settings.DegradedMinimumSamples = command.DegradedMinimumSamples;
         settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
@@ -74,6 +75,7 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             DegradedCurrentWindowMinutes = 60,
             DegradedPacketLossIncreasePercentagePoints = 20d,
             DegradedRttIncreasePercent = 20d,
+            DegradedJitterIncreasePercent = 20d,
             DegradedMinimumSamples = 10,
             EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
             AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes),
@@ -117,6 +119,7 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             DegradedCurrentWindowMinutes = settings.DegradedCurrentWindowMinutes,
             DegradedPacketLossIncreasePercentagePoints = settings.DegradedPacketLossIncreasePercentagePoints,
             DegradedRttIncreasePercent = settings.DegradedRttIncreasePercent,
+            DegradedJitterIncreasePercent = settings.DegradedJitterIncreasePercent,
             DegradedMinimumSamples = settings.DegradedMinimumSamples,
             UpdatedAtUtc = settings.UpdatedAtUtc
         };

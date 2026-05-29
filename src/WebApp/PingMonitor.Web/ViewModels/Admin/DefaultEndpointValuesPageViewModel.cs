@@ -43,6 +43,10 @@ public sealed class DefaultEndpointValuesPageViewModel : IValidatableObject
     [Display(Name = "RTT increase threshold (percent)")]
     public double DegradedRttIncreasePercent { get; set; }
 
+    [Range(0, 10000, ErrorMessage = "Jitter increase threshold must be zero or greater.")]
+    [Display(Name = "Jitter increase threshold")]
+    public double DegradedJitterIncreasePercent { get; set; }
+
     [Range(1, int.MaxValue, ErrorMessage = "Minimum samples must be at least 1.")]
     [Display(Name = "Minimum samples per window")]
     public int DegradedMinimumSamples { get; set; }

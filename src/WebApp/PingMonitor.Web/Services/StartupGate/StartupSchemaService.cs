@@ -92,6 +92,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "DegradedCurrentWindowMinutes",
         "DegradedPacketLossIncreasePercentagePoints",
         "DegradedRttIncreasePercent",
+        "DegradedJitterIncreasePercent",
         "DegradedMinimumSamples",
         "EnableAutomaticUpdateChecks",
         "AutomaticUpdateCheckIntervalMinutes",
@@ -445,6 +446,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `DegradedCurrentWindowMinutes` int NOT NULL DEFAULT 60,
                 `DegradedPacketLossIncreasePercentagePoints` double NOT NULL DEFAULT 20,
                 `DegradedRttIncreasePercent` double NOT NULL DEFAULT 20,
+                `DegradedJitterIncreasePercent` double NOT NULL DEFAULT 20,
                 `DegradedMinimumSamples` int NOT NULL DEFAULT 10,
                 `EnableAutomaticUpdateChecks` tinyint(1) NOT NULL DEFAULT 1,
                 `AutomaticUpdateCheckIntervalMinutes` int NOT NULL DEFAULT 15,
@@ -1387,6 +1389,16 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """
                 ALTER TABLE `ApplicationSettings`
                 ADD COLUMN `DegradedRttIncreasePercent` double NOT NULL DEFAULT 20;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "DegradedJitterIncreasePercent", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `DegradedJitterIncreasePercent` double NOT NULL DEFAULT 20;
                 """,
                 cancellationToken);
         }
