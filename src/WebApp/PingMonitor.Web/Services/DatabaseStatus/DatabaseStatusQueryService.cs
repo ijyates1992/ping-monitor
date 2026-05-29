@@ -4,6 +4,7 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.Diagnostics;
+using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.State;
 using PingMonitor.Web.Services.StartupGate;
 using System.Data;
@@ -16,6 +17,7 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
     private readonly IBufferedResultIngestionService _bufferedResultIngestionService;
     private readonly IAssignmentProcessingQueue _assignmentProcessingQueue;
     private readonly IOptions<ResultBufferOptions> _resultBufferOptions;
+    private readonly IRollingWindowHydrationState _rollingWindowHydrationState;
     private readonly IOptions<StartupGateOptions> _startupGateOptions;
     private readonly IDbActivityTracker _dbActivityTracker;
     private readonly IDbActivityScope _dbActivityScope;
@@ -25,6 +27,7 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
         IBufferedResultIngestionService bufferedResultIngestionService,
         IAssignmentProcessingQueue assignmentProcessingQueue,
         IOptions<ResultBufferOptions> resultBufferOptions,
+        IRollingWindowHydrationState rollingWindowHydrationState,
         IOptions<StartupGateOptions> startupGateOptions,
         IDbActivityTracker dbActivityTracker,
         IDbActivityScope dbActivityScope)
@@ -33,6 +36,7 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
         _bufferedResultIngestionService = bufferedResultIngestionService;
         _assignmentProcessingQueue = assignmentProcessingQueue;
         _resultBufferOptions = resultBufferOptions;
+        _rollingWindowHydrationState = rollingWindowHydrationState;
         _startupGateOptions = startupGateOptions;
         _dbActivityTracker = dbActivityTracker;
         _dbActivityScope = dbActivityScope;
@@ -59,6 +63,7 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
         var bufferSnapshot = _bufferedResultIngestionService.GetSnapshot();
         var bufferOptions = _resultBufferOptions.Value;
         var assignmentQueueSnapshot = _assignmentProcessingQueue.GetSnapshot();
+        var hydrationSnapshot = _rollingWindowHydrationState.GetSnapshot();
         var dbActivity = _dbActivityTracker.GetSnapshot(DateTimeOffset.UtcNow)
             .Select(x => new DatabaseSubsystemActivityStatusSnapshot
             {
@@ -109,6 +114,7 @@ internal sealed class DatabaseStatusQueryService : IDatabaseStatusQueryService
             TotalIndexBytes = indexBytes,
             Tables = tables,
             DbActivityBySubsystem = dbActivity,
+            RollingWindowHydration = hydrationSnapshot,
             ResultBuffer = new ResultBufferRuntimeSnapshot
             {
                 BufferingEnabled = bufferOptions.ResultBufferEnabled,

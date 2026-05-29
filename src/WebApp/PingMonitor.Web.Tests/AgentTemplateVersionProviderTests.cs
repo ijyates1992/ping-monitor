@@ -59,6 +59,21 @@ public sealed class AgentTemplateVersionProviderTests
     }
 
     [Fact]
+    public void GetBundledAgentVersion_DevelopmentRepositoryReportsV014()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var contentRoot = Path.Combine(repositoryRoot, "src", "WebApp", "PingMonitor.Web");
+
+        var provider = new AgentTemplateVersionProvider(
+            new StubWebHostEnvironment(contentRoot),
+            NullLogger<AgentTemplateVersionProvider>.Instance);
+
+        var version = provider.GetBundledAgentVersion();
+
+        Assert.Equal("0.1.4", version);
+    }
+
+    [Fact]
     public void GetBundledAgentVersion_ReturnsNullWhenVersionConstantIsMissing()
     {
         var contentRoot = CreateTempDirectory();
@@ -80,6 +95,23 @@ public sealed class AgentTemplateVersionProviderTests
         {
             Directory.Delete(contentRoot, recursive: true);
         }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "src", "Agent", "app", "version.py");
+            if (File.Exists(candidate))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate repository root containing src/Agent/app/version.py.");
     }
 
     private static string CreateTempDirectory()

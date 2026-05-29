@@ -231,6 +231,7 @@ builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService
 builder.Services.AddScoped<IEndpointPerformanceQueryService, EndpointPerformanceQueryService>();
 builder.Services.AddScoped<IGroupManagementService, GroupManagementService>();
 builder.Services.AddScoped<IAgentManagementQueryService, AgentManagementQueryService>();
+builder.Services.AddSingleton<IRollingWindowHydrationState, RollingWindowHydrationState>();
 builder.Services.AddSingleton<IRollingAssignmentWindowStore, RollingAssignmentWindowStore>();
 builder.Services.AddScoped<IAssignmentMetrics24hService, AssignmentMetrics24hService>();
 builder.Services.AddScoped<IAgentMetricsService, AgentMetricsService>();
@@ -251,6 +252,7 @@ builder.Services.AddSingleton<ConfigurationAutoBackupBackgroundService>();
 builder.Services.AddSingleton<IConfigurationChangeBackupSignal>(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationAutoBackupBackgroundService>());
 builder.Services.AddHostedService<AgentStatusTransitionBackgroundService>();
+builder.Services.AddHostedService<RollingWindowHydrationBackgroundService>();
 builder.Services.AddHostedService<BufferedResultFlushBackgroundService>();
 builder.Services.AddHostedService<AssignmentProcessingBackgroundService>();
 builder.Services.AddHostedService<TelegramPollingBackgroundService>();

@@ -9,22 +9,23 @@ namespace PingMonitor.Web.Tests;
 public sealed class AgentOutdatedVersionWarningServiceTests
 {
     [Fact]
-    public async Task TryWriteWarningAsync_OutdatedAgent_WritesWarningOnce()
+    public async Task TryWriteWarningAsync_V013AgentAgainstV014_WritesReleaseSpecificWarningOnce()
     {
         var registry = new FakeWarningRegistry();
         var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.2", registry, eventLogService);
+        var service = BuildService("V0.1.4", registry, eventLogService);
         var agent = BuildAgent();
 
-        await service.TryWriteWarningAsync(agent, "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(agent, "V0.1.3", DateTimeOffset.UtcNow, CancellationToken.None);
 
         var warning = Assert.Single(eventLogService.Writes);
         Assert.Equal(EventCategory.Agent, warning.Category);
         Assert.Equal(EventSeverity.Warning, warning.Severity);
         Assert.Equal(EventType.AgentOutdated, warning.EventType);
-        Assert.Contains("agent version V0.1.1", warning.Message, StringComparison.Ordinal);
-        Assert.Contains("bundled version V0.1.2", warning.Message, StringComparison.Ordinal);
-        Assert.Contains("this version improves agent resilience when the web app is restarting or temporarily unavailable", warning.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "Agent \"LOCAL\" is running agent version V0.1.3, older than the currently bundled version V0.1.4. Please re-deploy this instance to upgrade to agent V0.1.4; this version improves retry handling when result ingestion is temporarily unavailable during rolling-window hydration.",
+            warning.Message);
+        Assert.Equal(AgentOutdatedWarningRegistry.BuildDetailsMarker("V0.1.4"), warning.DetailsJson);
     }
 
     [Fact]
@@ -32,13 +33,29 @@ public sealed class AgentOutdatedVersionWarningServiceTests
     {
         var registry = new FakeWarningRegistry();
         var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.2", registry, eventLogService);
+        var service = BuildService("V0.1.4", registry, eventLogService);
         var agent = BuildAgent();
 
-        await service.TryWriteWarningAsync(agent, "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
-        await service.TryWriteWarningAsync(agent, "V0.1.1", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(agent, "V0.1.3", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(agent, "V0.1.3", DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.Single(eventLogService.Writes);
+    }
+
+    [Fact]
+    public async Task TryWriteWarningAsync_PreviousTargetWarning_DoesNotSuppressNewBundledTarget()
+    {
+        var registry = new FakeWarningRegistry();
+        registry.Record("agent-1", "V0.1.3");
+        var eventLogService = new RecordingEventLogService(registry);
+        var service = BuildService("V0.1.4", registry, eventLogService);
+
+        await service.TryWriteWarningAsync(BuildAgent(), "V0.1.3", DateTimeOffset.UtcNow, CancellationToken.None);
+
+        var warning = Assert.Single(eventLogService.Writes);
+        Assert.Contains("agent version V0.1.3", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("bundled version V0.1.4", warning.Message, StringComparison.Ordinal);
+        Assert.Equal(AgentOutdatedWarningRegistry.BuildDetailsMarker("V0.1.4"), warning.DetailsJson);
     }
 
     [Fact]
@@ -46,9 +63,9 @@ public sealed class AgentOutdatedVersionWarningServiceTests
     {
         var registry = new FakeWarningRegistry();
         var eventLogService = new RecordingEventLogService(registry);
-        var service = BuildService("V0.1.2", registry, eventLogService);
+        var service = BuildService("V0.1.4", registry, eventLogService);
 
-        await service.TryWriteWarningAsync(BuildAgent(), "V0.1.2", DateTimeOffset.UtcNow, CancellationToken.None);
+        await service.TryWriteWarningAsync(BuildAgent(), "V0.1.4", DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.Empty(eventLogService.Writes);
     }

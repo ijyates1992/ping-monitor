@@ -1,3 +1,5 @@
+using PingMonitor.Web.Services.Metrics;
+
 namespace PingMonitor.Web.Services.DatabaseStatus;
 
 public sealed class DatabaseStatusSnapshot
@@ -13,6 +15,7 @@ public sealed class DatabaseStatusSnapshot
     public long TotalDataBytes { get; init; }
     public long TotalIndexBytes { get; init; }
     public IReadOnlyList<DatabaseTableStatusSnapshot> Tables { get; init; } = Array.Empty<DatabaseTableStatusSnapshot>();
+    public RollingWindowHydrationSnapshot RollingWindowHydration { get; init; } = new(RollingWindowHydrationStatus.NotStarted, null, null, null);
     public ResultBufferRuntimeSnapshot ResultBuffer { get; init; } = new();
     public IReadOnlyList<DatabaseSubsystemActivityStatusSnapshot> DbActivityBySubsystem { get; init; } = Array.Empty<DatabaseSubsystemActivityStatusSnapshot>();
 }
