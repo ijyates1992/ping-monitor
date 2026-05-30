@@ -172,7 +172,7 @@
                 <div class="status @schemaStatusClass" role="status">
                     @if (Model.SchemaCompatibilityState == PingMonitor.Web.ViewModels.Admin.ApplicationUpdaterSchemaCompatibilityState.CompatibleNoUpgradeNeeded)
                     {
-                        <span>Schema compatibility check: selected release requires schema version @Model.TargetRequiredSchemaVersion and current database schema is @Model.CurrentDatabaseSchemaVersion. No schema upgrade warning detected.</span>
+                        <span>Schema compatibility check: selected release requires schema version @Model.TargetRequiredSchemaVersion and current database schema is @Model.CurrentDatabaseSchemaVersion. Metadata source: @Model.TargetSchemaMetadataSourceLabel. No schema upgrade warning detected.</span>
                     }
                     else
                     {
@@ -288,7 +288,8 @@
                     <div><strong>Title:</strong> @(string.IsNullOrWhiteSpace(Model.SelectedRelease.Name) ? "(not provided)" : Model.SelectedRelease.Name)</div>
                     <div><strong>Published:</strong> @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.SelectedRelease.PublishedAtUtc, "Unknown")</div>
                     <div><strong>Type:</strong> @(Model.SelectedRelease.IsPrerelease ? "Preview/prerelease" : "Stable")</div>
-                    <div><strong>Required schema version (release metadata):</strong> @(Model.SelectedRelease.RequiredSchemaVersion?.ToString() ?? "(not declared)")</div>
+                    <div><strong>Required schema version (release metadata):</strong> @(Model.TargetRequiredSchemaVersion?.ToString() ?? "(not declared)")</div>
+                    <div><strong>Schema metadata source:</strong> @Model.TargetSchemaMetadataSourceLabel</div>
                     <div><strong>Current database schema version:</strong> @(Model.CurrentDatabaseSchemaVersion?.ToString() ?? "(unknown)")</div>
                     @if (!string.IsNullOrWhiteSpace(Model.SelectedRelease.HtmlUrl))
                     {
@@ -349,6 +350,10 @@
                         <div><dt>Latest applicable release tag</dt><dd>@(Model.StagedUpdate.LatestApplicableReleaseTag ?? "(unknown)")</dd></div>
                         <div><dt>Release title</dt><dd>@(Model.StagedUpdate.ReleaseTitle ?? "(none)")</dd></div>
                         <div><dt>Selected archive</dt><dd>@(Model.StagedUpdate.SelectedAssetName ?? "(none)")</dd></div>
+                        <div><dt>Staged required schema version</dt><dd>@(Model.StagedUpdate.RequiredSchemaVersion?.ToString() ?? "(not declared)")</dd></div>
+                        <div><dt>Staged schema metadata source</dt><dd>@Model.StagedUpdate.SchemaMetadataSource</dd></div>
+                        <div><dt>Staged schema metadata source name</dt><dd>@(Model.StagedUpdate.SchemaMetadataSourceName ?? "(none)")</dd></div>
+                        <div><dt>Staged schema metadata warning</dt><dd>@(Model.StagedUpdate.SchemaMetadataWarning ?? "(none)")</dd></div>
                         <div><dt>Staging in progress</dt><dd>@(Model.StagedUpdate.StagingInProgress ? "Yes" : "No")</dd></div>
                         <div><dt>No-op restage</dt><dd>@(Model.StagedUpdate.StageOperationWasNoOp ? "Yes" : "No")</dd></div>
                         <div><dt>Stage message</dt><dd>@(Model.StagedUpdate.StageOperationMessage ?? "(none)")</dd></div>

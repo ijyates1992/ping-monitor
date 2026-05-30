@@ -160,6 +160,7 @@ $publishOutputPath = Join-Path $publishRoot $Runtime
 $zipPath = Join-Path $releaseRoot "$packageBaseName.zip"
 $checksumPath = Join-Path $releaseRoot 'SHA256.txt'
 $manifestPath = Join-Path $stagingRoot 'manifest.json'
+$standaloneManifestPath = Join-Path $releaseRoot "$packageBaseName.manifest.json"
 
 if (-not (Test-Path -LiteralPath $webProjectPath)) {
     Fail-Build "Expected web project was not found at '$webProjectPath'."
@@ -195,6 +196,7 @@ Remove-PathIfPresent -Path $publishRoot
 Remove-PathIfPresent -Path $stagingRoot
 Remove-PathIfPresent -Path $zipPath
 Remove-PathIfPresent -Path $checksumPath
+Remove-PathIfPresent -Path $standaloneManifestPath
 New-Item -ItemType Directory -Path $publishRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
 
@@ -338,7 +340,33 @@ if ($manifestFromDisk.packageFileName -ne $expectedPackageFileName) {
     Fail-Build "manifest.json validation failed. packageFileName '$($manifestFromDisk.packageFileName)' did not match generated archive '$expectedPackageFileName'."
 }
 
+Copy-Item -LiteralPath $manifestPath -Destination $standaloneManifestPath -Force
+if (-not (Test-Path -LiteralPath $standaloneManifestPath -PathType Leaf)) {
+    Fail-Build "Standalone manifest was not created at '$standaloneManifestPath'."
+}
+
+$standaloneManifestFromDisk = Get-Content -LiteralPath $standaloneManifestPath -Raw | ConvertFrom-Json
+$validatedStandaloneSchemaVersion = Resolve-ManifestRequiredSchemaVersion -ManifestObject $standaloneManifestFromDisk -ManifestSourcePath $standaloneManifestPath
+if ($standaloneManifestFromDisk.version -ne $Version) {
+    Fail-Build "Standalone manifest validation failed. version '$($standaloneManifestFromDisk.version)' did not match requested release version '$Version'."
+}
+
+if ($standaloneManifestFromDisk.packageFileName -ne $expectedPackageFileName) {
+    Fail-Build "Standalone manifest validation failed. packageFileName '$($standaloneManifestFromDisk.packageFileName)' did not match generated archive '$expectedPackageFileName'."
+}
+
+$manifestJson = Get-Content -LiteralPath $manifestPath -Raw
+$standaloneManifestJson = Get-Content -LiteralPath $standaloneManifestPath -Raw
+if ($manifestJson -cne $standaloneManifestJson) {
+    Fail-Build "Standalone manifest validation failed. Standalone manifest metadata does not exactly match staging manifest metadata."
+}
+
+if ($validatedStandaloneSchemaVersion -ne $validatedManifestSchemaVersion) {
+    Fail-Build "Standalone manifest validation failed. requiredSchemaVersion '$validatedStandaloneSchemaVersion' did not match in-package manifest '$validatedManifestSchemaVersion'."
+}
+
 Write-Info "Validated manifest required schema version: $validatedManifestSchemaVersion"
+Write-Info "Validated standalone manifest: $standaloneManifestPath"
 
 if (-not (Test-Path -LiteralPath $appStagingPath -PathType Container)) {
     Fail-Build "Staging app directory missing at '$appStagingPath'."
@@ -369,7 +397,8 @@ if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) {
 Write-Step 'Release package completed successfully'
 Write-Info "Staging root: $stagingRoot"
 Write-Info "Release zip: $zipPath"
-Write-Info "Manifest: $manifestPath"
+Write-Info "In-package manifest: $manifestPath"
+Write-Info "Standalone manifest asset: $standaloneManifestPath"
 Write-Info "Checksum: $checksumPath"
 Write-Info "Commit hash: $($commitHash ?? 'unavailable')"
 

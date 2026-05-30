@@ -37,6 +37,8 @@ public sealed class ApplicationUpdaterPageViewModel
     public ApplicationUpdateStagingState? StagedUpdate { get; init; }
     public int? CurrentDatabaseSchemaVersion { get; init; }
     public int? TargetRequiredSchemaVersion { get; init; }
+    public ReleaseSchemaMetadataSource TargetSchemaMetadataSource { get; init; }
+    public string TargetSchemaMetadataSourceLabel { get; init; } = string.Empty;
     public ApplicationUpdaterSchemaCompatibilityState SchemaCompatibilityState { get; init; }
     public string? SchemaCompatibilityWarningMessage { get; init; }
 }
@@ -51,6 +53,8 @@ public sealed class ApplicationUpdaterSelectableReleaseViewModel
     public string? HtmlUrl { get; init; }
     public DateTimeOffset? PublishedAtUtc { get; init; }
     public int? RequiredSchemaVersion { get; init; }
+    public ReleaseSchemaMetadataSource SchemaMetadataSource { get; init; }
+    public string SchemaMetadataSourceLabel { get; init; } = string.Empty;
 }
 
 public enum ApplicationUpdaterSchemaCompatibilityState

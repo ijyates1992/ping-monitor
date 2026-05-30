@@ -33,6 +33,10 @@ public sealed class ApplicationUpdateStagingState
     public string? ReleaseUrl { get; init; }
     public string? SelectedAssetName { get; init; }
     public string? SelectedChecksumAssetName { get; init; }
+    public int? RequiredSchemaVersion { get; init; }
+    public ReleaseSchemaMetadataSource SchemaMetadataSource { get; init; }
+    public string? SchemaMetadataSourceName { get; init; }
+    public string? SchemaMetadataWarning { get; init; }
     public string? StagedZipPath { get; init; }
     public string? StagedChecksumPath { get; init; }
     public string? ExpectedSha256 { get; init; }

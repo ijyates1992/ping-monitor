@@ -240,6 +240,8 @@ public sealed class GitHubReleaseSummary
     public string? AssetsApiUrl { get; init; }
     public IReadOnlyList<GitHubReleaseAssetSummary> Assets { get; init; } = [];
     public int? RequiredSchemaVersion { get; init; }
+    public ReleaseSchemaMetadataSource SchemaMetadataSource { get; init; }
+    public string? SchemaMetadataAssetName { get; init; }
 }
 
 public sealed class GitHubReleaseAssetSummary

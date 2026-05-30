@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Hosting;
@@ -253,6 +254,106 @@ public sealed class ApplicationUpdateStagingServiceTests
         }
     }
 
+    [Fact]
+    public async Task StageSelectedApplicableReleaseAsync_ReadsStagedManifestFromTopLevelPackageFolder_WhenStandaloneManifestMissing()
+    {
+        var tempRoot = CreateTempRoot();
+        try
+        {
+            var release = BuildRelease("V1.2.3");
+            var zipBytes = BuildZipWithManifest("PingMonitor-V1.2.3-win-x64/manifest.json", BuildManifestJson(requiredSchemaVersion: 14));
+            var checksum = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipBytes));
+
+            var handler = new MappingHttpMessageHandler(new Dictionary<string, HttpResponseMessage>
+            {
+                ["https://download/release.zip"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(zipBytes) },
+                ["https://download/SHA256.txt"] = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{checksum}  PingMonitor-V1.2.3-win-x64.zip", Encoding.UTF8, "text/plain")
+                }
+            });
+
+            var service = BuildService(tempRoot, release, handler);
+            var result = await service.StageSelectedApplicableReleaseAsync(false, "V1.2.3", CancellationToken.None);
+
+            Assert.Equal(ApplicationUpdateStagingStatus.Ready, result.State.Status);
+            Assert.Equal(14, result.State.RequiredSchemaVersion);
+            Assert.Equal(ReleaseSchemaMetadataSource.StagedPackageManifest, result.State.SchemaMetadataSource);
+            Assert.Null(result.State.SchemaMetadataWarning);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StageSelectedApplicableReleaseAsync_WarnsSafely_WhenZipManifestMissingAndStandaloneManifestMissing()
+    {
+        var tempRoot = CreateTempRoot();
+        try
+        {
+            var release = BuildRelease("V1.2.3");
+            var zipBytes = BuildZipWithManifest("PingMonitor-V1.2.3-win-x64/readme.txt", "no manifest");
+            var checksum = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipBytes));
+
+            var handler = new MappingHttpMessageHandler(new Dictionary<string, HttpResponseMessage>
+            {
+                ["https://download/release.zip"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(zipBytes) },
+                ["https://download/SHA256.txt"] = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{checksum}  PingMonitor-V1.2.3-win-x64.zip", Encoding.UTF8, "text/plain")
+                }
+            });
+
+            var service = BuildService(tempRoot, release, handler);
+            var result = await service.StageSelectedApplicableReleaseAsync(false, "V1.2.3", CancellationToken.None);
+
+            Assert.Equal(ApplicationUpdateStagingStatus.Ready, result.State.Status);
+            Assert.Null(result.State.RequiredSchemaVersion);
+            Assert.Equal(ReleaseSchemaMetadataSource.MissingOrUnknown, result.State.SchemaMetadataSource);
+            Assert.Contains("manifest", result.State.SchemaMetadataWarning, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StageSelectedApplicableReleaseAsync_FailsSafely_WhenStandaloneAndZipManifestConflict()
+    {
+        var tempRoot = CreateTempRoot();
+        try
+        {
+            var release = BuildRelease("V1.2.3", includeManifestAsset: true);
+            var zipBytes = BuildZipWithManifest("PingMonitor-V1.2.3-win-x64/manifest.json", BuildManifestJson(requiredSchemaVersion: 14));
+            var checksum = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipBytes));
+
+            var handler = new MappingHttpMessageHandler(new Dictionary<string, HttpResponseMessage>
+            {
+                ["https://download/manifest.json"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(BuildManifestJson(requiredSchemaVersion: 15), Encoding.UTF8, "application/json") },
+                ["https://download/release.zip"] = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(zipBytes) },
+                ["https://download/SHA256.txt"] = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{checksum}  PingMonitor-V1.2.3-win-x64.zip", Encoding.UTF8, "text/plain")
+                }
+            });
+
+            var service = BuildService(tempRoot, release, handler);
+            var result = await service.StageSelectedApplicableReleaseAsync(false, "V1.2.3", CancellationToken.None);
+
+            Assert.Equal(ApplicationUpdateStagingStatus.StagingFailed, result.State.Status);
+            Assert.Equal(15, result.State.RequiredSchemaVersion);
+            Assert.Equal(ReleaseSchemaMetadataSource.StandaloneManifestAsset, result.State.SchemaMetadataSource);
+            Assert.Contains("conflicts", result.State.FailureMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static string CreateTempRoot()
     {
         var path = Path.Combine(Path.GetTempPath(), "ping-monitor-stage2-tests", Guid.NewGuid().ToString("N"));
@@ -260,7 +361,7 @@ public sealed class ApplicationUpdateStagingServiceTests
         return path;
     }
 
-    private static GitHubReleaseSummary BuildRelease(string tag)
+    private static GitHubReleaseSummary BuildRelease(string tag, bool includeManifestAsset = false)
     {
         return new GitHubReleaseSummary
         {
@@ -269,12 +370,47 @@ public sealed class ApplicationUpdateStagingServiceTests
             IsPrerelease = false,
             HtmlUrl = "https://example/release",
             PublishedAtUtc = DateTimeOffset.UtcNow,
-            Assets =
-            [
-                new GitHubReleaseAssetSummary { Name = $"PingMonitor-{tag}-win-x64.zip", BrowserDownloadUrl = "https://download/release.zip" },
-                new GitHubReleaseAssetSummary { Name = "SHA256.txt", BrowserDownloadUrl = "https://download/SHA256.txt" }
-            ]
+            Assets = includeManifestAsset
+                ?
+                [
+                    new GitHubReleaseAssetSummary { Name = $"PingMonitor-{tag}-win-x64.zip", BrowserDownloadUrl = "https://download/release.zip" },
+                    new GitHubReleaseAssetSummary { Name = "SHA256.txt", BrowserDownloadUrl = "https://download/SHA256.txt" },
+                    new GitHubReleaseAssetSummary { Name = $"PingMonitor-{tag}-win-x64.manifest.json", BrowserDownloadUrl = "https://download/manifest.json" }
+                ]
+                :
+                [
+                    new GitHubReleaseAssetSummary { Name = $"PingMonitor-{tag}-win-x64.zip", BrowserDownloadUrl = "https://download/release.zip" },
+                    new GitHubReleaseAssetSummary { Name = "SHA256.txt", BrowserDownloadUrl = "https://download/SHA256.txt" }
+                ]
         };
+    }
+
+    private static string BuildManifestJson(string version = "V1.2.3", string packageFileName = "PingMonitor-V1.2.3-win-x64.zip", int requiredSchemaVersion = 14)
+    {
+        return $$"""
+               {
+                 "appName":"Ping Monitor",
+                 "version":"{{version}}",
+                 "buildTimestampUtc":"2026-05-30T00:00:00.0000000+00:00",
+                 "packageFileName":"{{packageFileName}}",
+                 "runtime":"win-x64",
+                 "commitHash":"abc123",
+                 "requiredSchemaVersion":{{requiredSchemaVersion}}
+               }
+               """;
+    }
+
+    private static byte[] BuildZipWithManifest(string entryName, string contents)
+    {
+        using var memoryStream = new MemoryStream();
+        using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry(entryName);
+            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
+            writer.Write(contents);
+        }
+
+        return memoryStream.ToArray();
     }
 
     private static ApplicationUpdateStagingService BuildService(string contentRoot, GitHubReleaseSummary release, HttpMessageHandler handler)

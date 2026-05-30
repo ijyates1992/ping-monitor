@@ -35,6 +35,14 @@ When update apply is initiated from the web app:
 
 Apply remains explicit/manual and is blocked when PowerShell 7 (`pwsh`) is unavailable.
 
+## Release schema metadata precedence
+
+The web updater uses release manifest metadata only for compatibility warnings and readiness validation; it does not apply schema changes. Metadata source precedence is:
+
+1. **Standalone manifest asset** (`PingMonitor-Vx.y.z-win-x64.manifest.json`) matched to the selected ZIP asset. This is preferred so schema compatibility can be checked before downloading/staging the full ZIP.
+2. **Staged package manifest** (`manifest.json`) embedded in the ZIP. This fallback is inspected after staging and supports ZIPs where the manifest is either at ZIP root or under a single top-level package folder such as `PingMonitor-Vx.y.z-win-x64/manifest.json`.
+3. **Missing/unknown metadata** for older or invalid releases. The updater keeps the strong warning that schema compatibility cannot be assessed safely. If standalone and package manifests conflict after staging, the updater fails safely instead of silently trusting either source.
+
 ## Input contract
 
 The script reads Stage 2 metadata from `-StagedMetadataPath` and accepts explicit operator-supplied runtime targets.

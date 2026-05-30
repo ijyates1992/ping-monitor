@@ -159,7 +159,7 @@ public sealed class AdminApplicationUpdaterController : Controller
         var powerShellStatus = _powerShellPrerequisiteDetector.GetStatus();
         var schemaCompatibility = BuildSchemaCompatibility(
             releaseSelection.CurrentDatabaseSchemaVersion,
-            releaseSelection.SelectedRelease?.RequiredSchemaVersion);
+            ResolveTargetSchemaVersion(releaseSelection.SelectedRelease, decoratedStaged));
 
         return new ApplicationUpdaterPageViewModel
         {
@@ -191,7 +191,9 @@ public sealed class AdminApplicationUpdaterController : Controller
             RuntimeState = runtimeState,
             StagedUpdate = decoratedStaged,
             CurrentDatabaseSchemaVersion = releaseSelection.CurrentDatabaseSchemaVersion,
-            TargetRequiredSchemaVersion = releaseSelection.SelectedRelease?.RequiredSchemaVersion,
+            TargetRequiredSchemaVersion = ResolveTargetSchemaVersion(releaseSelection.SelectedRelease, decoratedStaged),
+            TargetSchemaMetadataSource = ResolveTargetSchemaMetadataSource(releaseSelection.SelectedRelease, decoratedStaged),
+            TargetSchemaMetadataSourceLabel = FormatSchemaMetadataSource(ResolveTargetSchemaMetadataSource(releaseSelection.SelectedRelease, decoratedStaged)),
             SchemaCompatibilityState = schemaCompatibility.State,
             SchemaCompatibilityWarningMessage = schemaCompatibility.WarningMessage
         };
@@ -211,7 +213,7 @@ public sealed class AdminApplicationUpdaterController : Controller
             var selected = string.IsNullOrWhiteSpace(selectedReleaseTag)
                 ? latest
                 : releases.FirstOrDefault(release => string.Equals(release.TagName, selectedReleaseTag, StringComparison.OrdinalIgnoreCase)) ?? latest;
-            var hydratedReleases = await _releaseSchemaMetadataService.PopulateRequiredSchemaVersionsAsync(releases, cancellationToken);
+            var hydratedReleases = await _releaseSchemaMetadataService.PopulateRequiredSchemaVersionsAsync(releases, selectedReleaseTag, cancellationToken);
             var hydratedLatest = hydratedReleases.FirstOrDefault();
             var hydratedSelected = string.IsNullOrWhiteSpace(selectedReleaseTag)
                 ? hydratedLatest
@@ -242,7 +244,54 @@ public sealed class AdminApplicationUpdaterController : Controller
             IsPrerelease = release.IsPrerelease,
             HtmlUrl = release.HtmlUrl,
             PublishedAtUtc = release.PublishedAtUtc,
-            RequiredSchemaVersion = release.RequiredSchemaVersion
+            RequiredSchemaVersion = release.RequiredSchemaVersion,
+            SchemaMetadataSource = release.SchemaMetadataSource,
+            SchemaMetadataSourceLabel = FormatSchemaMetadataSource(release.SchemaMetadataSource)
+        };
+    }
+
+
+    private static int? ResolveTargetSchemaVersion(GitHubReleaseSummary? selectedRelease, ApplicationUpdateStagingState? staged)
+    {
+        if (selectedRelease?.RequiredSchemaVersion is not null)
+        {
+            return selectedRelease.RequiredSchemaVersion;
+        }
+
+        if (selectedRelease is not null
+            && staged?.RequiredSchemaVersion is not null
+            && string.Equals(staged.ReleaseTag, selectedRelease.TagName, StringComparison.OrdinalIgnoreCase))
+        {
+            return staged.RequiredSchemaVersion;
+        }
+
+        return null;
+    }
+
+    private static ReleaseSchemaMetadataSource ResolveTargetSchemaMetadataSource(GitHubReleaseSummary? selectedRelease, ApplicationUpdateStagingState? staged)
+    {
+        if (selectedRelease?.RequiredSchemaVersion is not null)
+        {
+            return selectedRelease.SchemaMetadataSource;
+        }
+
+        if (selectedRelease is not null
+            && staged?.RequiredSchemaVersion is not null
+            && string.Equals(staged.ReleaseTag, selectedRelease.TagName, StringComparison.OrdinalIgnoreCase))
+        {
+            return staged.SchemaMetadataSource;
+        }
+
+        return ReleaseSchemaMetadataSource.MissingOrUnknown;
+    }
+
+    private static string FormatSchemaMetadataSource(ReleaseSchemaMetadataSource source)
+    {
+        return source switch
+        {
+            ReleaseSchemaMetadataSource.StandaloneManifestAsset => "standalone manifest asset",
+            ReleaseSchemaMetadataSource.StagedPackageManifest => "staged package manifest",
+            _ => "missing/unknown"
         };
     }
 
@@ -309,6 +358,10 @@ public sealed class AdminApplicationUpdaterController : Controller
             ReleaseUrl = staged.ReleaseUrl,
             SelectedAssetName = staged.SelectedAssetName,
             SelectedChecksumAssetName = staged.SelectedChecksumAssetName,
+            RequiredSchemaVersion = staged.RequiredSchemaVersion,
+            SchemaMetadataSource = staged.SchemaMetadataSource,
+            SchemaMetadataSourceName = staged.SchemaMetadataSourceName,
+            SchemaMetadataWarning = staged.SchemaMetadataWarning,
             StagedZipPath = staged.StagedZipPath,
             StagedChecksumPath = staged.StagedChecksumPath,
             ExpectedSha256 = staged.ExpectedSha256,
