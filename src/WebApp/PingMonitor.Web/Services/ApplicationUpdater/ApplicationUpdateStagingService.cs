@@ -136,6 +136,27 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
             return await WriteAndReturnAsync(BuildAssetFailureState(repository, allowPreviewReleases, release, $"Checksum asset '{_options.ChecksumAssetName}' was not found.", currentState), cancellationToken);
         }
 
+        ReleaseManifestMetadata? standaloneMetadata;
+        try
+        {
+            standaloneMetadata = await TryResolveStandaloneManifestMetadataAsync(release, zipAsset.Name, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return await WriteAndReturnAsync(BuildState(
+                repository,
+                allowPreviewReleases,
+                ApplicationUpdateStagingStatus.StagingFailed,
+                $"Standalone release manifest validation failed: {ex.Message}",
+                DateTimeOffset.UtcNow,
+                currentState,
+                release,
+                zipAsset.Name,
+                checksumAsset.Name,
+                latestApplicableReleaseTag: latestRelease.TagName,
+                schemaMetadataWarning: ex.Message), cancellationToken);
+        }
+
         var downloadsPath = Path.Combine(stagingRoot, "staged", StagedCurrentFolderName);
         var zipPath = Path.Combine(downloadsPath, zipAsset.Name);
         var checksumPath = Path.Combine(downloadsPath, checksumAsset.Name);
@@ -212,6 +233,47 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
                 latestApplicableReleaseTag: latestRelease.TagName), cancellationToken);
         }
 
+        ReleaseManifestMetadata? packageMetadata = null;
+        string? schemaMetadataWarning = null;
+        try
+        {
+            packageMetadata = await ReleaseManifestMetadataReader.ReadPackageManifestFromZipAsync(zipPath, zipAsset.Name, cancellationToken);
+            ReleaseManifestMetadataReader.ValidateForRelease(packageMetadata, release.TagName, zipAsset.Name, _options.RuntimeIdentifier);
+            if (standaloneMetadata is not null)
+            {
+                ReleaseManifestMetadataReader.ValidateNoConflict(standaloneMetadata, packageMetadata);
+            }
+        }
+        catch (Exception ex) when (standaloneMetadata is not null)
+        {
+            return await WriteAndReturnAsync(BuildState(
+                repository,
+                allowPreviewReleases,
+                ApplicationUpdateStagingStatus.StagingFailed,
+                $"Staged package manifest validation failed after checksum verification: {ex.Message}",
+                DateTimeOffset.UtcNow,
+                currentState,
+                release,
+                zipAsset.Name,
+                checksumAsset.Name,
+                zipPath,
+                checksumPath,
+                expectedHash,
+                actualHash,
+                true,
+                latestApplicableReleaseTag: latestRelease.TagName,
+                requiredSchemaVersion: standaloneMetadata.RequiredSchemaVersion,
+                schemaMetadataSource: standaloneMetadata.Source,
+                schemaMetadataSourceName: standaloneMetadata.SourceName,
+                schemaMetadataWarning: ex.Message), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            schemaMetadataWarning = $"Staged package manifest metadata could not be read: {ex.Message}";
+        }
+
+        var effectiveMetadata = standaloneMetadata ?? packageMetadata;
+
         return await WriteAndReturnAsync(BuildState(
             repository,
             allowPreviewReleases,
@@ -228,7 +290,11 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
             actualHash,
             true,
             DateTimeOffset.UtcNow,
-            latestApplicableReleaseTag: latestRelease.TagName), cancellationToken);
+            latestApplicableReleaseTag: latestRelease.TagName,
+            requiredSchemaVersion: effectiveMetadata?.RequiredSchemaVersion,
+            schemaMetadataSource: effectiveMetadata?.Source,
+            schemaMetadataSourceName: effectiveMetadata?.SourceName,
+            schemaMetadataWarning: schemaMetadataWarning), cancellationToken);
     }
 
     private static GitHubReleaseSummary? ResolveSelectedRelease(IReadOnlyList<GitHubReleaseSummary> releases, string? selectedReleaseTag)
@@ -361,7 +427,11 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
         DateTimeOffset? stagedAtUtc = null,
         string? latestApplicableReleaseTag = null,
         bool stagingInProgress = false,
-        bool stageOperationWasNoOp = false)
+        bool stageOperationWasNoOp = false,
+        int? requiredSchemaVersion = null,
+        ReleaseSchemaMetadataSource? schemaMetadataSource = null,
+        string? schemaMetadataSourceName = null,
+        string? schemaMetadataWarning = null)
     {
         var resolvedReleaseTag = release?.TagName ?? previous?.ReleaseTag;
         var resolvedLatestTag = latestApplicableReleaseTag ?? previous?.LatestApplicableReleaseTag ?? resolvedReleaseTag;
@@ -376,6 +446,10 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
             ReleaseUrl = release?.HtmlUrl ?? previous?.ReleaseUrl,
             SelectedAssetName = selectedAssetName ?? previous?.SelectedAssetName,
             SelectedChecksumAssetName = selectedChecksumAssetName ?? previous?.SelectedChecksumAssetName,
+            RequiredSchemaVersion = requiredSchemaVersion ?? release?.RequiredSchemaVersion ?? previous?.RequiredSchemaVersion,
+            SchemaMetadataSource = schemaMetadataSource ?? release?.SchemaMetadataSource ?? previous?.SchemaMetadataSource ?? ReleaseSchemaMetadataSource.MissingOrUnknown,
+            SchemaMetadataSourceName = schemaMetadataSourceName ?? release?.SchemaMetadataAssetName ?? previous?.SchemaMetadataSourceName,
+            SchemaMetadataWarning = schemaMetadataWarning ?? previous?.SchemaMetadataWarning,
             StagedZipPath = stagedZipPath ?? previous?.StagedZipPath,
             StagedChecksumPath = stagedChecksumPath ?? previous?.StagedChecksumPath,
             ExpectedSha256 = expectedSha256 ?? previous?.ExpectedSha256,
@@ -408,6 +482,23 @@ internal sealed partial class ApplicationUpdateStagingService : IApplicationUpda
             LastKnownUpdaterResultCode = previous?.LastKnownUpdaterResultCode,
             LastUpdatedAtUtc = now
         };
+    }
+
+    private async Task<ReleaseManifestMetadata?> TryResolveStandaloneManifestMetadataAsync(GitHubReleaseSummary release, string zipAssetName, CancellationToken cancellationToken)
+    {
+        var manifestAssetName = $"{_options.ReleasePackagePrefix}-{release.TagName}-{_options.RuntimeIdentifier}.manifest.json";
+        var manifestAsset = release.Assets.FirstOrDefault(asset =>
+            string.Equals(asset.Name, manifestAssetName, StringComparison.OrdinalIgnoreCase));
+        if (manifestAsset is null || string.IsNullOrWhiteSpace(manifestAsset.BrowserDownloadUrl))
+        {
+            return null;
+        }
+
+        var client = _httpClientFactory.CreateClient(nameof(ApplicationUpdateStagingService));
+        await using var manifestStream = await client.GetStreamAsync(manifestAsset.BrowserDownloadUrl, cancellationToken);
+        var metadata = await ReleaseManifestMetadataReader.ReadStandaloneManifestAsync(manifestStream, manifestAsset.Name, cancellationToken);
+        ReleaseManifestMetadataReader.ValidateForRelease(metadata, release.TagName, zipAssetName, _options.RuntimeIdentifier);
+        return metadata;
     }
 
     private async Task DownloadToFileAsync(string url, string destinationPath, CancellationToken cancellationToken)

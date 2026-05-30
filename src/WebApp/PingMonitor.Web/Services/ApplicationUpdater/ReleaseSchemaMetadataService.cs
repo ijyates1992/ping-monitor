@@ -1,5 +1,3 @@
-using System.IO.Compression;
-using System.Text.Json;
 using Microsoft.Extensions.Options;
 using PingMonitor.Web.Options;
 
@@ -9,6 +7,7 @@ public interface IReleaseSchemaMetadataService
 {
     Task<IReadOnlyList<GitHubReleaseSummary>> PopulateRequiredSchemaVersionsAsync(
         IReadOnlyList<GitHubReleaseSummary> releases,
+        string? selectedReleaseTag,
         CancellationToken cancellationToken);
 }
 
@@ -30,6 +29,7 @@ internal sealed class ReleaseSchemaMetadataService : IReleaseSchemaMetadataServi
 
     public async Task<IReadOnlyList<GitHubReleaseSummary>> PopulateRequiredSchemaVersionsAsync(
         IReadOnlyList<GitHubReleaseSummary> releases,
+        string? selectedReleaseTag,
         CancellationToken cancellationToken)
     {
         if (releases.Count == 0)
@@ -37,30 +37,24 @@ internal sealed class ReleaseSchemaMetadataService : IReleaseSchemaMetadataServi
             return releases;
         }
 
-        var targetTag = releases[0].TagName;
-        for (var i = 0; i < releases.Count; i++)
-        {
-            if (releases[i].RequiredSchemaVersion is null && !string.IsNullOrWhiteSpace(releases[i].TagName))
-            {
-                targetTag = releases[i].TagName;
-                break;
-            }
-        }
+        var targetTag = string.IsNullOrWhiteSpace(selectedReleaseTag)
+            ? releases[0].TagName
+            : selectedReleaseTag;
 
-        var resolvedSchemaVersion = await ResolveRequiredSchemaVersionAsync(releases, targetTag, cancellationToken);
-        if (resolvedSchemaVersion is null)
+        var resolvedMetadata = await ResolveStandaloneManifestMetadataAsync(releases, targetTag, cancellationToken);
+        if (resolvedMetadata is null)
         {
             return releases;
         }
 
         return releases
             .Select(release => string.Equals(release.TagName, targetTag, StringComparison.OrdinalIgnoreCase)
-                ? CloneWithSchemaVersion(release, resolvedSchemaVersion)
+                ? CloneWithSchemaMetadata(release, resolvedMetadata)
                 : release)
             .ToArray();
     }
 
-    private async Task<int?> ResolveRequiredSchemaVersionAsync(
+    private async Task<ReleaseManifestMetadata?> ResolveStandaloneManifestMetadataAsync(
         IReadOnlyList<GitHubReleaseSummary> releases,
         string selectedTag,
         CancellationToken cancellationToken)
@@ -72,11 +66,11 @@ internal sealed class ReleaseSchemaMetadataService : IReleaseSchemaMetadataServi
             return null;
         }
 
-        var zipName = $"{_options.ReleasePackagePrefix}-{selectedRelease.TagName}-{_options.RuntimeIdentifier}.zip";
+        var zipName = BuildExpectedZipAssetName(selectedRelease.TagName);
+        var manifestName = BuildExpectedManifestAssetName(selectedRelease.TagName);
         var zipAsset = selectedRelease.Assets.FirstOrDefault(asset =>
             string.Equals(asset.Name, zipName, StringComparison.OrdinalIgnoreCase));
-
-        if (zipAsset is null || string.IsNullOrWhiteSpace(zipAsset.BrowserDownloadUrl))
+        if (zipAsset is null)
         {
             _logger.LogInformation(
                 "Schema metadata lookup skipped for release {ReleaseTag}. Could not find zip asset {ZipAssetName}.",
@@ -85,51 +79,47 @@ internal sealed class ReleaseSchemaMetadataService : IReleaseSchemaMetadataServi
             return null;
         }
 
+        var manifestAsset = selectedRelease.Assets.FirstOrDefault(asset =>
+            string.Equals(asset.Name, manifestName, StringComparison.OrdinalIgnoreCase));
+        if (manifestAsset is null || string.IsNullOrWhiteSpace(manifestAsset.BrowserDownloadUrl))
+        {
+            _logger.LogInformation(
+                "Standalone schema manifest asset {ManifestAssetName} was not found for release {ReleaseTag}; selected release will use missing-metadata warning until staging fallback can inspect the package.",
+                manifestName,
+                selectedRelease.TagName);
+            return null;
+        }
+
         try
         {
             var client = _httpClientFactory.CreateClient(nameof(ReleaseSchemaMetadataService));
-            await using var releaseStream = await client.GetStreamAsync(zipAsset.BrowserDownloadUrl, cancellationToken);
-            using var archive = new ZipArchive(releaseStream, ZipArchiveMode.Read, leaveOpen: false);
-            var manifest = archive.Entries.FirstOrDefault(entry =>
-                string.Equals(entry.FullName, "manifest.json", StringComparison.OrdinalIgnoreCase));
-
-            if (manifest is null)
-            {
-                _logger.LogInformation("Release {ReleaseTag} zip did not include manifest.json.", selectedRelease.TagName);
-                return null;
-            }
-
-            await using var manifestStream = manifest.Open();
-            using var document = await JsonDocument.ParseAsync(manifestStream, cancellationToken: cancellationToken);
-            if (!document.RootElement.TryGetProperty("requiredSchemaVersion", out var schemaVersionElement))
-            {
-                _logger.LogWarning("Release {ReleaseTag} manifest does not contain requiredSchemaVersion.", selectedRelease.TagName);
-                return null;
-            }
-
-            if (schemaVersionElement.ValueKind != JsonValueKind.Number
-                || !schemaVersionElement.TryGetInt32(out var parsed))
-            {
-                _logger.LogWarning("Release {ReleaseTag} manifest contains invalid requiredSchemaVersion.", selectedRelease.TagName);
-                return null;
-            }
-
-            if (parsed < 1)
-            {
-                _logger.LogWarning("Release {ReleaseTag} manifest contains out-of-range requiredSchemaVersion {RequiredSchemaVersion}.", selectedRelease.TagName, parsed);
-                return null;
-            }
-
-            return parsed;
+            await using var manifestStream = await client.GetStreamAsync(manifestAsset.BrowserDownloadUrl, cancellationToken);
+            var metadata = await ReleaseManifestMetadataReader.ReadStandaloneManifestAsync(manifestStream, manifestAsset.Name, cancellationToken);
+            ReleaseManifestMetadataReader.ValidateForRelease(metadata, selectedRelease.TagName, zipAsset.Name, _options.RuntimeIdentifier);
+            return metadata;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to resolve required schema version metadata for release {ReleaseTag}.", selectedRelease.TagName);
+            _logger.LogWarning(
+                ex,
+                "Failed to resolve standalone schema manifest metadata for release {ReleaseTag} from asset {ManifestAssetName}.",
+                selectedRelease.TagName,
+                manifestAsset.Name);
             return null;
         }
     }
 
-    private static GitHubReleaseSummary CloneWithSchemaVersion(GitHubReleaseSummary source, int? schemaVersion)
+    private string BuildExpectedZipAssetName(string releaseTag)
+    {
+        return $"{_options.ReleasePackagePrefix}-{releaseTag}-{_options.RuntimeIdentifier}.zip";
+    }
+
+    private string BuildExpectedManifestAssetName(string releaseTag)
+    {
+        return $"{_options.ReleasePackagePrefix}-{releaseTag}-{_options.RuntimeIdentifier}.manifest.json";
+    }
+
+    private static GitHubReleaseSummary CloneWithSchemaMetadata(GitHubReleaseSummary source, ReleaseManifestMetadata metadata)
     {
         return new GitHubReleaseSummary
         {
@@ -141,7 +131,9 @@ internal sealed class ReleaseSchemaMetadataService : IReleaseSchemaMetadataServi
             PublishedAtUtc = source.PublishedAtUtc,
             AssetsApiUrl = source.AssetsApiUrl,
             Assets = source.Assets,
-            RequiredSchemaVersion = schemaVersion
+            RequiredSchemaVersion = metadata.RequiredSchemaVersion,
+            SchemaMetadataSource = metadata.Source,
+            SchemaMetadataAssetName = metadata.SourceName
         };
     }
 }

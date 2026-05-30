@@ -78,6 +78,14 @@ Verification check:
 
 ## 4) Prepare the release package
 
+Each GitHub release should publish these assets together:
+
+- `PingMonitor-Vx.y.z-win-x64.zip` → deployable release package
+- `SHA256.txt` → checksum file for the ZIP
+- `PingMonitor-Vx.y.z-win-x64.manifest.json` → standalone release manifest used by the application updater for schema compatibility checks before ZIP staging
+
+The standalone manifest must match the `manifest.json` embedded in the ZIP, including `requiredSchemaVersion`. Older releases that do not include the standalone manifest remain usable, but the updater will show a strong missing-metadata warning until a staged package manifest can be inspected.
+
 From the official release ZIP (`PingMonitor-<Version>-win-x64.zip`), extract to a staging folder.
 
 Expected top-level layout:
