@@ -76,7 +76,7 @@ This slice upgrades the client-side draft editor from a viewport-sized placement
 
 Included in this slice:
 
-- A 4000 x 2500 diagram-unit virtual canvas rendered inside the existing visible editor area.
+- A 4000 x 2828 A-series landscape diagram-unit virtual canvas rendered inside the existing visible editor area.
 - Draft nodes and draft links use diagram/world coordinates rather than raw browser viewport coordinates.
 - Empty canvas space can be dragged with pointer events to pan the visible workspace.
 - Mouse wheel zooms the canvas around the mouse pointer.
@@ -210,3 +210,32 @@ Backup/restore follow-up:
 
 - Network diagrams are configuration, not operational monitoring history.
 - Configuration backup/restore inclusion for `NetworkDiagrams`, `NetworkDiagramNodes`, and `NetworkDiagramLinks` remains a required follow-up before publishing V0.1.1 if it is not completed in the release branch.
+
+## A-series canvas sizing and PDF export slice
+
+This slice adds paper-ratio canvas handling and saved-diagram PDF export without changing monitoring behaviour.
+
+- New diagrams use an ISO 216 A-series landscape virtual canvas by default (`4000 × 2828` world units, approximately `1.414:1`). A4 and A3 use the same ratio, so the editor canvas maps predictably to paper export.
+- Existing diagrams continue to load with their saved `CanvasWidth` and `CanvasHeight`. Legacy arbitrary-ratio diagrams are not silently normalised; the editor shows a warning and lets an admin choose an A-series canvas size when it is safe.
+- The editor provides controlled landscape canvas size presets: Small, Medium, Large, and Extra large. Changing presets preserves node/link world coordinates.
+- Shrinking or normalising to a smaller preset is blocked when any existing node would fall outside the target canvas, preventing accidental cropping.
+- PDF export is server-side, authenticated, admin-only through the existing Network Diagrams controller, and still respects `NetworkDiagramsEnabled`.
+- PDF export renders from the last saved diagram data in the database, not unsaved browser state. The editor warns before exporting when unsaved changes exist.
+- PDF export supports A4 landscape and A3 landscape and scales the saved diagram content to fit the page with padding. The export includes the diagram title, UTC export timestamp, nodes, visual links, link labels/ports where present, node labels, practical notes, and the documentation-only footer.
+- PDF export wraps, shrinks, and truncates node labels and secondary node text so exported text remains inside device boxes. Clipping is also applied to each exported node as a final safety guard.
+- Very dense diagrams may require A3 export or larger canvas spacing for best readability; export does not silently change saved diagram geometry.
+- Diagram links remain visual documentation only and do not create monitoring dependencies.
+- This slice does not change endpoint monitoring, dependency suppression, alerting, agent runtime behaviour, topology discovery, SNMP, or automatic endpoint/dependency creation.
+
+Manual regression checklist for this slice:
+
+1. Create a new diagram and confirm the default world canvas reads `4000 × 2828` and is shown as A-series landscape.
+2. Add monitored endpoint nodes and custom nodes, then draw visual links.
+3. Save, expand the canvas to a larger preset, and confirm existing nodes keep their world positions.
+4. Confirm pan, zoom, node dragging, link drawing, and Fit content still work after canvas size changes.
+5. Attempt to shrink below existing node bounds and confirm the editor blocks the change with a clear message.
+6. Export A4 and A3 PDFs and confirm the diagram title, timestamp, nodes, links behind nodes, readable labels, and documentation-only footer appear without editor UI/sidebar/toolbars.
+7. Confirm long labels such as “Summerhouse Access Point”, “Living Room Access Point”, and dense Trading VM labels stay inside node boxes and do not overlap adjacent nodes.
+8. Try exporting with unsaved changes and confirm the editor warns that export uses the last saved diagram.
+9. Disable `NetworkDiagramsEnabled` and confirm the export route is blocked.
+10. Confirm no endpoint dependency, alerting, state-evaluation, or agent data is created or changed.

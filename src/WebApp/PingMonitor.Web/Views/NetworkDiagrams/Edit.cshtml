@@ -10,7 +10,7 @@
 </head>
 <body>
 @await Html.PartialAsync("_AuthenticatedNav")
-<main class="network-diagrams-main" data-network-diagram-editor data-diagram-id="@Model.DiagramId" data-load-url="@Model.LoadUrl" data-save-url="@Model.SaveUrl">
+<main class="network-diagrams-main" data-network-diagram-editor data-diagram-id="@Model.DiagramId" data-load-url="@Model.LoadUrl" data-save-url="@Model.SaveUrl" data-export-pdf-url="@Model.ExportPdfUrl">
     @Html.AntiForgeryToken()
     <section class="diagram-editor-shell" aria-labelledby="network-diagrams-title">
         <header class="diagram-editor-toolbar">
@@ -98,6 +98,26 @@
                     <button type="button" class="diagram-tool-button" data-reset-view>Reset view</button>
                     <button type="button" class="diagram-tool-button" data-fit-content>Fit content</button>
                     <span class="diagram-zoom-label" data-zoom-label aria-live="polite">100%</span>
+                    <span class="diagram-toolbar-divider" aria-hidden="true"></span>
+                    <label class="diagram-toolbar-select-label">
+                        Canvas size
+                        <select data-canvas-size-preset aria-label="Canvas size preset">
+                            <option value="small">Small (4000 × 2828)</option>
+                            <option value="medium">Medium (5656 × 4000)</option>
+                            <option value="large">Large (8000 × 5657)</option>
+                            <option value="extra-large">Extra large (11314 × 8000)</option>
+                        </select>
+                    </label>
+                    <span class="diagram-canvas-ratio-warning" data-canvas-ratio-warning hidden>Legacy canvas ratio loaded. Choose a canvas size to normalise safely.</span>
+                    <span class="diagram-toolbar-divider" aria-hidden="true"></span>
+                    <label class="diagram-toolbar-select-label">
+                        PDF paper
+                        <select data-export-paper aria-label="PDF paper size">
+                            <option value="A4">A4 landscape</option>
+                            <option value="A3">A3 landscape</option>
+                        </select>
+                    </label>
+                    <button type="button" class="diagram-tool-button" data-export-pdf>Export PDF</button>
                     <button type="button" class="diagram-tool-button" data-save-diagram>Save</button>
                     <span class="diagram-tool-hint" data-tool-hint>Select nodes to move them. Draw link mode creates documentation-only links. Drag empty space to pan. Use mouse wheel to zoom.</span>
                 </div>
