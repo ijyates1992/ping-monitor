@@ -10,6 +10,7 @@ The authenticated top navigation uses dropdown menus with this structure:
   - Operational status → `/status`
   - Manage endpoints → `/endpoints`
   - Manage groups → `/groups` (Admin only)
+  - Network diagrams → `/network-diagrams` (Admin only, only when enabled)
 - **Agents** (Admin only)
   - Manage agents → `/agents`
   - Deploy new agent → `/agents/deploy`

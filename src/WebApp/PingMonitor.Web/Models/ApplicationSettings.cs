@@ -32,6 +32,8 @@ public sealed class ApplicationSettings
 
     public int DegradedMinimumSamples { get; set; } = 10;
 
+    public bool NetworkDiagramsEnabled { get; set; }
+
     public bool EnableAutomaticUpdateChecks { get; set; } = true;
 
     public int AutomaticUpdateCheckIntervalMinutes { get; set; } = 15;

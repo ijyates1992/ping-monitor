@@ -49,7 +49,8 @@ public sealed class AdminDefaultEndpointValuesController : Controller
                 DegradedPacketLossIncreasePercentagePoints = model.DegradedPacketLossIncreasePercentagePoints,
                 DegradedRttIncreasePercent = model.DegradedRttIncreasePercent,
                 DegradedJitterIncreasePercent = model.DegradedJitterIncreasePercent,
-                DegradedMinimumSamples = model.DegradedMinimumSamples
+                DegradedMinimumSamples = model.DegradedMinimumSamples,
+                NetworkDiagramsEnabled = current.NetworkDiagramsEnabled
             },
             cancellationToken);
 

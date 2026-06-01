@@ -107,7 +107,8 @@ public sealed class AgentsController : Controller
                 DegradedPacketLossIncreasePercentagePoints = current.DegradedPacketLossIncreasePercentagePoints,
                 DegradedRttIncreasePercent = current.DegradedRttIncreasePercent,
                 DegradedJitterIncreasePercent = current.DegradedJitterIncreasePercent,
-                DegradedMinimumSamples = current.DegradedMinimumSamples
+                DegradedMinimumSamples = current.DegradedMinimumSamples,
+                NetworkDiagramsEnabled = current.NetworkDiagramsEnabled
             },
             cancellationToken);
 

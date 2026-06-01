@@ -45,6 +45,7 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
         settings.DegradedRttIncreasePercent = command.DegradedRttIncreasePercent;
         settings.DegradedJitterIncreasePercent = command.DegradedJitterIncreasePercent;
         settings.DegradedMinimumSamples = command.DegradedMinimumSamples;
+        settings.NetworkDiagramsEnabled = command.NetworkDiagramsEnabled;
         settings.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -77,6 +78,7 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             DegradedRttIncreasePercent = 20d,
             DegradedJitterIncreasePercent = 20d,
             DegradedMinimumSamples = 10,
+            NetworkDiagramsEnabled = false,
             EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
             AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes),
             AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates,
@@ -121,6 +123,7 @@ internal sealed class ApplicationSettingsService : IApplicationSettingsService
             DegradedRttIncreasePercent = settings.DegradedRttIncreasePercent,
             DegradedJitterIncreasePercent = settings.DegradedJitterIncreasePercent,
             DegradedMinimumSamples = settings.DegradedMinimumSamples,
+            NetworkDiagramsEnabled = settings.NetworkDiagramsEnabled,
             UpdatedAtUtc = settings.UpdatedAtUtc
         };
     }

@@ -15,5 +15,6 @@ public sealed class ApplicationSettingsDto
     public double DegradedRttIncreasePercent { get; init; } = 20d;
     public double DegradedJitterIncreasePercent { get; init; } = 20d;
     public int DegradedMinimumSamples { get; init; } = 10;
+    public bool NetworkDiagramsEnabled { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
 }
