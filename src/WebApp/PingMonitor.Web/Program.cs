@@ -230,6 +230,7 @@ builder.Services.AddScoped<ITelegramNotificationSender, TelegramNotificationSend
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
 builder.Services.AddScoped<PingMonitor.Web.Services.NetworkDiagrams.INetworkDiagramService, PingMonitor.Web.Services.NetworkDiagrams.NetworkDiagramService>();
+builder.Services.AddScoped<PingMonitor.Web.Services.NetworkDiagrams.INetworkDiagramPdfExportService, PingMonitor.Web.Services.NetworkDiagrams.NetworkDiagramPdfExportService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();
 builder.Services.AddScoped<IEndpointPerformanceQueryService, EndpointPerformanceQueryService>();
 builder.Services.AddScoped<IGroupManagementService, GroupManagementService>();

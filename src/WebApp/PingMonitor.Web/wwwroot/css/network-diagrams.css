@@ -194,7 +194,7 @@ body {
     left: 0;
     top: 0;
     width: var(--diagram-world-width, 4000px);
-    height: var(--diagram-world-height, 2500px);
+    height: var(--diagram-world-height, 2828px);
     transform-origin: 0 0;
     background:
         linear-gradient(rgba(16, 42, 67, .055) 1px, transparent 1px),
@@ -824,4 +824,45 @@ html[data-theme="dark"] .diagram-link-port-label {
     .diagram-list-card {
         grid-template-columns: 1fr;
     }
+}
+
+.diagram-toolbar-select-label {
+    display: inline-grid;
+    gap: .15rem;
+    color: var(--diagram-muted);
+    font-size: .76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.diagram-toolbar-select-label select {
+    min-height: 44px;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+    color: var(--diagram-text);
+    font: inherit;
+    font-size: .86rem;
+    font-weight: 700;
+    padding: .45rem .55rem;
+    text-transform: none;
+}
+
+.diagram-canvas-ratio-warning {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    max-width: 260px;
+    padding: .35rem .55rem;
+    border: 1px solid var(--diagram-warning);
+    border-radius: 8px;
+    background: var(--diagram-warning-soft);
+    color: var(--diagram-warning);
+    font-size: .8rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.diagram-canvas-ratio-warning[hidden] {
+    display: none;
 }

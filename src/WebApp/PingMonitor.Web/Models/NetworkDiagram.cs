@@ -6,7 +6,7 @@ public sealed class NetworkDiagram
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public double CanvasWidth { get; set; } = 4000;
-    public double CanvasHeight { get; set; } = 2500;
+    public double CanvasHeight { get; set; } = 2828;
     public double ViewportPanX { get; set; }
     public double ViewportPanY { get; set; }
     public double ViewportZoom { get; set; } = 1;

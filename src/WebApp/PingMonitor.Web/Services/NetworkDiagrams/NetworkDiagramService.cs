@@ -31,8 +31,6 @@ public sealed class NetworkDiagramValidationException : InvalidOperationExceptio
 
 internal sealed class NetworkDiagramService : INetworkDiagramService
 {
-    private const double DefaultCanvasWidth = 4000;
-    private const double DefaultCanvasHeight = 2500;
     private readonly PingMonitorDbContext _dbContext;
 
     public NetworkDiagramService(PingMonitorDbContext dbContext)
@@ -71,8 +69,8 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
             DiagramId = Guid.NewGuid().ToString("N"),
             Name = trimmedName,
             Description = TrimOptional(description, 2048),
-            CanvasWidth = DefaultCanvasWidth,
-            CanvasHeight = DefaultCanvasHeight,
+            CanvasWidth = NetworkDiagramPaper.SmallCanvasWidth,
+            CanvasHeight = NetworkDiagramPaper.SmallCanvasHeight,
             ViewportZoom = 1,
             CreatedAtUtc = now,
             UpdatedAtUtc = now,

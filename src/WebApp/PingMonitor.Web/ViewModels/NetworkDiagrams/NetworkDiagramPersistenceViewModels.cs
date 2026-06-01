@@ -49,6 +49,8 @@ public sealed class NetworkDiagramEditorPageViewModel
 
     public string SaveUrl { get; init; } = string.Empty;
 
+    public string ExportPdfUrl { get; init; } = string.Empty;
+
     public IReadOnlyList<NetworkDiagramEndpointToolboxItemViewModel> MonitoredEndpoints { get; init; } = [];
 }
 

@@ -38,10 +38,15 @@
     const selectedNodeHelp = editor.querySelector('[data-selected-node-help]');
     const selectedNodeCount = editor.querySelector('[data-selected-node-count]');
     const saveButton = editor.querySelector('[data-save-diagram]');
+    const exportPdfButton = editor.querySelector('[data-export-pdf]');
+    const exportPaperSelect = editor.querySelector('[data-export-paper]');
+    const canvasSizePresetSelect = editor.querySelector('[data-canvas-size-preset]');
+    const canvasRatioWarning = editor.querySelector('[data-canvas-ratio-warning]');
     const saveStatus = editor.querySelector('[data-save-status]');
     const antiforgeryToken = editor.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
     const loadUrl = editor.dataset.loadUrl || '';
     const saveUrl = editor.dataset.saveUrl || '';
+    const exportPdfUrl = editor.dataset.exportPdfUrl || '';
 
     if (!canvasHost || !canvas || !world || !nodeLayer || !linkLayer) {
         return;
@@ -51,6 +56,13 @@
     const maximumZoom = 3;
     const zoomStep = 1.1;
     const nodeMargin = 8;
+    const aSeriesLandscapeRatio = 1.41421356237;
+    const canvasPresets = [
+        { value: 'small', label: 'Small', width: 4000, height: 2828 },
+        { value: 'medium', label: 'Medium', width: 5656, height: 4000 },
+        { value: 'large', label: 'Large', width: 8000, height: 5657 },
+        { value: 'extra-large', label: 'Extra large', width: 11314, height: 8000 }
+    ];
 
     const state = {
         nodes: [],
@@ -63,7 +75,7 @@
         panX: 0,
         panY: 0,
         virtualCanvasWidth: 4000,
-        virtualCanvasHeight: 2500,
+        virtualCanvasHeight: 2828,
         name: '',
         description: '',
         dirty: false,
@@ -143,13 +155,60 @@
         canvasHost.style.setProperty('--diagram-canvas-width', `${Math.round(rect.width)}px`);
         canvasHost.style.setProperty('--diagram-canvas-height', `${Math.round(rect.height)}px`);
 
+        const orientation = state.virtualCanvasWidth >= state.virtualCanvasHeight ? 'landscape' : 'portrait';
+        const aSeries = isASeriesLandscapeCanvas() ? 'A-series' : 'legacy ratio';
         if (sizeLabel) {
-            sizeLabel.textContent = `${Math.round(rect.width)} x ${Math.round(rect.height)} visible • ${state.virtualCanvasWidth} x ${state.virtualCanvasHeight} world • ${Math.round(state.zoom * 100)}% zoom`;
+            sizeLabel.textContent = `${Math.round(rect.width)} x ${Math.round(rect.height)} visible • ${state.virtualCanvasWidth} x ${state.virtualCanvasHeight} world • ${orientation} ${aSeries} • ${Math.round(state.zoom * 100)}% zoom`;
         }
 
+        if (canvasRatioWarning) {
+            canvasRatioWarning.hidden = isASeriesLandscapeCanvas();
+        }
+
+        syncCanvasPresetSelector();
         applyViewTransform();
         clampAllNodes();
         renderLinks();
+    }
+
+    function isASeriesLandscapeCanvas() {
+        if (state.virtualCanvasWidth <= 0 || state.virtualCanvasHeight <= 0) {
+            return false;
+        }
+
+        return Math.abs((state.virtualCanvasWidth / state.virtualCanvasHeight) - aSeriesLandscapeRatio) < 0.01;
+    }
+
+    function syncCanvasPresetSelector() {
+        if (!canvasSizePresetSelect) {
+            return;
+        }
+
+        const preset = canvasPresets.find(item => item.width === state.virtualCanvasWidth && item.height === state.virtualCanvasHeight);
+        canvasSizePresetSelect.value = preset ? preset.value : '';
+    }
+
+    function canFitNodesWithin(width, height) {
+        return state.nodes.every(node => node.x + getNodeWidth(node) + nodeMargin <= width && node.y + getNodeHeight(node) + nodeMargin <= height);
+    }
+
+    function applyCanvasPreset(value) {
+        const preset = canvasPresets.find(item => item.value === value);
+        if (!preset) {
+            return;
+        }
+
+        if (!canFitNodesWithin(preset.width, preset.height)) {
+            setSaveStatus(`Canvas cannot shrink to ${preset.label}; one or more nodes would be outside the A-series canvas. Move nodes inward or choose a larger size.`, { error: true });
+            syncCanvasPresetSelector();
+            return;
+        }
+
+        state.virtualCanvasWidth = preset.width;
+        state.virtualCanvasHeight = preset.height;
+        updateCanvasSize();
+        markDirty();
+        setSaveStatus(`${preset.label} A-series landscape canvas selected. Save to persist this canvas size.`, { dirty: true });
     }
 
     function formatNodeType(type) {
@@ -1134,6 +1193,23 @@
         };
     }
 
+    function exportPdf() {
+        if (!exportPdfUrl) {
+            return;
+        }
+
+        if (state.dirty) {
+            const confirmed = window.confirm('Export uses the last saved diagram. Save your changes before exporting if you want them in the PDF. Continue exporting the saved version?');
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        const paper = exportPaperSelect ? exportPaperSelect.value : 'A4';
+        const separator = exportPdfUrl.includes('?') ? '&' : '?';
+        window.location.href = `${exportPdfUrl}${separator}paper=${encodeURIComponent(paper)}`;
+    }
+
     async function saveDiagram() {
         if (!saveUrl || !saveButton) {
             return;
@@ -1211,6 +1287,14 @@
 
     if (fitContentButton) {
         fitContentButton.addEventListener('click', fitContent);
+    }
+
+    if (canvasSizePresetSelect) {
+        canvasSizePresetSelect.addEventListener('change', event => applyCanvasPreset(event.currentTarget.value));
+    }
+
+    if (exportPdfButton) {
+        exportPdfButton.addEventListener('click', exportPdf);
     }
 
     if (saveButton) {

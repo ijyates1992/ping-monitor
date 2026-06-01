@@ -17,15 +17,18 @@ public sealed class NetworkDiagramsController : Controller
     private readonly IApplicationSettingsService _applicationSettingsService;
     private readonly IEndpointManagementQueryService _endpointManagementQueryService;
     private readonly INetworkDiagramService _networkDiagramService;
+    private readonly INetworkDiagramPdfExportService _pdfExportService;
 
     public NetworkDiagramsController(
         IApplicationSettingsService applicationSettingsService,
         IEndpointManagementQueryService endpointManagementQueryService,
-        INetworkDiagramService networkDiagramService)
+        INetworkDiagramService networkDiagramService,
+        INetworkDiagramPdfExportService pdfExportService)
     {
         _applicationSettingsService = applicationSettingsService;
         _endpointManagementQueryService = endpointManagementQueryService;
         _networkDiagramService = networkDiagramService;
+        _pdfExportService = pdfExportService;
     }
 
     [HttpGet("")]
@@ -106,6 +109,7 @@ public sealed class NetworkDiagramsController : Controller
             DiagramDescription = diagram.Description,
             LoadUrl = Url.Action(nameof(Load), new { diagramId = diagram.DiagramId }) ?? string.Empty,
             SaveUrl = Url.Action(nameof(Save), new { diagramId = diagram.DiagramId }) ?? string.Empty,
+            ExportPdfUrl = Url.Action(nameof(ExportPdf), new { diagramId = diagram.DiagramId }) ?? string.Empty,
             MonitoredEndpoints = BuildEndpointToolbox(endpoints.Rows)
         });
     }
@@ -140,6 +144,25 @@ public sealed class NetworkDiagramsController : Controller
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+
+    [HttpGet("{diagramId}/export/pdf")]
+    public async Task<IActionResult> ExportPdf(string diagramId, [FromQuery] string paper = "A4", CancellationToken cancellationToken = default)
+    {
+        if (!await NetworkDiagramsEnabledAsync(cancellationToken))
+        {
+            return NotFound("Network diagrams are not enabled.");
+        }
+
+        var diagram = await _networkDiagramService.LoadAsync(diagramId, cancellationToken);
+        if (diagram is null)
+        {
+            return NotFound("Network diagram was not found.");
+        }
+
+        var export = _pdfExportService.Export(diagram, new NetworkDiagramPdfExportOptions(paper, DateTimeOffset.UtcNow));
+        return File(export.Content, export.ContentType, export.FileName);
     }
 
     [HttpPost("{diagramId}/delete")]
