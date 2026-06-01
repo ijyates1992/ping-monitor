@@ -12,9 +12,204 @@ public sealed record NetworkDiagramPdfExportOptions(string PaperSize, DateTimeOf
 
 public sealed record NetworkDiagramPdfExportResult(byte[] Content, string ContentType, string FileName);
 
+internal sealed record NetworkDiagramPdfTextFitResult(IReadOnlyList<string> Lines, double FontSize)
+{
+    public double LineHeight => FontSize * 1.18d;
+    public double TotalHeight => Lines.Count == 0 ? 0 : FontSize + (Lines.Count - 1) * LineHeight;
+}
+
+internal static class NetworkDiagramPdfTextFitter
+{
+    private const string Ellipsis = "...";
+
+    public static NetworkDiagramPdfTextFitResult Fit(string? text, double maxWidth, int maxLines, double fontSize, double minimumFontSize, bool useEllipsis)
+    {
+        if (maxLines < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLines), "At least one line is required.");
+        }
+
+        var normalized = Normalize(text);
+        if (string.IsNullOrEmpty(normalized) || maxWidth <= 0)
+        {
+            return new NetworkDiagramPdfTextFitResult(Array.Empty<string>(), Math.Max(minimumFontSize, Math.Min(fontSize, minimumFontSize)));
+        }
+
+        for (var size = fontSize; size >= minimumFontSize; size -= 0.5d)
+        {
+            var lines = Wrap(normalized, maxWidth, size);
+            if (lines.Count <= maxLines && lines.All(line => MeasureWidth(line, size) <= maxWidth + 0.01d))
+            {
+                return new NetworkDiagramPdfTextFitResult(lines, size);
+            }
+        }
+
+        var fittedLines = WrapToMaximumLines(normalized, maxWidth, minimumFontSize, maxLines, useEllipsis);
+        return new NetworkDiagramPdfTextFitResult(fittedLines, minimumFontSize);
+    }
+
+    public static double MeasureWidth(string text, double fontSize)
+    {
+        var width = 0d;
+        foreach (var ch in Normalize(text))
+        {
+            width += CharacterWidthFactor(ch) * fontSize;
+        }
+
+        return width;
+    }
+
+    private static IReadOnlyList<string> WrapToMaximumLines(string text, double maxWidth, double fontSize, int maxLines, bool useEllipsis)
+    {
+        var allLines = Wrap(text, maxWidth, fontSize);
+        if (allLines.Count <= maxLines)
+        {
+            return allLines;
+        }
+
+        var result = allLines.Take(maxLines).ToList();
+        if (useEllipsis && result.Count > 0)
+        {
+            result[^1] = TrimToWidth(result[^1], maxWidth, fontSize, appendEllipsis: true);
+        }
+
+        return result;
+    }
+
+    private static List<string> Wrap(string text, double maxWidth, double fontSize)
+    {
+        var lines = new List<string>();
+        var current = string.Empty;
+        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (MeasureWidth(word, fontSize) > maxWidth)
+            {
+                if (!string.IsNullOrEmpty(current))
+                {
+                    lines.Add(current);
+                    current = string.Empty;
+                }
+
+                lines.AddRange(SplitLongWord(word, maxWidth, fontSize));
+                continue;
+            }
+
+            var candidate = string.IsNullOrEmpty(current) ? word : current + " " + word;
+            if (MeasureWidth(candidate, fontSize) <= maxWidth)
+            {
+                current = candidate;
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(current))
+                {
+                    lines.Add(current);
+                }
+
+                current = word;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(current))
+        {
+            lines.Add(current);
+        }
+
+        return lines;
+    }
+
+    private static IEnumerable<string> SplitLongWord(string word, double maxWidth, double fontSize)
+    {
+        var current = new StringBuilder();
+        foreach (var ch in word)
+        {
+            var candidate = current.ToString() + ch;
+            if (MeasureWidth(candidate, fontSize) > maxWidth)
+            {
+                if (current.Length > 0)
+                {
+                    yield return current.ToString();
+                    current.Clear();
+                }
+                else
+                {
+                    var singleCharacter = TrimToWidth(ch.ToString(), maxWidth, fontSize, appendEllipsis: false);
+                    if (!string.IsNullOrEmpty(singleCharacter))
+                    {
+                        yield return singleCharacter;
+                    }
+
+                    continue;
+                }
+            }
+
+            current.Append(ch);
+        }
+
+        if (current.Length > 0)
+        {
+            yield return current.ToString();
+        }
+    }
+
+    private static string TrimToWidth(string text, double maxWidth, double fontSize, bool appendEllipsis)
+    {
+        var suffix = appendEllipsis ? TrimSuffixToWidth(Ellipsis, maxWidth, fontSize) : string.Empty;
+        var availableWidth = Math.Max(0, maxWidth - MeasureWidth(suffix, fontSize));
+        var builder = new StringBuilder();
+        foreach (var ch in Normalize(text))
+        {
+            var candidate = builder.ToString() + ch;
+            if (MeasureWidth(candidate, fontSize) > availableWidth)
+            {
+                break;
+            }
+
+            builder.Append(ch);
+        }
+
+        return builder.ToString().TrimEnd() + suffix;
+    }
+
+    private static string TrimSuffixToWidth(string suffix, double maxWidth, double fontSize)
+    {
+        var candidate = suffix;
+        while (candidate.Length > 0 && MeasureWidth(candidate, fontSize) > maxWidth)
+        {
+            candidate = candidate[..^1];
+        }
+
+        return candidate;
+    }
+
+    private static string Normalize(string? text)
+    {
+        return string.IsNullOrWhiteSpace(text)
+            ? string.Empty
+            : text.Replace("\r", " ").Replace("\n", " ").Replace("…", Ellipsis).Trim();
+    }
+
+    private static double CharacterWidthFactor(char ch)
+    {
+        return ch switch
+        {
+            ' ' => 0.28d,
+            '.' or ',' or ':' or ';' or '!' or '|' => 0.25d,
+            'i' or 'l' or 'I' or '1' => 0.28d,
+            'm' or 'w' or 'M' or 'W' => 0.86d,
+            >= 'A' and <= 'Z' => 0.68d,
+            >= '0' and <= '9' => 0.56d,
+            _ => 0.52d
+        };
+    }
+}
+
 internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportService
 {
     private const string DocumentationFooter = "Diagram links are visual documentation only and do not create monitoring dependencies.";
+    private const double MinimumExportNodeWidth = 92d;
+    private const double MinimumExportNodeHeight = 48d;
+    private const double NodePadding = 6d;
 
     public NetworkDiagramPdfExportResult Export(NetworkDiagramDto diagram, NetworkDiagramPdfExportOptions options)
     {
@@ -94,16 +289,19 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
             var label = BuildLinkLabel(link);
             if (!string.IsNullOrWhiteSpace(label))
             {
-                AddText(stream, (sx + tx) / 2 - 45, (sy + ty) / 2 + 5, 7, Truncate(label, 48), bold: false);
+                var fittedLabel = NetworkDiagramPdfTextFitter.Fit(label, maxWidth: 90, maxLines: 1, fontSize: 7, minimumFontSize: 5, useEllipsis: true);
+                AddFittedText(stream, (sx + tx) / 2 - 45, (sy + ty) / 2 + 5, fittedLabel, bold: false);
             }
         }
 
         foreach (var node in diagram.Nodes)
         {
-            var x = MapX(node.X);
-            var height = Math.Max(22, MapHeight(node.Height));
-            var width = Math.Max(44, MapWidth(node.Width));
-            var y = MapY(node.Y + node.Height);
+            var rawWidth = Math.Max(1, MapWidth(node.Width));
+            var rawHeight = Math.Max(1, MapHeight(node.Height));
+            var width = Math.Max(MinimumExportNodeWidth, rawWidth);
+            var height = Math.Max(MinimumExportNodeHeight, rawHeight);
+            var x = MapX(node.X) - (width - rawWidth) / 2;
+            var y = MapY(node.Y + node.Height) - (height - rawHeight) / 2;
             stream.AppendLine("q");
             if (string.Equals(node.NodeType, "MonitoredEndpoint", StringComparison.OrdinalIgnoreCase))
             {
@@ -125,12 +323,7 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
             stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.##} {1:0.##} {2:0.##} {3:0.##} re B\n", x, y, width, height);
             stream.AppendLine("Q");
 
-            AddText(stream, x + 5, y + height - 12, 8, Truncate(node.DisplayLabel, 34), bold: true);
-            AddText(stream, x + 5, y + height - 23, 6.5, FormatNodeType(node.NodeType), bold: false);
-            if (!string.IsNullOrWhiteSpace(node.Notes))
-            {
-                AddText(stream, x + 5, y + 6, 6, Truncate(node.Notes, 44), bold: false);
-            }
+            AddNodeText(stream, node, x, y, width, height);
         }
 
         if (diagram.Nodes.Any(x => !string.IsNullOrWhiteSpace(x.Notes)) || diagram.Links.Any(x => !string.IsNullOrWhiteSpace(x.Notes)))
@@ -195,6 +388,50 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
 
         var singleLine = value.Replace("\r", " ").Replace("\n", " ").Trim();
         return singleLine.Length <= maxLength ? singleLine : singleLine[..Math.Max(0, maxLength - 1)] + "…";
+    }
+
+    private static void AddNodeText(StringBuilder stream, NetworkDiagramNodeDto node, double x, double y, double width, double height)
+    {
+        var contentX = x + NodePadding;
+        var contentTop = y + height - NodePadding;
+        var contentWidth = Math.Max(1, width - NodePadding * 2);
+        var contentHeight = Math.Max(1, height - NodePadding * 2);
+        var currentTop = contentTop;
+
+        stream.AppendLine("q");
+        stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.##} {1:0.##} {2:0.##} {3:0.##} re W n\n", x + 1, y + 1, Math.Max(1, width - 2), Math.Max(1, height - 2));
+
+        var label = NetworkDiagramPdfTextFitter.Fit(node.DisplayLabel, contentWidth, maxLines: 2, fontSize: 8, minimumFontSize: 5.5, useEllipsis: true);
+        AddFittedTextFromTop(stream, contentX, currentTop, label, bold: true);
+        currentTop -= label.TotalHeight + 3;
+
+        if (currentTop - y > 9)
+        {
+            var type = NetworkDiagramPdfTextFitter.Fit(FormatNodeType(node.NodeType), contentWidth, maxLines: 1, fontSize: 6.5, minimumFontSize: 5, useEllipsis: true);
+            AddFittedTextFromTop(stream, contentX, currentTop, type, bold: false);
+            currentTop -= type.TotalHeight + 3;
+        }
+
+        if (!string.IsNullOrWhiteSpace(node.Notes) && currentTop - y > 12 && contentHeight >= 42)
+        {
+            var notes = NetworkDiagramPdfTextFitter.Fit(node.Notes, contentWidth, maxLines: 1, fontSize: 5.5, minimumFontSize: 5, useEllipsis: true);
+            AddFittedText(stream, contentX, y + NodePadding, notes, bold: false);
+        }
+
+        stream.AppendLine("Q");
+    }
+
+    private static void AddFittedTextFromTop(StringBuilder stream, double x, double topY, NetworkDiagramPdfTextFitResult text, bool bold)
+    {
+        AddFittedText(stream, x, topY - text.FontSize, text, bold);
+    }
+
+    private static void AddFittedText(StringBuilder stream, double x, double baselineY, NetworkDiagramPdfTextFitResult text, bool bold)
+    {
+        for (var i = 0; i < text.Lines.Count; i++)
+        {
+            AddText(stream, x, baselineY - i * text.LineHeight, text.FontSize, text.Lines[i], bold);
+        }
     }
 
     private static void AddText(StringBuilder stream, double x, double y, double size, string text, bool bold)

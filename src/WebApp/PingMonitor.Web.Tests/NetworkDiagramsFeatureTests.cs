@@ -176,6 +176,36 @@ public sealed class NetworkDiagramsFeatureTests
     }
 
 
+
+    [Fact]
+    public void NetworkDiagramPdfTextFitter_WrapsShortMultiWordLabels()
+    {
+        var fit = NetworkDiagramPdfTextFitter.Fit("Living Room Access Point", maxWidth: 46, maxLines: 2, fontSize: 8, minimumFontSize: 5.5, useEllipsis: true);
+
+        Assert.True(fit.Lines.Count >= 2);
+        Assert.True(fit.Lines.Count <= 2);
+        Assert.All(fit.Lines, line => Assert.True(NetworkDiagramPdfTextFitter.MeasureWidth(line, fit.FontSize) <= 46.01));
+    }
+
+    [Fact]
+    public void NetworkDiagramPdfTextFitter_TruncatesVeryLongLabelsWithEllipsis()
+    {
+        var fit = NetworkDiagramPdfTextFitter.Fit("TradingVmNodeWithAnExtremelyLongUnbrokenHostnameThatCannotFit", maxWidth: 38, maxLines: 1, fontSize: 8, minimumFontSize: 5, useEllipsis: true);
+
+        var line = Assert.Single(fit.Lines);
+        Assert.EndsWith("...", line);
+        Assert.True(NetworkDiagramPdfTextFitter.MeasureWidth(line, fit.FontSize) <= 38.01);
+    }
+
+    [Fact]
+    public void NetworkDiagramPdfTextFitter_NeverReturnsLinesWiderThanMaxWidth()
+    {
+        var fit = NetworkDiagramPdfTextFitter.Fit("Summerhouse Access Point monitored endpoint secondary text", maxWidth: 58, maxLines: 2, fontSize: 8, minimumFontSize: 5, useEllipsis: true);
+
+        Assert.InRange(fit.Lines.Count, 1, 2);
+        Assert.All(fit.Lines, line => Assert.True(NetworkDiagramPdfTextFitter.MeasureWidth(line, fit.FontSize) <= 58.01));
+    }
+
     [Fact]
     public void NetworkDiagramPdfExportService_RendersSavedNodesAndLinksToPdf()
     {
@@ -207,6 +237,53 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Web server", pdfText);
         Assert.Contains("uplink", pdfText);
         Assert.Contains("Diagram links are visual documentation only", pdfText);
+    }
+
+
+    [Fact]
+    public void NetworkDiagramPdfExportService_ExportsLongAndDenseNodeLabelsToPdf()
+    {
+        var service = new NetworkDiagramPdfExportService();
+        var nodes = new List<NetworkDiagramNodeDto>();
+        for (var i = 0; i < 12; i++)
+        {
+            nodes.Add(new NetworkDiagramNodeDto
+            {
+                NodeId = $"node-{i}",
+                NodeType = "MonitoredEndpoint",
+                DisplayLabel = i % 2 == 0 ? $"Trading VM {i} With Very Long Endpoint Label" : $"Summerhouse Access Point {i}",
+                X = 120 + i * 90,
+                Y = 400 + (i % 3) * 90,
+                Width = 178,
+                Height = 78,
+                Notes = "operator note that should only render when there is enough room"
+            });
+        }
+
+        var diagram = new NetworkDiagramDto
+        {
+            DiagramId = "dense",
+            Name = "Dense Home",
+            CanvasWidth = 4000,
+            CanvasHeight = 2828,
+            Nodes = nodes,
+            Links = nodes.Skip(1).Select((node, index) => new NetworkDiagramLinkDto
+            {
+                LinkId = $"link-{index}",
+                SourceNodeId = nodes[index].NodeId,
+                TargetNodeId = node.NodeId,
+                Label = "very long access uplink label that should not overflow"
+            }).ToArray()
+        };
+
+        var export = service.Export(diagram, new NetworkDiagramPdfExportOptions("A3", new DateTimeOffset(2026, 6, 1, 17, 0, 0, TimeSpan.Zero)));
+        var pdfText = System.Text.Encoding.ASCII.GetString(export.Content);
+
+        Assert.Equal("application/pdf", export.ContentType);
+        Assert.StartsWith("%PDF-1.4", pdfText);
+        Assert.Contains("Dense Home", pdfText);
+        Assert.Contains("re W n", pdfText);
+        Assert.Contains("Trading VM", pdfText);
     }
 
     [Fact]
