@@ -7,10 +7,16 @@
     const nav = document.querySelector('.site-nav');
     const canvasHost = editor.querySelector('[data-diagram-canvas-host]');
     const canvas = editor.querySelector('[data-diagram-canvas]');
+    const world = editor.querySelector('[data-diagram-world]');
     const nodeLayer = editor.querySelector('[data-node-layer]');
     const linkLayer = editor.querySelector('[data-link-layer]');
     const emptyState = editor.querySelector('[data-empty-state]');
     const sizeLabel = editor.querySelector('[data-canvas-size]');
+    const zoomLabel = editor.querySelector('[data-zoom-label]');
+    const zoomInButton = editor.querySelector('[data-zoom-in]');
+    const zoomOutButton = editor.querySelector('[data-zoom-out]');
+    const resetViewButton = editor.querySelector('[data-reset-view]');
+    const fitContentButton = editor.querySelector('[data-fit-content]');
     const addButtons = Array.from(editor.querySelectorAll('[data-add-node]'));
     const addEndpointButtons = Array.from(editor.querySelectorAll('[data-add-endpoint-node]'));
     const toolButtons = Array.from(editor.querySelectorAll('[data-tool-button]'));
@@ -20,21 +26,32 @@
     const deleteLinkButton = editor.querySelector('[data-delete-link]');
     const linkFields = Array.from(editor.querySelectorAll('[data-link-field]'));
 
-    if (!canvasHost || !canvas || !nodeLayer || !linkLayer) {
+    if (!canvasHost || !canvas || !world || !nodeLayer || !linkLayer) {
         return;
     }
+
+    const minimumZoom = 0.25;
+    const maximumZoom = 3;
+    const zoomStep = 1.1;
+    const nodeMargin = 8;
 
     const state = {
         nodes: [],
         links: [],
         selectedNodeId: null,
         selectedLinkId: null,
-        currentTool: 'select'
+        currentTool: 'select',
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        virtualCanvasWidth: 4000,
+        virtualCanvasHeight: 2500
     };
 
     let nodeSequence = 0;
     let linkSequence = 0;
     let dragState = null;
+    let panState = null;
     let pendingLinkSourceId = null;
 
     function updateNavHeight() {
@@ -54,14 +71,20 @@
         return Math.min(Math.max(value, min), max);
     }
 
-    function clampNodePosition(node) {
-        const rect = getCanvasRect();
-        const width = node.element.offsetWidth || 178;
-        const height = node.element.offsetHeight || 78;
-        const margin = 8;
+    function getNodeWidth(node) {
+        return node.element.offsetWidth || 178;
+    }
 
-        node.x = clamp(node.x, margin, rect.width - width - margin);
-        node.y = clamp(node.y, margin, rect.height - height - margin);
+    function getNodeHeight(node) {
+        return node.element.offsetHeight || 78;
+    }
+
+    function clampNodePosition(node) {
+        const width = getNodeWidth(node);
+        const height = getNodeHeight(node);
+
+        node.x = clamp(node.x, nodeMargin, state.virtualCanvasWidth - width - nodeMargin);
+        node.y = clamp(node.y, nodeMargin, state.virtualCanvasHeight - height - nodeMargin);
         node.element.style.transform = `translate(${Math.round(node.x)}px, ${Math.round(node.y)}px)`;
         renderLinks();
     }
@@ -70,18 +93,35 @@
         state.nodes.forEach(clampNodePosition);
     }
 
+    function applyViewTransform() {
+        world.style.width = `${state.virtualCanvasWidth}px`;
+        world.style.height = `${state.virtualCanvasHeight}px`;
+        world.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+        linkLayer.setAttribute('viewBox', `0 0 ${state.virtualCanvasWidth} ${state.virtualCanvasHeight}`);
+        linkLayer.setAttribute('width', String(state.virtualCanvasWidth));
+        linkLayer.setAttribute('height', String(state.virtualCanvasHeight));
+
+        canvasHost.style.setProperty('--diagram-world-width', `${state.virtualCanvasWidth}px`);
+        canvasHost.style.setProperty('--diagram-world-height', `${state.virtualCanvasHeight}px`);
+        canvasHost.style.setProperty('--diagram-grid-scale', String(state.zoom));
+
+        if (zoomLabel) {
+            zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
+        }
+    }
+
     function updateCanvasSize() {
         updateNavHeight();
 
         const rect = getCanvasRect();
         canvasHost.style.setProperty('--diagram-canvas-width', `${Math.round(rect.width)}px`);
         canvasHost.style.setProperty('--diagram-canvas-height', `${Math.round(rect.height)}px`);
-        linkLayer.setAttribute('viewBox', `0 0 ${Math.max(1, Math.round(rect.width))} ${Math.max(1, Math.round(rect.height))}`);
 
         if (sizeLabel) {
-            sizeLabel.textContent = `${Math.round(rect.width)} x ${Math.round(rect.height)} canvas`;
+            sizeLabel.textContent = `${Math.round(rect.width)} x ${Math.round(rect.height)} visible • ${state.virtualCanvasWidth} x ${state.virtualCanvasHeight} world • ${Math.round(state.zoom * 100)}% zoom`;
         }
 
+        applyViewTransform();
         clampAllNodes();
         renderLinks();
     }
@@ -94,6 +134,34 @@
         if (emptyState) {
             emptyState.hidden = state.nodes.length > 0;
         }
+    }
+
+    function screenToWorld(clientX, clientY) {
+        const rect = getCanvasRect();
+        return {
+            x: (clientX - rect.left - state.panX) / state.zoom,
+            y: (clientY - rect.top - state.panY) / state.zoom
+        };
+    }
+
+    function getVisibleWorldCenter() {
+        const rect = getCanvasRect();
+        return {
+            x: (rect.width / 2 - state.panX) / state.zoom,
+            y: (rect.height / 2 - state.panY) / state.zoom
+        };
+    }
+
+    function getNextNodePosition() {
+        nodeSequence += 1;
+        const center = getVisibleWorldCenter();
+        const offset = ((nodeSequence - 1) % 8) * 26;
+
+        return {
+            id: `draft-node-${nodeSequence}`,
+            x: center.x - 89 + offset,
+            y: center.y - 39 + offset
+        };
     }
 
     function createNodeElement(options) {
@@ -139,17 +207,7 @@
         return node;
     }
 
-    function getNextNodePosition() {
-        nodeSequence += 1;
-        return {
-            id: `draft-node-${nodeSequence}`,
-            x: 24 + ((nodeSequence - 1) % 6) * 28,
-            y: 24 + ((nodeSequence - 1) % 8) * 24
-        };
-    }
-
     function addNodeFromOptions(options) {
-        const rect = getCanvasRect();
         const position = getNextNodePosition();
         const node = {
             id: position.id,
@@ -174,8 +232,6 @@
         nodeLayer.appendChild(node.element);
         state.nodes.push(node);
 
-        node.x = clamp(node.x, 8, rect.width - node.element.offsetWidth - 8);
-        node.y = clamp(node.y, 8, rect.height - node.element.offsetHeight - 8);
         clampNodePosition(node);
         setEmptyState();
         selectNode(node.id);
@@ -227,8 +283,8 @@
 
         if (toolHint) {
             toolHint.textContent = tool === 'draw-link'
-                ? 'Draw link mode: select a source node, then select a different target node.'
-                : 'Select nodes to move them. Draw link mode creates documentation-only links.';
+                ? 'Draw link mode: select a source node, then select a different target node. Drag empty space to pan. Use mouse wheel to zoom.'
+                : 'Select nodes to move them. Draw link mode creates documentation-only links. Drag empty space to pan. Use mouse wheel to zoom.';
         }
     }
 
@@ -237,6 +293,16 @@
         state.selectedLinkId = null;
         state.nodes.forEach(node => {
             node.element.dataset.selected = node.id === nodeId ? 'true' : 'false';
+        });
+        renderLinks();
+        updatePropertiesPanel();
+    }
+
+    function clearSelection() {
+        state.selectedNodeId = null;
+        state.selectedLinkId = null;
+        state.nodes.forEach(node => {
+            node.element.dataset.selected = 'false';
         });
         renderLinks();
         updatePropertiesPanel();
@@ -317,33 +383,35 @@
             return;
         }
 
-        const rect = getCanvasRect();
+        const pointer = screenToWorld(event.clientX, event.clientY);
         dragState = {
             node,
-            offsetX: event.clientX - rect.left - node.x,
-            offsetY: event.clientY - rect.top - node.y
+            pointerId: event.pointerId,
+            offsetX: pointer.x - node.x,
+            offsetY: pointer.y - node.y
         };
 
         selectNode(node.id);
         target.dataset.dragging = 'true';
         target.setPointerCapture(event.pointerId);
         event.preventDefault();
+        event.stopPropagation();
     }
 
     function moveDrag(event) {
-        if (!dragState) {
+        if (!dragState || dragState.pointerId !== event.pointerId) {
             return;
         }
 
-        const rect = getCanvasRect();
-        dragState.node.x = event.clientX - rect.left - dragState.offsetX;
-        dragState.node.y = event.clientY - rect.top - dragState.offsetY;
+        const pointer = screenToWorld(event.clientX, event.clientY);
+        dragState.node.x = pointer.x - dragState.offsetX;
+        dragState.node.y = pointer.y - dragState.offsetY;
         clampNodePosition(dragState.node);
         event.preventDefault();
     }
 
     function endDrag(event) {
-        if (!dragState) {
+        if (!dragState || dragState.pointerId !== event.pointerId) {
             return;
         }
 
@@ -384,8 +452,8 @@
 
     function getNodeCenter(node) {
         return {
-            x: node.x + (node.element.offsetWidth || 178) / 2,
-            y: node.y + (node.element.offsetHeight || 78) / 2
+            x: node.x + getNodeWidth(node) / 2,
+            y: node.y + getNodeHeight(node) / 2
         };
     }
 
@@ -504,6 +572,106 @@
         updatePropertiesPanel();
     }
 
+    function zoomAt(clientX, clientY, requestedZoom) {
+        const nextZoom = clamp(requestedZoom, minimumZoom, maximumZoom);
+        const rect = getCanvasRect();
+        const screenX = clientX - rect.left;
+        const screenY = clientY - rect.top;
+        const worldX = (screenX - state.panX) / state.zoom;
+        const worldY = (screenY - state.panY) / state.zoom;
+
+        state.zoom = nextZoom;
+        state.panX = screenX - worldX * state.zoom;
+        state.panY = screenY - worldY * state.zoom;
+        updateCanvasSize();
+    }
+
+    function zoomFromCenter(factor) {
+        const rect = getCanvasRect();
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, state.zoom * factor);
+    }
+
+    function resetView() {
+        state.zoom = 1;
+        state.panX = 0;
+        state.panY = 0;
+        updateCanvasSize();
+    }
+
+    function fitContent() {
+        if (state.nodes.length === 0) {
+            resetView();
+            return;
+        }
+
+        const padding = 96;
+        const rect = getCanvasRect();
+        const minX = Math.min(...state.nodes.map(node => node.x));
+        const minY = Math.min(...state.nodes.map(node => node.y));
+        const maxX = Math.max(...state.nodes.map(node => node.x + getNodeWidth(node)));
+        const maxY = Math.max(...state.nodes.map(node => node.y + getNodeHeight(node)));
+        const contentWidth = Math.max(1, maxX - minX);
+        const contentHeight = Math.max(1, maxY - minY);
+        const nextZoom = clamp(Math.min(
+            (rect.width - padding) / contentWidth,
+            (rect.height - padding) / contentHeight,
+            1.5), minimumZoom, maximumZoom);
+
+        state.zoom = nextZoom;
+        state.panX = (rect.width - contentWidth * nextZoom) / 2 - minX * nextZoom;
+        state.panY = (rect.height - contentHeight * nextZoom) / 2 - minY * nextZoom;
+        updateCanvasSize();
+    }
+
+    function beginPan(event) {
+        if (event.button !== 0 || event.target.closest('.diagram-node') || event.target.closest('.diagram-link-group')) {
+            return;
+        }
+
+        panState = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            panX: state.panX,
+            panY: state.panY,
+            moved: false
+        };
+        canvas.dataset.panning = 'true';
+        canvas.setPointerCapture(event.pointerId);
+        event.preventDefault();
+    }
+
+    function movePan(event) {
+        if (!panState || panState.pointerId !== event.pointerId) {
+            return;
+        }
+
+        const deltaX = event.clientX - panState.startX;
+        const deltaY = event.clientY - panState.startY;
+        panState.moved = panState.moved || Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2;
+        state.panX = panState.panX + deltaX;
+        state.panY = panState.panY + deltaY;
+        updateCanvasSize();
+        event.preventDefault();
+    }
+
+    function endPan(event) {
+        if (!panState || panState.pointerId !== event.pointerId) {
+            return;
+        }
+
+        const moved = panState.moved;
+        panState = null;
+        canvas.dataset.panning = 'false';
+        if (canvas.hasPointerCapture(event.pointerId)) {
+            canvas.releasePointerCapture(event.pointerId);
+        }
+
+        if (!moved) {
+            clearSelection();
+        }
+    }
+
     addButtons.forEach(button => {
         button.addEventListener('click', () => addCustomNode(button));
     });
@@ -524,6 +692,22 @@
         deleteLinkButton.addEventListener('click', deleteSelectedLink);
     }
 
+    if (zoomInButton) {
+        zoomInButton.addEventListener('click', () => zoomFromCenter(zoomStep));
+    }
+
+    if (zoomOutButton) {
+        zoomOutButton.addEventListener('click', () => zoomFromCenter(1 / zoomStep));
+    }
+
+    if (resetViewButton) {
+        resetViewButton.addEventListener('click', resetView);
+    }
+
+    if (fitContentButton) {
+        fitContentButton.addEventListener('click', fitContent);
+    }
+
     nodeLayer.addEventListener('pointerdown', handleNodePointerDown);
     nodeLayer.addEventListener('pointermove', moveDrag);
     nodeLayer.addEventListener('pointerup', endDrag);
@@ -534,17 +718,15 @@
         }
     });
 
-    canvas.addEventListener('pointerdown', event => {
-        if (event.target === canvas || event.target === linkLayer) {
-            state.selectedNodeId = null;
-            state.selectedLinkId = null;
-            state.nodes.forEach(node => {
-                node.element.dataset.selected = 'false';
-            });
-            renderLinks();
-            updatePropertiesPanel();
-        }
-    });
+    canvas.addEventListener('pointerdown', beginPan);
+    canvas.addEventListener('pointermove', movePan);
+    canvas.addEventListener('pointerup', endPan);
+    canvas.addEventListener('pointercancel', endPan);
+    canvas.addEventListener('wheel', event => {
+        const factor = event.deltaY < 0 ? zoomStep : 1 / zoomStep;
+        zoomAt(event.clientX, event.clientY, state.zoom * factor);
+        event.preventDefault();
+    }, { passive: false });
 
     const resizeObserver = 'ResizeObserver' in window
         ? new ResizeObserver(updateCanvasSize)
@@ -555,6 +737,7 @@
     }
 
     window.addEventListener('resize', updateCanvasSize);
+    applyViewTransform();
     updateCanvasSize();
     setTool('select');
     setEmptyState();

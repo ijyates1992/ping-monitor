@@ -121,6 +121,13 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Monitored endpoints", viewMarkup);
         Assert.Contains("data-add-endpoint-node", viewMarkup);
         Assert.Contains("Draw link", viewMarkup);
+        Assert.Contains("Zoom in", viewMarkup);
+        Assert.Contains("Zoom out", viewMarkup);
+        Assert.Contains("Reset view", viewMarkup);
+        Assert.Contains("Fit content", viewMarkup);
+        Assert.Contains("Drag empty space to pan. Use mouse wheel to zoom.", viewMarkup);
+        Assert.Contains("data-diagram-world", viewMarkup);
+        Assert.Contains("data-zoom-label", viewMarkup);
         Assert.Contains("Diagram links are visual documentation only and do not create monitoring dependencies.", viewMarkup);
         Assert.Contains("data-link-properties", viewMarkup);
         Assert.Contains("Layout is not saved yet", viewMarkup);
