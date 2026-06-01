@@ -37,6 +37,11 @@
     const selectedNodeTypeLabel = editor.querySelector('[data-selected-node-type]');
     const selectedNodeHelp = editor.querySelector('[data-selected-node-help]');
     const selectedNodeCount = editor.querySelector('[data-selected-node-count]');
+    const saveButton = editor.querySelector('[data-save-diagram]');
+    const saveStatus = editor.querySelector('[data-save-status]');
+    const antiforgeryToken = editor.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    const loadUrl = editor.dataset.loadUrl || '';
+    const saveUrl = editor.dataset.saveUrl || '';
 
     if (!canvasHost || !canvas || !world || !nodeLayer || !linkLayer) {
         return;
@@ -58,7 +63,11 @@
         panX: 0,
         panY: 0,
         virtualCanvasWidth: 4000,
-        virtualCanvasHeight: 2500
+        virtualCanvasHeight: 2500,
+        name: '',
+        description: '',
+        dirty: false,
+        loading: true
     };
 
     let nodeSequence = 0;
@@ -169,13 +178,17 @@
         };
     }
 
+    function makeClientId(prefix) {
+        return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
     function getNextNodePosition() {
         nodeSequence += 1;
         const center = getVisibleWorldCenter();
         const offset = ((nodeSequence - 1) % 8) * 26;
 
         return {
-            id: `draft-node-${nodeSequence}`,
+            id: makeClientId('diagram-node'),
             x: center.x - 89 + offset,
             y: center.y - 39 + offset
         };
@@ -219,7 +232,7 @@
 
         const draft = document.createElement('span');
         draft.className = 'diagram-node-draft';
-        draft.textContent = options.kind === 'monitored-endpoint' ? 'Draft visual instance' : 'Draft';
+        draft.textContent = options.kind === 'monitored-endpoint' ? 'Visual instance' : 'Diagram node';
         main.appendChild(draft);
 
         node.append(symbol, main);
@@ -261,6 +274,7 @@
 
         nodeLayer.appendChild(node.element);
         state.nodes.push(node);
+        markDirty();
 
         clampNodePosition(node);
         setEmptyState();
@@ -414,7 +428,7 @@
 
         linkSequence += 1;
         const link = {
-            id: `draft-link-${linkSequence}`,
+            id: makeClientId('diagram-link'),
             sourceNodeId,
             targetNodeId,
             label: '',
@@ -424,6 +438,7 @@
         };
 
         state.links.push(link);
+        markDirty();
         selectLink(link.id);
     }
 
@@ -535,6 +550,7 @@
         });
 
         renderLinks();
+        markDirty();
         event.preventDefault();
     }
 
@@ -549,7 +565,9 @@
                 node.element.releasePointerCapture(event.pointerId);
             }
         });
+        const moved = dragState.moved;
         dragState = null;
+        if (moved) { markDirty(); }
         updatePropertiesPanel();
     }
 
@@ -758,6 +776,7 @@
 
         node[propertyName] = field.value;
         updateNodeElement(node);
+        markDirty();
     }
 
     function updateSelectedLinkField(event) {
@@ -770,6 +789,7 @@
 
         selectedLink[propertyName] = field.value;
         renderLinks();
+        markDirty();
     }
 
     function deleteSelection() {
@@ -792,6 +812,7 @@
             state.selectedNodeIds = [];
             state.selectedLinkId = null;
             state.activeSelectionType = 'none';
+            markDirty();
             setPendingLinkSource(null);
             setEmptyState();
             syncSelectionDom();
@@ -807,6 +828,7 @@
             state.links = state.links.filter(link => link.id !== state.selectedLinkId);
             state.selectedLinkId = null;
             state.activeSelectionType = 'none';
+            markDirty();
             syncSelectionDom();
         }
     }
@@ -823,6 +845,7 @@
         state.panX = screenX - worldX * state.zoom;
         state.panY = screenY - worldY * state.zoom;
         updateCanvasSize();
+        markDirty();
     }
 
     function zoomFromCenter(factor) {
@@ -860,6 +883,7 @@
         state.panX = (rect.width - contentWidth * nextZoom) / 2 - minX * nextZoom;
         state.panY = (rect.height - contentHeight * nextZoom) / 2 - minY * nextZoom;
         updateCanvasSize();
+        markDirty();
     }
 
     function beginPan(event) {
@@ -907,7 +931,9 @@
             canvas.releasePointerCapture(event.pointerId);
         }
 
-        if (!moved) {
+        if (moved) {
+            markDirty();
+        } else {
             clearSelection();
         }
     }
@@ -945,6 +971,197 @@
         if (event.key === 'Delete' || event.key === 'Backspace') {
             deleteSelection();
             event.preventDefault();
+        }
+    }
+
+
+    function setSaveStatus(message, options = {}) {
+        if (!saveStatus) {
+            return;
+        }
+
+        saveStatus.textContent = message;
+        saveStatus.dataset.dirty = options.dirty ? 'true' : 'false';
+        saveStatus.dataset.error = options.error ? 'true' : 'false';
+    }
+
+    function markDirty() {
+        if (state.loading) {
+            return;
+        }
+
+        state.dirty = true;
+        setSaveStatus('Unsaved changes', { dirty: true });
+    }
+
+    function normalizeNodeType(serverType) {
+        if (serverType === 'MonitoredEndpoint') {
+            return { nodeType: 'monitored-endpoint', nodeKind: 'monitored-endpoint' };
+        }
+        if (serverType === 'Note') {
+            return { nodeType: 'note', nodeKind: 'custom-device' };
+        }
+
+        return { nodeType: 'generic-device', nodeKind: 'custom-device' };
+    }
+
+    function addLoadedNode(savedNode) {
+        const normalized = normalizeNodeType(savedNode.nodeType);
+        const node = {
+            id: savedNode.nodeId,
+            nodeType: normalized.nodeType,
+            nodeKind: normalized.nodeKind,
+            endpointId: savedNode.endpointId || '',
+            endpointName: savedNode.displayLabel,
+            label: savedNode.displayLabel,
+            target: '',
+            iconKey: savedNode.iconKey || 'generic',
+            notes: savedNode.notes || '',
+            x: savedNode.x,
+            y: savedNode.y,
+            savedWidth: savedNode.width,
+            savedHeight: savedNode.height,
+            element: createNodeElement({
+                id: savedNode.nodeId,
+                label: savedNode.displayLabel,
+                target: '',
+                type: normalized.nodeType,
+                kind: normalized.nodeKind,
+                symbol: savedNode.iconKey || 'DEV'
+            })
+        };
+
+        const endpointButton = savedNode.endpointId
+            ? editor.querySelector(`[data-add-endpoint-node][data-endpoint-id="${CSS.escape(savedNode.endpointId)}"]`)
+            : null;
+        if (endpointButton) {
+            node.endpointName = endpointButton.dataset.endpointName || node.label;
+            node.target = endpointButton.dataset.endpointTarget || '';
+        }
+
+        nodeLayer.appendChild(node.element);
+        state.nodes.push(node);
+        applyNodePosition(node);
+    }
+
+    async function loadDiagram() {
+        if (!loadUrl) {
+            state.loading = false;
+            return;
+        }
+
+        const response = await fetch(loadUrl, { headers: { Accept: 'application/json' } });
+        if (!response.ok) {
+            setSaveStatus('Failed to load diagram', { error: true });
+            state.loading = false;
+            return;
+        }
+
+        const diagram = await response.json();
+        state.name = diagram.name || '';
+        state.description = diagram.description || '';
+        state.virtualCanvasWidth = diagram.canvasWidth || state.virtualCanvasWidth;
+        state.virtualCanvasHeight = diagram.canvasHeight || state.virtualCanvasHeight;
+        state.panX = diagram.viewportPanX || 0;
+        state.panY = diagram.viewportPanY || 0;
+        state.zoom = diagram.viewportZoom || 1;
+        nodeLayer.replaceChildren();
+        state.nodes = [];
+        state.links = [];
+        (diagram.nodes || []).forEach(addLoadedNode);
+        state.links = (diagram.links || []).map(link => ({
+            id: link.linkId,
+            sourceNodeId: link.sourceNodeId,
+            targetNodeId: link.targetNodeId,
+            label: link.label || '',
+            sourcePort: link.sourcePortLabel || '',
+            targetPort: link.targetPortLabel || '',
+            notes: link.notes || ''
+        }));
+        state.loading = false;
+        state.dirty = false;
+        applyViewTransform();
+        updateCanvasSize();
+        setEmptyState();
+        syncSelectionDom();
+        setSaveStatus(diagram.updatedAtUtc ? `Saved ${new Date(diagram.updatedAtUtc).toLocaleString()}` : 'Saved');
+    }
+
+    function toServerNodeType(node) {
+        if (node.nodeKind === 'monitored-endpoint') {
+            return 'MonitoredEndpoint';
+        }
+        if (node.nodeType === 'note') {
+            return 'Note';
+        }
+
+        return 'CustomDevice';
+    }
+
+    function buildSavePayload() {
+        return {
+            name: state.name || document.querySelector('#network-diagrams-title')?.textContent || 'Network diagram',
+            description: state.description || null,
+            canvasWidth: state.virtualCanvasWidth,
+            canvasHeight: state.virtualCanvasHeight,
+            viewportPanX: state.panX,
+            viewportPanY: state.panY,
+            viewportZoom: state.zoom,
+            nodes: state.nodes.map(node => ({
+                nodeId: node.id,
+                nodeType: toServerNodeType(node),
+                endpointId: node.nodeKind === 'monitored-endpoint' ? node.endpointId : null,
+                displayLabel: node.label,
+                iconKey: node.iconKey || 'generic',
+                x: node.x,
+                y: node.y,
+                width: getNodeWidth(node),
+                height: getNodeHeight(node),
+                notes: node.notes || null,
+                metadataJson: null
+            })),
+            links: state.links.map(link => ({
+                linkId: link.id,
+                sourceNodeId: link.sourceNodeId,
+                targetNodeId: link.targetNodeId,
+                label: link.label || null,
+                sourcePortLabel: link.sourcePort || null,
+                targetPortLabel: link.targetPort || null,
+                notes: link.notes || null,
+                linkType: 'default',
+                metadataJson: null
+            }))
+        };
+    }
+
+    async function saveDiagram() {
+        if (!saveUrl || !saveButton) {
+            return;
+        }
+
+        saveButton.disabled = true;
+        setSaveStatus('Saving…', { dirty: true });
+        try {
+            const response = await fetch(saveUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    RequestVerificationToken: antiforgeryToken
+                },
+                body: JSON.stringify(buildSavePayload())
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.error || 'Save failed.');
+            }
+
+            state.dirty = false;
+            setSaveStatus(result.updatedAtUtc ? `Saved ${new Date(result.updatedAtUtc).toLocaleString()}` : 'Saved');
+        } catch (error) {
+            setSaveStatus(error.message || 'Save failed', { dirty: true, error: true });
+        } finally {
+            saveButton.disabled = false;
         }
     }
 
@@ -996,6 +1213,19 @@
         fitContentButton.addEventListener('click', fitContent);
     }
 
+    if (saveButton) {
+        saveButton.addEventListener('click', saveDiagram);
+    }
+
+    window.addEventListener('beforeunload', event => {
+        if (!state.dirty) {
+            return;
+        }
+
+        event.preventDefault();
+        event.returnValue = '';
+    });
+
     nodeLayer.addEventListener('pointerdown', handleNodePointerDown);
     nodeLayer.addEventListener('pointermove', moveDrag);
     nodeLayer.addEventListener('pointerup', endDrag);
@@ -1032,4 +1262,5 @@
     setEmptyState();
     updatePropertiesPanel();
     updateSelectionButtons();
+    loadDiagram();
 })();

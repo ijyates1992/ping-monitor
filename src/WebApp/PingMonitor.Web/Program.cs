@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
@@ -92,6 +93,7 @@ builder.Services.AddControllersWithViews()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new UtcDateTimeOffsetJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
@@ -227,6 +229,7 @@ builder.Services.AddScoped<ITelegramPollingService, TelegramPollingService>();
 builder.Services.AddScoped<ITelegramNotificationSender, TelegramNotificationSender>();
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
+builder.Services.AddScoped<PingMonitor.Web.Services.NetworkDiagrams.INetworkDiagramService, PingMonitor.Web.Services.NetworkDiagrams.NetworkDiagramService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();
 builder.Services.AddScoped<IEndpointPerformanceQueryService, EndpointPerformanceQueryService>();
 builder.Services.AddScoped<IGroupManagementService, GroupManagementService>();

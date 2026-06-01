@@ -44,7 +44,58 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "NotificationSettings",
         "UserNotificationSettings",
         "PendingTelegramLinks",
-        "TelegramAccounts"
+        "TelegramAccounts",
+        "NetworkDiagrams",
+        "NetworkDiagramNodes",
+        "NetworkDiagramLinks"
+    ];
+
+    private static readonly string[] RequiredNetworkDiagramColumns =
+    [
+        "DiagramId",
+        "Name",
+        "Description",
+        "CanvasWidth",
+        "CanvasHeight",
+        "ViewportPanX",
+        "ViewportPanY",
+        "ViewportZoom",
+        "CreatedAtUtc",
+        "UpdatedAtUtc",
+        "CreatedByUserId",
+        "UpdatedByUserId"
+    ];
+    private static readonly string[] RequiredNetworkDiagramNodeColumns =
+    [
+        "NodeId",
+        "DiagramId",
+        "NodeType",
+        "EndpointId",
+        "DisplayLabel",
+        "IconKey",
+        "X",
+        "Y",
+        "Width",
+        "Height",
+        "Notes",
+        "MetadataJson",
+        "CreatedAtUtc",
+        "UpdatedAtUtc"
+    ];
+    private static readonly string[] RequiredNetworkDiagramLinkColumns =
+    [
+        "LinkId",
+        "DiagramId",
+        "SourceNodeId",
+        "TargetNodeId",
+        "Label",
+        "SourcePortLabel",
+        "TargetPortLabel",
+        "Notes",
+        "LinkType",
+        "MetadataJson",
+        "CreatedAtUtc",
+        "UpdatedAtUtc"
     ];
     private static readonly string[] RequiredEndpointDependencyColumns =
     [
@@ -338,6 +389,29 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add("CheckResults table still contains legacy compatibility columns (AgentId and/or EndpointId). Apply schema upgrade to complete Phase 2 normalization.");
+            return status;
+        }
+
+
+        var missingNetworkDiagramColumns = await GetMissingColumnsAsync(connection, "NetworkDiagrams", RequiredNetworkDiagramColumns, cancellationToken);
+        if (missingNetworkDiagramColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"NetworkDiagrams table is missing required columns: {string.Join(", ", missingNetworkDiagramColumns)}.");
+            return status;
+        }
+        var missingNetworkDiagramNodeColumns = await GetMissingColumnsAsync(connection, "NetworkDiagramNodes", RequiredNetworkDiagramNodeColumns, cancellationToken);
+        if (missingNetworkDiagramNodeColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"NetworkDiagramNodes table is missing required columns: {string.Join(", ", missingNetworkDiagramNodeColumns)}.");
+            return status;
+        }
+        var missingNetworkDiagramLinkColumns = await GetMissingColumnsAsync(connection, "NetworkDiagramLinks", RequiredNetworkDiagramLinkColumns, cancellationToken);
+        if (missingNetworkDiagramLinkColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"NetworkDiagramLinks table is missing required columns: {string.Join(", ", missingNetworkDiagramLinkColumns)}.");
             return status;
         }
 
@@ -759,6 +833,69 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+
+        const string createNetworkDiagramsSql = """
+            CREATE TABLE IF NOT EXISTS `NetworkDiagrams` (
+                `DiagramId` varchar(64) NOT NULL,
+                `Name` varchar(255) NOT NULL,
+                `Description` varchar(2048) NULL,
+                `CanvasWidth` double NOT NULL DEFAULT 4000,
+                `CanvasHeight` double NOT NULL DEFAULT 2500,
+                `ViewportPanX` double NOT NULL DEFAULT 0,
+                `ViewportPanY` double NOT NULL DEFAULT 0,
+                `ViewportZoom` double NOT NULL DEFAULT 1,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                `CreatedByUserId` varchar(255) NULL,
+                `UpdatedByUserId` varchar(255) NULL,
+                PRIMARY KEY (`DiagramId`),
+                KEY `IX_NetworkDiagrams_Name` (`Name`)
+            );
+            """;
+
+        const string createNetworkDiagramNodesSql = """
+            CREATE TABLE IF NOT EXISTS `NetworkDiagramNodes` (
+                `NodeId` varchar(64) NOT NULL,
+                `DiagramId` varchar(64) NOT NULL,
+                `NodeType` varchar(32) NOT NULL,
+                `EndpointId` varchar(64) NULL,
+                `DisplayLabel` varchar(255) NOT NULL,
+                `IconKey` varchar(64) NOT NULL,
+                `X` double NOT NULL,
+                `Y` double NOT NULL,
+                `Width` double NOT NULL DEFAULT 178,
+                `Height` double NOT NULL DEFAULT 78,
+                `Notes` varchar(4096) NULL,
+                `MetadataJson` longtext NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`NodeId`),
+                KEY `IX_NetworkDiagramNodes_DiagramId_EndpointId` (`DiagramId`, `EndpointId`),
+                CONSTRAINT `FK_NetworkDiagramNodes_NetworkDiagrams_DiagramId` FOREIGN KEY (`DiagramId`) REFERENCES `NetworkDiagrams` (`DiagramId`) ON DELETE CASCADE
+            );
+            """;
+
+        const string createNetworkDiagramLinksSql = """
+            CREATE TABLE IF NOT EXISTS `NetworkDiagramLinks` (
+                `LinkId` varchar(64) NOT NULL,
+                `DiagramId` varchar(64) NOT NULL,
+                `SourceNodeId` varchar(64) NOT NULL,
+                `TargetNodeId` varchar(64) NOT NULL,
+                `Label` varchar(255) NULL,
+                `SourcePortLabel` varchar(128) NULL,
+                `TargetPortLabel` varchar(128) NULL,
+                `Notes` varchar(4096) NULL,
+                `LinkType` varchar(64) NOT NULL DEFAULT 'default',
+                `MetadataJson` longtext NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`LinkId`),
+                KEY `IX_NetworkDiagramLinks_DiagramId` (`DiagramId`),
+                KEY `IX_NetworkDiagramLinks_DiagramId_SourceNodeId_TargetNodeId` (`DiagramId`, `SourceNodeId`, `TargetNodeId`),
+                CONSTRAINT `FK_NetworkDiagramLinks_NetworkDiagrams_DiagramId` FOREIGN KEY (`DiagramId`) REFERENCES `NetworkDiagrams` (`DiagramId`) ON DELETE CASCADE
+            );
+            """;
+
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAssignmentMetrics24hSql, cancellationToken);
@@ -779,6 +916,9 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointGroupMembershipsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserGroupAccessesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserEndpointAccessesSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramNodesSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramLinksSql, cancellationToken);
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
         await EnsureEndpointColumnsAsync(dbContext, cancellationToken);
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
@@ -931,6 +1071,30 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             await dbContext.Database.ExecuteSqlRawAsync(createIndexSql, cancellationToken);
         }
+    }
+
+
+    private static async Task<string[]> GetMissingColumnsAsync(MySqlConnection connection, string tableName, IReadOnlyCollection<string> requiredColumns, CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = @tableName;
+            """;
+        command.Parameters.AddWithValue("@tableName", tableName);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existingColumns.Add(reader.GetString(0));
+        }
+
+        return requiredColumns
+            .Where(column => !existingColumns.Contains(column))
+            .ToArray();
     }
 
     private static async Task<string[]> GetMissingEndpointDependencyColumnsAsync(MySqlConnection connection, CancellationToken cancellationToken)
