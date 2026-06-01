@@ -435,6 +435,8 @@ body {
 .endpoint-toolbox-item button,
 .diagram-tool-button,
 .link-properties button,
+.node-properties button,
+.multi-node-properties button,
 .danger-button {
     min-height: 44px;
     border: 1px solid var(--diagram-border);
@@ -447,12 +449,30 @@ body {
     padding: .55rem .7rem;
 }
 
+.diagram-tool-button:disabled,
+.link-properties button:disabled,
+.node-properties button:disabled,
+.multi-node-properties button:disabled,
+.danger-button:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+}
+
+.diagram-tool-button.danger-button {
+    min-height: 38px;
+}
+
+
 .endpoint-toolbox-item button:hover,
 .endpoint-toolbox-item button:focus-visible,
 .diagram-tool-button:hover,
 .diagram-tool-button:focus-visible,
 .link-properties button:hover,
-.link-properties button:focus-visible {
+.link-properties button:focus-visible,
+.node-properties button:hover,
+.node-properties button:focus-visible,
+.multi-node-properties button:hover,
+.multi-node-properties button:focus-visible {
     outline: none;
     border-color: var(--diagram-accent);
     box-shadow: 0 0 0 3px var(--diagram-accent-soft);
@@ -600,15 +620,20 @@ body {
     line-height: 1.35;
 }
 
+.node-properties,
+.multi-node-properties,
 .link-properties {
     display: grid;
     gap: .65rem;
 }
 
+.node-properties[hidden],
+.multi-node-properties[hidden],
 .link-properties[hidden] {
     display: none;
 }
 
+.node-properties label,
 .link-properties label {
     display: grid;
     gap: .25rem;
@@ -617,6 +642,8 @@ body {
     font-weight: 700;
 }
 
+.node-properties input,
+.node-properties textarea,
 .link-properties input,
 .link-properties textarea {
     width: 100%;
@@ -626,6 +653,41 @@ body {
     color: var(--diagram-text);
     font: inherit;
     padding: .55rem .6rem;
+}
+
+.diagram-property-summary {
+    display: grid;
+    gap: .45rem;
+    margin: 0;
+    padding: .65rem;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+}
+
+.diagram-property-summary div {
+    display: grid;
+    gap: .15rem;
+}
+
+.diagram-property-summary div[hidden] {
+    display: none;
+}
+
+.diagram-property-summary dt {
+    color: var(--diagram-muted);
+    font-size: .76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.diagram-property-summary dd {
+    display: grid;
+    gap: .1rem;
+    margin: 0;
+    color: var(--diagram-text);
+    font-size: .86rem;
+    overflow-wrap: anywhere;
 }
 
 .danger-button {

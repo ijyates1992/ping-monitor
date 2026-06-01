@@ -121,6 +121,17 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Monitored endpoints", viewMarkup);
         Assert.Contains("data-add-endpoint-node", viewMarkup);
         Assert.Contains("Draw link", viewMarkup);
+        Assert.Contains("Select all nodes", viewMarkup);
+        Assert.Contains("Clear selection", viewMarkup);
+        Assert.Contains("Delete selected", viewMarkup);
+        Assert.Contains("data-select-all", viewMarkup);
+        Assert.Contains("data-clear-selection", viewMarkup);
+        Assert.Contains("data-delete-selection", viewMarkup);
+        Assert.Contains("data-node-properties", viewMarkup);
+        Assert.Contains(@"data-node-field=""label""", viewMarkup);
+        Assert.Contains(@"data-node-field=""notes""", viewMarkup);
+        Assert.Contains("data-multi-node-properties", viewMarkup);
+        Assert.Contains("This visual link does not create or modify monitoring dependencies.", viewMarkup);
         Assert.Contains("Zoom in", viewMarkup);
         Assert.Contains("Zoom out", viewMarkup);
         Assert.Contains("Reset view", viewMarkup);

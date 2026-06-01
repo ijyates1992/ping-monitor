@@ -456,3 +456,15 @@ Diagram links must not be interpreted as monitoring dependencies or real physica
 13. Delete the selected link and confirm both nodes remain on the canvas.
 14. Confirm deleting the visual link does not alter endpoint dependencies.
 15. Disable `NetworkDiagramsEnabled` and confirm navigation, linked access, and direct page access are blocked.
+
+## Current editor slice: selection, edit/delete, and group move
+
+Issue: #499
+
+The draft editor now supports selecting draft nodes and documentation-only visual links. Multiple nodes can be selected with Shift/Ctrl/Cmd-click, Select all nodes selects every current draft node, and Clear selection removes both node and link selection. Dragging any selected node moves the selected group together in virtual canvas/world coordinates so links remain connected while the group moves.
+
+The Properties panel supports draft-only edits for exactly one selected node: diagram display label and notes. For monitored endpoint visual nodes, the panel shows endpoint details and states that changing the diagram label does not rename the monitored endpoint. When multiple nodes are selected, the panel shows the selected count and group delete action rather than single-node-only fields.
+
+The link Properties panel supports draft-only edits for label, source port, target port, and notes, and repeats that visual links do not create or modify monitoring dependencies. Deleting a selected link removes only the draft visual link. Deleting selected node(s) removes only draft diagram nodes and attached draft visual links; it does not delete endpoints, assignments, monitoring data, dependencies, alerts, or agent state.
+
+This remains a client-side draft-only slice. No saved diagram layout, database persistence, monitoring state evaluation, dependency suppression, alerting, Startup Gate, or agent behavior is changed. Marquee selection remains future work to avoid risking pan/zoom regressions.

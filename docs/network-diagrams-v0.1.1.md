@@ -113,3 +113,60 @@ Architecture boundary:
 - Confirm reset view works.
 - Confirm feature disabled hides nav and blocks direct access.
 - Confirm no endpoint dependencies are created or changed.
+
+## Draft Editor Selection, Edit/Delete, and Group Move Slice
+
+Issue: #499
+
+This slice extends the client-side draft editor interactions without adding persistence. The visible “Layout is not saved yet” messaging remains accurate: node and link edits affect only the current browser draft diagram state.
+
+Included in this slice:
+
+- Draft node selection with visible selected-node highlighting.
+- Draft visual link selection with visible selected-link highlighting.
+- Shift/Ctrl/Cmd-click multi-selection for draft nodes.
+- Select all nodes and clear selection toolbar actions.
+- Group movement: dragging any selected node moves all selected draft nodes together in virtual canvas/world coordinates.
+- Group movement remains bounded so selected draft nodes stay recoverable inside the virtual canvas.
+- Single-node Properties panel editing for diagram display label and notes.
+- Monitored endpoint node details in the Properties panel, with clear messaging that editing the diagram label does not rename the monitored endpoint.
+- Link Properties panel editing for link label, source port, target port, and notes.
+- Safe delete actions for selected draft nodes and selected draft visual links.
+- Keyboard support for Ctrl/Cmd+A select all, Escape clear selection, and Delete/Backspace delete selection while focus is inside the editor and not inside a text field.
+
+Draft-only safety boundary:
+
+- Deleting a diagram node removes only the draft diagram node and any attached draft visual links.
+- Deleting a monitored endpoint visual node does not delete the endpoint, monitoring data, assignments, dependencies, alerts, or agent state.
+- Deleting a visual link does not delete or modify monitoring dependencies.
+- Visual links remain documentation-only and do not create, change, or delete endpoint dependencies.
+- This slice does not change endpoint monitoring, monitoring state evaluation, dependency suppression, alerting, agent behavior, Startup Gate behavior, SNMP discovery, topology inference, endpoint creation, or dependency creation.
+
+Marquee selection is intentionally left as future work for this slice so it does not interfere with existing pan/zoom behavior.
+
+### Manual Regression Checklist - Selection and Group Move
+
+1. Enable `NetworkDiagramsEnabled`.
+2. Open the editor at 1920x1080.
+3. Open the editor at 1366x768.
+4. Add several monitored endpoint nodes.
+5. Add several custom nodes.
+6. Draw links between nodes.
+7. Select one node.
+8. Edit the node display label.
+9. Edit the node notes.
+10. Select one link.
+11. Edit the link label, source port, target port, and notes.
+12. Delete a link and confirm connected nodes remain.
+13. Delete a custom node and confirm attached visual links are removed.
+14. Delete a monitored endpoint node and confirm the actual endpoint remains in the app.
+15. Select multiple nodes with Shift/Ctrl-click.
+16. Use Select all nodes.
+17. Use Clear selection.
+18. Drag selected nodes as a group to the right to create space on the left.
+19. Confirm links follow moved nodes.
+20. Confirm group drag works after zooming to 0.5x and 2x.
+21. Confirm panning empty canvas still works.
+22. Confirm draw-link mode still works.
+23. Disable `NetworkDiagramsEnabled` and confirm nav/direct access are blocked.
+24. Confirm no endpoint dependencies are created, changed, or deleted.

@@ -17,14 +17,26 @@
     const zoomOutButton = editor.querySelector('[data-zoom-out]');
     const resetViewButton = editor.querySelector('[data-reset-view]');
     const fitContentButton = editor.querySelector('[data-fit-content]');
+    const selectAllButton = editor.querySelector('[data-select-all]');
+    const clearSelectionButton = editor.querySelector('[data-clear-selection]');
+    const deleteSelectionButtons = Array.from(editor.querySelectorAll('[data-delete-selection]'));
     const addButtons = Array.from(editor.querySelectorAll('[data-add-node]'));
     const addEndpointButtons = Array.from(editor.querySelectorAll('[data-add-endpoint-node]'));
     const toolButtons = Array.from(editor.querySelectorAll('[data-tool-button]'));
     const toolHint = editor.querySelector('[data-tool-hint]');
+    const nodeProperties = editor.querySelector('[data-node-properties]');
+    const multiNodeProperties = editor.querySelector('[data-multi-node-properties]');
     const linkProperties = editor.querySelector('[data-link-properties]');
     const noSelectionPanel = editor.querySelector('[data-no-selection-panel]');
-    const deleteLinkButton = editor.querySelector('[data-delete-link]');
+    const nodeFields = Array.from(editor.querySelectorAll('[data-node-field]'));
     const linkFields = Array.from(editor.querySelectorAll('[data-link-field]'));
+    const selectedNodeKindLabel = editor.querySelector('[data-selected-node-kind]');
+    const selectedNodeEndpointDetails = editor.querySelector('[data-selected-node-endpoint-details]');
+    const selectedNodeEndpointName = editor.querySelector('[data-selected-node-endpoint-name]');
+    const selectedNodeEndpointTarget = editor.querySelector('[data-selected-node-endpoint-target]');
+    const selectedNodeTypeLabel = editor.querySelector('[data-selected-node-type]');
+    const selectedNodeHelp = editor.querySelector('[data-selected-node-help]');
+    const selectedNodeCount = editor.querySelector('[data-selected-node-count]');
 
     if (!canvasHost || !canvas || !world || !nodeLayer || !linkLayer) {
         return;
@@ -38,8 +50,9 @@
     const state = {
         nodes: [],
         links: [],
-        selectedNodeId: null,
+        selectedNodeIds: [],
         selectedLinkId: null,
+        activeSelectionType: 'none',
         currentTool: 'select',
         zoom: 1,
         panX: 0,
@@ -79,13 +92,17 @@
         return node.element.offsetHeight || 78;
     }
 
+    function applyNodePosition(node) {
+        node.element.style.transform = `translate(${Math.round(node.x)}px, ${Math.round(node.y)}px)`;
+    }
+
     function clampNodePosition(node) {
         const width = getNodeWidth(node);
         const height = getNodeHeight(node);
 
         node.x = clamp(node.x, nodeMargin, state.virtualCanvasWidth - width - nodeMargin);
         node.y = clamp(node.y, nodeMargin, state.virtualCanvasHeight - height - nodeMargin);
-        node.element.style.transform = `translate(${Math.round(node.x)}px, ${Math.round(node.y)}px)`;
+        applyNodePosition(node);
         renderLinks();
     }
 
@@ -172,6 +189,7 @@
         node.setAttribute('aria-label', `${options.label} draft ${formatNodeType(options.type)} node`);
         node.dataset.nodeId = options.id;
         node.dataset.nodeKind = options.kind;
+        node.dataset.selected = 'false';
 
         const symbol = document.createElement('span');
         symbol.className = 'diagram-node-symbol';
@@ -183,6 +201,7 @@
 
         const name = document.createElement('span');
         name.className = 'diagram-node-name';
+        name.dataset.nodeName = 'true';
         name.textContent = options.label;
 
         const type = document.createElement('span');
@@ -207,6 +226,15 @@
         return node;
     }
 
+    function updateNodeElement(node) {
+        const name = node.element.querySelector('[data-node-name]');
+        if (name) {
+            name.textContent = node.label;
+        }
+
+        node.element.setAttribute('aria-label', `${node.label} draft ${formatNodeType(node.nodeType)} node`);
+    }
+
     function addNodeFromOptions(options) {
         const position = getNextNodePosition();
         const node = {
@@ -214,9 +242,11 @@
             nodeType: options.type,
             nodeKind: options.kind,
             endpointId: options.endpointId || '',
+            endpointName: options.endpointName || options.label,
             label: options.label,
             target: options.target || '',
             iconKey: options.iconKey || options.symbol || '',
+            notes: '',
             x: position.x,
             y: position.y,
             element: createNodeElement({
@@ -234,7 +264,7 @@
 
         clampNodePosition(node);
         setEmptyState();
-        selectNode(node.id);
+        selectOnlyNode(node.id);
         node.element.focus({ preventScroll: true });
     }
 
@@ -252,6 +282,7 @@
             type: 'monitored-endpoint',
             kind: 'monitored-endpoint',
             endpointId: button.dataset.endpointId || '',
+            endpointName: button.dataset.endpointName || 'Monitored endpoint',
             label: button.dataset.endpointName || 'Monitored endpoint',
             target: button.dataset.endpointTarget || '',
             iconKey: button.dataset.endpointIcon || 'generic',
@@ -271,6 +302,23 @@
         return state.links.find(link => link.id === linkId) || null;
     }
 
+    function selectedNodes() {
+        return state.selectedNodeIds.map(findNodeById).filter(Boolean);
+    }
+
+    function hasSelection() {
+        return state.selectedNodeIds.length > 0 || Boolean(state.selectedLinkId);
+    }
+
+    function syncSelectionDom() {
+        state.nodes.forEach(node => {
+            node.element.dataset.selected = state.selectedNodeIds.includes(node.id) ? 'true' : 'false';
+        });
+        renderLinks();
+        updatePropertiesPanel();
+        updateSelectionButtons();
+    }
+
     function setTool(tool) {
         state.currentTool = tool;
         if (tool !== 'draw-link') {
@@ -284,38 +332,62 @@
         if (toolHint) {
             toolHint.textContent = tool === 'draw-link'
                 ? 'Draw link mode: select a source node, then select a different target node. Drag empty space to pan. Use mouse wheel to zoom.'
-                : 'Select nodes to move them. Draw link mode creates documentation-only links. Drag empty space to pan. Use mouse wheel to zoom.';
+                : 'Select nodes or links. Shift/Ctrl-click nodes to multi-select; drag selected nodes to move the group. Drag empty space to pan.';
         }
     }
 
-    function selectNode(nodeId) {
-        state.selectedNodeId = nodeId;
+    function selectOnlyNode(nodeId) {
+        state.selectedNodeIds = [nodeId];
         state.selectedLinkId = null;
-        state.nodes.forEach(node => {
-            node.element.dataset.selected = node.id === nodeId ? 'true' : 'false';
-        });
-        renderLinks();
-        updatePropertiesPanel();
+        state.activeSelectionType = 'nodes';
+        syncSelectionDom();
+    }
+
+    function toggleNodeSelection(nodeId) {
+        state.selectedLinkId = null;
+        if (state.selectedNodeIds.includes(nodeId)) {
+            state.selectedNodeIds = state.selectedNodeIds.filter(id => id !== nodeId);
+        } else {
+            state.selectedNodeIds = [...state.selectedNodeIds, nodeId];
+        }
+
+        state.activeSelectionType = state.selectedNodeIds.length > 0 ? 'nodes' : 'none';
+        syncSelectionDom();
+    }
+
+    function selectAllNodes() {
+        state.selectedNodeIds = state.nodes.map(node => node.id);
+        state.selectedLinkId = null;
+        state.activeSelectionType = state.selectedNodeIds.length > 0 ? 'nodes' : 'none';
+        syncSelectionDom();
     }
 
     function clearSelection() {
-        state.selectedNodeId = null;
+        state.selectedNodeIds = [];
         state.selectedLinkId = null;
-        state.nodes.forEach(node => {
-            node.element.dataset.selected = 'false';
-        });
-        renderLinks();
-        updatePropertiesPanel();
+        state.activeSelectionType = 'none';
+        syncSelectionDom();
     }
 
     function selectLink(linkId) {
         state.selectedLinkId = linkId;
-        state.selectedNodeId = null;
-        state.nodes.forEach(node => {
-            node.element.dataset.selected = 'false';
+        state.selectedNodeIds = [];
+        state.activeSelectionType = 'link';
+        syncSelectionDom();
+    }
+
+    function updateSelectionButtons() {
+        if (selectAllButton) {
+            selectAllButton.disabled = state.nodes.length === 0;
+        }
+
+        if (clearSelectionButton) {
+            clearSelectionButton.disabled = !hasSelection();
+        }
+
+        deleteSelectionButtons.forEach(button => {
+            button.disabled = !hasSelection();
         });
-        renderLinks();
-        updatePropertiesPanel();
     }
 
     function setPendingLinkSource(nodeId) {
@@ -355,6 +427,38 @@
         selectLink(link.id);
     }
 
+    function getGroupBounds(nodes) {
+        return nodes.reduce((bounds, node) => ({
+            minX: Math.min(bounds.minX, node.x),
+            minY: Math.min(bounds.minY, node.y),
+            maxX: Math.max(bounds.maxX, node.x + getNodeWidth(node)),
+            maxY: Math.max(bounds.maxY, node.y + getNodeHeight(node))
+        }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+    }
+
+    function clampGroupDelta(nodes, requestedDeltaX, requestedDeltaY, startPositions) {
+        if (nodes.length === 0) {
+            return { deltaX: 0, deltaY: 0 };
+        }
+
+        const bounds = startPositions
+            ? nodes.reduce((currentBounds, node) => {
+                const start = startPositions.get(node.id) || { x: node.x, y: node.y };
+                return {
+                    minX: Math.min(currentBounds.minX, start.x),
+                    minY: Math.min(currentBounds.minY, start.y),
+                    maxX: Math.max(currentBounds.maxX, start.x + getNodeWidth(node)),
+                    maxY: Math.max(currentBounds.maxY, start.y + getNodeHeight(node))
+                };
+            }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity })
+            : getGroupBounds(nodes);
+
+        return {
+            deltaX: clamp(requestedDeltaX, nodeMargin - bounds.minX, state.virtualCanvasWidth - nodeMargin - bounds.maxX),
+            deltaY: clamp(requestedDeltaY, nodeMargin - bounds.minY, state.virtualCanvasHeight - nodeMargin - bounds.maxY)
+        };
+    }
+
     function handleNodePointerDown(event) {
         const target = event.target.closest('.diagram-node');
         if (!target || !nodeLayer.contains(target)) {
@@ -374,7 +478,7 @@
 
             if (!pendingLinkSourceId) {
                 setPendingLinkSource(node.id);
-                selectNode(node.id);
+                selectOnlyNode(node.id);
                 return;
             }
 
@@ -383,16 +487,26 @@
             return;
         }
 
-        const pointer = screenToWorld(event.clientX, event.clientY);
+        const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
+        if (additiveSelection) {
+            toggleNodeSelection(node.id);
+        } else if (!state.selectedNodeIds.includes(node.id)) {
+            selectOnlyNode(node.id);
+        }
+
+        const nodesForDrag = state.selectedNodeIds.includes(node.id) ? selectedNodes() : [node];
         dragState = {
-            node,
             pointerId: event.pointerId,
-            offsetX: pointer.x - node.x,
-            offsetY: pointer.y - node.y
+            startPointer: screenToWorld(event.clientX, event.clientY),
+            nodes: nodesForDrag,
+            startPositions: new Map(nodesForDrag.map(selectedNode => [selectedNode.id, { x: selectedNode.x, y: selectedNode.y }])),
+            moved: false
         };
 
-        selectNode(node.id);
-        target.dataset.dragging = 'true';
+        nodesForDrag.forEach(selectedNode => {
+            selectedNode.element.dataset.dragging = 'true';
+        });
+        target.focus({ preventScroll: true });
         target.setPointerCapture(event.pointerId);
         event.preventDefault();
         event.stopPropagation();
@@ -404,9 +518,23 @@
         }
 
         const pointer = screenToWorld(event.clientX, event.clientY);
-        dragState.node.x = pointer.x - dragState.offsetX;
-        dragState.node.y = pointer.y - dragState.offsetY;
-        clampNodePosition(dragState.node);
+        const requestedDeltaX = pointer.x - dragState.startPointer.x;
+        const requestedDeltaY = pointer.y - dragState.startPointer.y;
+        const { deltaX, deltaY } = clampGroupDelta(dragState.nodes, requestedDeltaX, requestedDeltaY, dragState.startPositions);
+        dragState.moved = dragState.moved || Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1;
+
+        dragState.nodes.forEach(node => {
+            const start = dragState.startPositions.get(node.id);
+            if (!start) {
+                return;
+            }
+
+            node.x = start.x + deltaX;
+            node.y = start.y + deltaY;
+            applyNodePosition(node);
+        });
+
+        renderLinks();
         event.preventDefault();
     }
 
@@ -415,39 +543,51 @@
             return;
         }
 
-        dragState.node.element.dataset.dragging = 'false';
-        if (dragState.node.element.hasPointerCapture(event.pointerId)) {
-            dragState.node.element.releasePointerCapture(event.pointerId);
-        }
+        dragState.nodes.forEach(node => {
+            node.element.dataset.dragging = 'false';
+            if (node.element.hasPointerCapture(event.pointerId)) {
+                node.element.releasePointerCapture(event.pointerId);
+            }
+        });
         dragState = null;
+        updatePropertiesPanel();
     }
 
-    function nudgeNode(event) {
+    function nudgeSelectedNodes(event) {
         const node = findNodeByElement(event.currentTarget);
         if (!node || state.currentTool !== 'select') {
             return;
         }
 
         const step = event.shiftKey ? 24 : 8;
-        let handled = true;
+        let deltaX = 0;
+        let deltaY = 0;
 
         if (event.key === 'ArrowLeft') {
-            node.x -= step;
+            deltaX = -step;
         } else if (event.key === 'ArrowRight') {
-            node.x += step;
+            deltaX = step;
         } else if (event.key === 'ArrowUp') {
-            node.y -= step;
+            deltaY = -step;
         } else if (event.key === 'ArrowDown') {
-            node.y += step;
+            deltaY = step;
         } else {
-            handled = false;
+            return;
         }
 
-        if (handled) {
-            selectNode(node.id);
-            clampNodePosition(node);
-            event.preventDefault();
+        if (!state.selectedNodeIds.includes(node.id)) {
+            selectOnlyNode(node.id);
         }
+
+        const nodes = selectedNodes();
+        const clamped = clampGroupDelta(nodes, deltaX, deltaY);
+        nodes.forEach(selectedNode => {
+            selectedNode.x += clamped.deltaX;
+            selectedNode.y += clamped.deltaY;
+            applyNodePosition(selectedNode);
+        });
+        renderLinks();
+        event.preventDefault();
     }
 
     function getNodeCenter(node) {
@@ -536,17 +676,88 @@
 
     function updatePropertiesPanel() {
         const selectedLink = state.selectedLinkId ? findLinkById(state.selectedLinkId) : null;
+        const nodes = selectedNodes();
+        const singleNode = nodes.length === 1 ? nodes[0] : null;
+        const multipleNodes = nodes.length > 1;
+
+        if (noSelectionPanel) {
+            noSelectionPanel.hidden = Boolean(selectedLink) || Boolean(singleNode) || multipleNodes;
+        }
+
+        if (nodeProperties) {
+            nodeProperties.hidden = !singleNode;
+        }
+
+        if (multiNodeProperties) {
+            multiNodeProperties.hidden = !multipleNodes;
+        }
+
         if (linkProperties) {
             linkProperties.hidden = !selectedLink;
         }
-        if (noSelectionPanel) {
-            noSelectionPanel.hidden = Boolean(selectedLink);
+
+        if (singleNode) {
+            if (selectedNodeKindLabel) {
+                selectedNodeKindLabel.textContent = singleNode.nodeKind === 'monitored-endpoint'
+                    ? 'Selected monitored endpoint visual node'
+                    : 'Selected custom draft node';
+            }
+
+            if (selectedNodeTypeLabel) {
+                selectedNodeTypeLabel.textContent = singleNode.nodeKind === 'monitored-endpoint'
+                    ? 'Monitored endpoint'
+                    : formatNodeType(singleNode.nodeType);
+            }
+
+            if (selectedNodeHelp) {
+                selectedNodeHelp.textContent = singleNode.nodeKind === 'monitored-endpoint'
+                    ? 'Editing this diagram label does not rename the monitored endpoint. Changes remain client-side draft layout only.'
+                    : 'Editing this node changes only the current client-side draft diagram.';
+            }
+
+            if (selectedNodeEndpointDetails) {
+                selectedNodeEndpointDetails.hidden = singleNode.nodeKind !== 'monitored-endpoint';
+            }
+
+            if (selectedNodeEndpointName) {
+                selectedNodeEndpointName.textContent = singleNode.endpointName || singleNode.label;
+            }
+
+            if (selectedNodeEndpointTarget) {
+                selectedNodeEndpointTarget.textContent = singleNode.target || 'No target recorded';
+            }
         }
+
+        if (selectedNodeCount) {
+            selectedNodeCount.textContent = String(nodes.length);
+        }
+
+        nodeFields.forEach(field => {
+            const propertyName = field.dataset.nodeField;
+            field.value = singleNode && propertyName ? singleNode[propertyName] || '' : '';
+        });
 
         linkFields.forEach(field => {
             const propertyName = field.dataset.linkField;
             field.value = selectedLink && propertyName ? selectedLink[propertyName] || '' : '';
         });
+    }
+
+    function updateSelectedNodeField(event) {
+        const nodes = selectedNodes();
+        if (nodes.length !== 1) {
+            return;
+        }
+
+        const node = nodes[0];
+        const field = event.currentTarget;
+        const propertyName = field.dataset.nodeField;
+        if (!propertyName) {
+            return;
+        }
+
+        node[propertyName] = field.value;
+        updateNodeElement(node);
     }
 
     function updateSelectedLinkField(event) {
@@ -561,15 +772,43 @@
         renderLinks();
     }
 
-    function deleteSelectedLink() {
-        if (!state.selectedLinkId) {
+    function deleteSelection() {
+        if (state.selectedNodeIds.length > 0) {
+            const confirmed = window.confirm('Remove selected item(s) from this draft diagram only? Monitored endpoints and monitoring data will not be deleted.');
+            if (!confirmed) {
+                return;
+            }
+
+            const nodeIds = new Set(state.selectedNodeIds);
+            state.nodes = state.nodes.filter(node => {
+                if (!nodeIds.has(node.id)) {
+                    return true;
+                }
+
+                node.element.remove();
+                return false;
+            });
+            state.links = state.links.filter(link => !nodeIds.has(link.sourceNodeId) && !nodeIds.has(link.targetNodeId));
+            state.selectedNodeIds = [];
+            state.selectedLinkId = null;
+            state.activeSelectionType = 'none';
+            setPendingLinkSource(null);
+            setEmptyState();
+            syncSelectionDom();
             return;
         }
 
-        state.links = state.links.filter(link => link.id !== state.selectedLinkId);
-        state.selectedLinkId = null;
-        renderLinks();
-        updatePropertiesPanel();
+        if (state.selectedLinkId) {
+            const confirmed = window.confirm('Remove this visual link from the draft diagram only? Monitoring dependencies will not be changed.');
+            if (!confirmed) {
+                return;
+            }
+
+            state.links = state.links.filter(link => link.id !== state.selectedLinkId);
+            state.selectedLinkId = null;
+            state.activeSelectionType = 'none';
+            syncSelectionDom();
+        }
     }
 
     function zoomAt(clientX, clientY, requestedZoom) {
@@ -638,6 +877,7 @@
         };
         canvas.dataset.panning = 'true';
         canvas.setPointerCapture(event.pointerId);
+        canvas.focus({ preventScroll: true });
         event.preventDefault();
     }
 
@@ -672,6 +912,42 @@
         }
     }
 
+    function isEditableTarget(target) {
+        if (!(target instanceof HTMLElement)) {
+            return false;
+        }
+
+        return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+    }
+
+    function handleEditorKeyDown(event) {
+        if (isEditableTarget(event.target)) {
+            return;
+        }
+
+        const isCanvasFocused = canvas.contains(document.activeElement) || document.activeElement === canvas;
+        if (!isCanvasFocused) {
+            return;
+        }
+
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+            selectAllNodes();
+            event.preventDefault();
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            clearSelection();
+            event.preventDefault();
+            return;
+        }
+
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+            deleteSelection();
+            event.preventDefault();
+        }
+    }
+
     addButtons.forEach(button => {
         button.addEventListener('click', () => addCustomNode(button));
     });
@@ -684,12 +960,24 @@
         button.addEventListener('click', () => setTool(button.dataset.toolButton || 'select'));
     });
 
+    nodeFields.forEach(field => {
+        field.addEventListener('input', updateSelectedNodeField);
+    });
+
     linkFields.forEach(field => {
         field.addEventListener('input', updateSelectedLinkField);
     });
 
-    if (deleteLinkButton) {
-        deleteLinkButton.addEventListener('click', deleteSelectedLink);
+    deleteSelectionButtons.forEach(button => {
+        button.addEventListener('click', deleteSelection);
+    });
+
+    if (selectAllButton) {
+        selectAllButton.addEventListener('click', selectAllNodes);
+    }
+
+    if (clearSelectionButton) {
+        clearSelectionButton.addEventListener('click', clearSelection);
     }
 
     if (zoomInButton) {
@@ -714,7 +1002,7 @@
     nodeLayer.addEventListener('pointercancel', endDrag);
     nodeLayer.addEventListener('keydown', event => {
         if (event.target instanceof HTMLElement && event.target.classList.contains('diagram-node')) {
-            nudgeNode(event);
+            nudgeSelectedNodes(event);
         }
     });
 
@@ -722,6 +1010,7 @@
     canvas.addEventListener('pointermove', movePan);
     canvas.addEventListener('pointerup', endPan);
     canvas.addEventListener('pointercancel', endPan);
+    canvas.addEventListener('keydown', handleEditorKeyDown);
     canvas.addEventListener('wheel', event => {
         const factor = event.deltaY < 0 ? zoomStep : 1 / zoomStep;
         zoomAt(event.clientX, event.clientY, state.zoom * factor);
@@ -742,4 +1031,5 @@
     setTool('select');
     setEmptyState();
     updatePropertiesPanel();
+    updateSelectionButtons();
 })();
