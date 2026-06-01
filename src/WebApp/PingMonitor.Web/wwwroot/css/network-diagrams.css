@@ -172,11 +172,7 @@ body {
     overflow: hidden;
     border: 1px solid #c7d2df;
     border-radius: 8px;
-    background:
-        linear-gradient(rgba(16, 42, 67, .055) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(16, 42, 67, .055) 1px, transparent 1px),
-        #fbfcff;
-    background-size: 24px 24px;
+    background: #fbfcff;
 }
 
 .diagram-canvas {
@@ -185,7 +181,29 @@ body {
     height: 100%;
     min-height: 280px;
     overflow: hidden;
+    cursor: grab;
+    touch-action: none;
 }
+
+.diagram-canvas[data-panning="true"] {
+    cursor: grabbing;
+}
+
+.diagram-world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--diagram-world-width, 4000px);
+    height: var(--diagram-world-height, 2500px);
+    transform-origin: 0 0;
+    background:
+        linear-gradient(rgba(16, 42, 67, .055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(16, 42, 67, .055) 1px, transparent 1px),
+        rgba(255, 255, 255, .45);
+    background-size: 24px 24px;
+    will-change: transform;
+}
+
 
 .diagram-empty-state {
     position: absolute;
@@ -459,6 +477,28 @@ body {
     color: var(--diagram-accent);
 }
 
+.diagram-toolbar-divider {
+    width: 1px;
+    align-self: stretch;
+    min-height: 32px;
+    background: var(--diagram-border);
+}
+
+.diagram-zoom-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    min-width: 58px;
+    padding: .25rem .55rem;
+    border: 1px solid var(--diagram-border);
+    border-radius: 999px;
+    background: var(--diagram-panel);
+    color: var(--diagram-text);
+    font-size: .86rem;
+    font-weight: 800;
+}
+
 .diagram-tool-hint {
     color: var(--diagram-muted);
     font-size: .85rem;
@@ -615,10 +655,14 @@ html[data-theme="dark"] .diagram-workspace {
 
 html[data-theme="dark"] .diagram-canvas-host {
     border-color: #374151;
+    background: #0f172a;
+}
+
+html[data-theme="dark"] .diagram-world {
     background:
         linear-gradient(rgba(203, 213, 225, .08) 1px, transparent 1px),
         linear-gradient(90deg, rgba(203, 213, 225, .08) 1px, transparent 1px),
-        #0f172a;
+        rgba(15, 23, 42, .55);
     background-size: 24px 24px;
 }
 

@@ -87,15 +87,23 @@
                 <div class="diagram-workspace-toolbar" aria-label="Network diagram tools">
                     <button type="button" class="diagram-tool-button" data-tool-button="select" aria-pressed="true">Select / move</button>
                     <button type="button" class="diagram-tool-button" data-tool-button="draw-link" aria-pressed="false">Draw link</button>
-                    <span class="diagram-tool-hint" data-tool-hint>Select nodes to move them. Draw link mode creates documentation-only links.</span>
+                    <span class="diagram-toolbar-divider" aria-hidden="true"></span>
+                    <button type="button" class="diagram-tool-button" data-zoom-out aria-label="Zoom out">Zoom out</button>
+                    <button type="button" class="diagram-tool-button" data-zoom-in aria-label="Zoom in">Zoom in</button>
+                    <button type="button" class="diagram-tool-button" data-reset-view>Reset view</button>
+                    <button type="button" class="diagram-tool-button" data-fit-content>Fit content</button>
+                    <span class="diagram-zoom-label" data-zoom-label aria-live="polite">100%</span>
+                    <span class="diagram-tool-hint" data-tool-hint>Select nodes to move them. Draw link mode creates documentation-only links. Drag empty space to pan. Use mouse wheel to zoom.</span>
                 </div>
                 <div class="diagram-canvas-host" data-diagram-canvas-host>
                     <div class="diagram-canvas" data-diagram-canvas role="application" aria-label="Draft network diagram canvas">
                         <div class="diagram-empty-state" data-empty-state>
-                            Add a monitored endpoint or draft device from the toolbox.
+                            Add a monitored endpoint or draft device from the toolbox. Drag empty space to pan. Use mouse wheel to zoom.
                         </div>
-                        <svg class="diagram-link-layer" data-link-layer aria-hidden="true"></svg>
-                        <div class="diagram-node-layer" data-node-layer></div>
+                        <div class="diagram-world" data-diagram-world>
+                            <svg class="diagram-link-layer" data-link-layer aria-hidden="true"></svg>
+                            <div class="diagram-node-layer" data-node-layer></div>
+                        </div>
                     </div>
                 </div>
             </section>
