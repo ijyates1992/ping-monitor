@@ -2,6 +2,41 @@ using PingMonitor.Web.Models;
 
 namespace PingMonitor.Web.Services.NetworkDiagrams;
 
+public static class NetworkDiagramLinkTypes
+{
+    public const string Copper = "Copper";
+    public const string Fibre = "Fibre";
+    public const string Wireless = "Wireless";
+    public const string Lacp = "LACP";
+    public const string Vpn = "VPN";
+    public const string Logical = "Logical";
+    public const string Other = "Other";
+
+    public static readonly IReadOnlySet<string> Allowed = new HashSet<string>(StringComparer.Ordinal)
+    {
+        Copper,
+        Fibre,
+        Wireless,
+        Lacp,
+        Vpn,
+        Logical,
+        Other
+    };
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.Equals(value.Trim(), "default", StringComparison.OrdinalIgnoreCase))
+        {
+            return Copper;
+        }
+
+        var trimmed = value.Trim();
+        return Allowed.FirstOrDefault(allowed => string.Equals(allowed, trimmed, StringComparison.OrdinalIgnoreCase)) ?? trimmed;
+    }
+
+    public static bool IsAllowed(string? value) => Allowed.Contains(Normalize(value));
+}
+
 public sealed class NetworkDiagramSaveRequest
 {
     public string Name { get; init; } = string.Empty;
@@ -82,6 +117,6 @@ public sealed class NetworkDiagramLinkDto
     public string? SourcePortLabel { get; init; }
     public string? TargetPortLabel { get; init; }
     public string? Notes { get; init; }
-    public string LinkType { get; init; } = "default";
+    public string LinkType { get; init; } = NetworkDiagramLinkTypes.Copper;
     public string? MetadataJson { get; init; }
 }

@@ -42,6 +42,7 @@
     const exportPaperSelect = editor.querySelector('[data-export-paper]');
     const canvasSizePresetSelect = editor.querySelector('[data-canvas-size-preset]');
     const canvasRatioWarning = editor.querySelector('[data-canvas-ratio-warning]');
+    const drawLinkTypeSelect = editor.querySelector('[data-draw-link-type]');
     const saveStatus = editor.querySelector('[data-save-status]');
     const antiforgeryToken = editor.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
     const loadUrl = editor.dataset.loadUrl || '';
@@ -57,6 +58,8 @@
     const zoomStep = 1.1;
     const nodeMargin = 8;
     const aSeriesLandscapeRatio = 1.41421356237;
+    const linkTypes = ['Copper', 'Fibre', 'Wireless', 'LACP', 'VPN', 'Logical', 'Other'];
+    const parallelLinkOffsetStep = 34;
     const canvasPresets = [
         { value: 'small', label: 'Small', width: 4000, height: 2828 },
         { value: 'medium', label: 'Medium', width: 5656, height: 4000 },
@@ -79,7 +82,8 @@
         name: '',
         description: '',
         dirty: false,
-        loading: true
+        loading: true,
+        selectedDrawLinkType: 'Copper'
     };
 
     let nodeSequence = 0;
@@ -474,14 +478,17 @@
         return node && node.nodeType !== 'note';
     }
 
-    function linkExists(sourceNodeId, targetNodeId) {
-        return state.links.some(link =>
-            (link.sourceNodeId === sourceNodeId && link.targetNodeId === targetNodeId) ||
-            (link.sourceNodeId === targetNodeId && link.targetNodeId === sourceNodeId));
+    function normalizeLinkType(value) {
+        const requested = (value || '').trim();
+        if (!requested || requested.toLowerCase() === 'default') {
+            return 'Copper';
+        }
+
+        return linkTypes.find(type => type.toLowerCase() === requested.toLowerCase()) || 'Other';
     }
 
     function createLink(sourceNodeId, targetNodeId) {
-        if (sourceNodeId === targetNodeId || linkExists(sourceNodeId, targetNodeId)) {
+        if (sourceNodeId === targetNodeId) {
             return;
         }
 
@@ -493,7 +500,8 @@
             label: '',
             sourcePort: '',
             targetPort: '',
-            notes: ''
+            notes: '',
+            linkType: normalizeLinkType(state.selectedDrawLinkType)
         };
 
         state.links.push(link);
@@ -678,8 +686,78 @@
         return document.createElementNS('http://www.w3.org/2000/svg', name);
     }
 
+    function getUnorderedLinkPairKey(link) {
+        return [link.sourceNodeId, link.targetNodeId].sort().join('::');
+    }
+
+    function getParallelOffsetIndexes() {
+        const groups = new Map();
+        state.links.forEach(link => {
+            const key = getUnorderedLinkPairKey(link);
+            const group = groups.get(key) || [];
+            group.push(link);
+            groups.set(key, group);
+        });
+
+        const offsets = new Map();
+        groups.forEach(group => {
+            const ordered = [...group].sort((left, right) => String(left.id).localeCompare(String(right.id)));
+            const center = (ordered.length - 1) / 2;
+            ordered.forEach((link, index) => offsets.set(link.id, index - center));
+        });
+
+        return offsets;
+    }
+
+    function buildLinkGeometry(source, target, offsetIndex) {
+        const start = getNodeCenter(source);
+        const end = getNodeCenter(target);
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const perpendicularX = -dy / length;
+        const perpendicularY = dx / length;
+        const offset = offsetIndex * parallelLinkOffsetStep;
+        const control = {
+            x: (start.x + end.x) / 2 + perpendicularX * offset,
+            y: (start.y + end.y) / 2 + perpendicularY * offset
+        };
+        const midpoint = {
+            x: start.x * 0.25 + control.x * 0.5 + end.x * 0.25,
+            y: start.y * 0.25 + control.y * 0.5 + end.y * 0.25
+        };
+        const labelNormal = offset === 0 ? -14 : Math.sign(offset) * 14;
+        const label = {
+            x: midpoint.x + perpendicularX * labelNormal,
+            y: midpoint.y + perpendicularY * labelNormal - 4
+        };
+
+        return {
+            start,
+            end,
+            control,
+            midpoint,
+            label,
+            path: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`
+        };
+    }
+
+    function truncateLinkText(value, maxLength) {
+        const normalized = (value || '').replace(/\s+/g, ' ').trim();
+        return normalized.length <= maxLength ? normalized : `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+    }
+
+    function buildVisibleLinkLabel(link) {
+        const main = [link.label, link.notes].filter(value => value && value.trim()).join(' — ');
+        const ports = link.sourcePort || link.targetPort
+            ? [link.sourcePort || '?', link.targetPort || '?'].join(' ↔ ')
+            : '';
+        return truncateLinkText([main, ports].filter(Boolean).join(' • '), 96);
+    }
+
     function renderLinks() {
         linkLayer.replaceChildren();
+        const offsetIndexes = getParallelOffsetIndexes();
 
         state.links.forEach(link => {
             const source = findNodeById(link.sourceNodeId);
@@ -688,67 +766,41 @@
                 return;
             }
 
-            const start = getNodeCenter(source);
-            const end = getNodeCenter(target);
+            const geometry = buildLinkGeometry(source, target, offsetIndexes.get(link.id) || 0);
             const group = createSvgElement('g');
             group.classList.add('diagram-link-group');
             group.dataset.linkId = link.id;
             group.dataset.selected = state.selectedLinkId === link.id ? 'true' : 'false';
+            group.dataset.linkType = normalizeLinkType(link.linkType).toLowerCase();
 
-            const hit = createSvgElement('line');
+            const hit = createSvgElement('path');
             hit.classList.add('diagram-link-hit');
-            setLineCoordinates(hit, start, end);
+            hit.setAttribute('d', geometry.path);
             hit.addEventListener('pointerdown', event => {
                 selectLink(link.id);
                 event.preventDefault();
                 event.stopPropagation();
             });
 
-            const line = createSvgElement('line');
+            const line = createSvgElement('path');
             line.classList.add('diagram-link-line');
-            setLineCoordinates(line, start, end);
+            line.setAttribute('d', geometry.path);
 
             group.append(hit, line);
 
-            if (link.label) {
+            const visibleLabel = buildVisibleLinkLabel(link);
+            if (visibleLabel) {
                 const label = createSvgElement('text');
                 label.classList.add('diagram-link-label');
-                label.setAttribute('x', String((start.x + end.x) / 2));
-                label.setAttribute('y', String((start.y + end.y) / 2 - 8));
+                label.setAttribute('x', String(geometry.label.x));
+                label.setAttribute('y', String(geometry.label.y));
                 label.setAttribute('text-anchor', 'middle');
-                label.textContent = link.label;
+                label.textContent = visibleLabel;
                 group.appendChild(label);
-            }
-
-            if (link.sourcePort) {
-                const sourcePort = createSvgElement('text');
-                sourcePort.classList.add('diagram-link-port-label');
-                sourcePort.setAttribute('x', String(start.x + (end.x - start.x) * 0.18));
-                sourcePort.setAttribute('y', String(start.y + (end.y - start.y) * 0.18 - 6));
-                sourcePort.setAttribute('text-anchor', 'middle');
-                sourcePort.textContent = link.sourcePort;
-                group.appendChild(sourcePort);
-            }
-
-            if (link.targetPort) {
-                const targetPort = createSvgElement('text');
-                targetPort.classList.add('diagram-link-port-label');
-                targetPort.setAttribute('x', String(start.x + (end.x - start.x) * 0.82));
-                targetPort.setAttribute('y', String(start.y + (end.y - start.y) * 0.82 - 6));
-                targetPort.setAttribute('text-anchor', 'middle');
-                targetPort.textContent = link.targetPort;
-                group.appendChild(targetPort);
             }
 
             linkLayer.appendChild(group);
         });
-    }
-
-    function setLineCoordinates(line, start, end) {
-        line.setAttribute('x1', String(start.x));
-        line.setAttribute('y1', String(start.y));
-        line.setAttribute('x2', String(end.x));
-        line.setAttribute('y2', String(end.y));
     }
 
     function updatePropertiesPanel() {
@@ -1135,7 +1187,8 @@
             label: link.label || '',
             sourcePort: link.sourcePortLabel || '',
             targetPort: link.targetPortLabel || '',
-            notes: link.notes || ''
+            notes: link.notes || '',
+            linkType: normalizeLinkType(link.linkType)
         }));
         state.loading = false;
         state.dirty = false;
@@ -1187,7 +1240,7 @@
                 sourcePortLabel: link.sourcePort || null,
                 targetPortLabel: link.targetPort || null,
                 notes: link.notes || null,
-                linkType: 'default',
+                linkType: normalizeLinkType(link.linkType),
                 metadataJson: null
             }))
         };
@@ -1252,6 +1305,13 @@
     toolButtons.forEach(button => {
         button.addEventListener('click', () => setTool(button.dataset.toolButton || 'select'));
     });
+
+    if (drawLinkTypeSelect) {
+        drawLinkTypeSelect.addEventListener('change', () => {
+            state.selectedDrawLinkType = normalizeLinkType(drawLinkTypeSelect.value);
+            drawLinkTypeSelect.value = state.selectedDrawLinkType;
+        });
+    }
 
     nodeFields.forEach(field => {
         field.addEventListener('input', updateSelectedNodeField);

@@ -239,3 +239,40 @@ Manual regression checklist for this slice:
 8. Try exporting with unsaved changes and confirm the editor warns that export uses the last saved diagram.
 9. Disable `NetworkDiagramsEnabled` and confirm the export route is blocked.
 10. Confirm no endpoint dependency, alerting, state-evaluation, or agent data is created or changed.
+
+## Link Styling, Labels, and Parallel Links Slice
+
+This slice enhances saved Network Diagram links while preserving the architectural boundary that links are documentation/status-overlay data only.
+
+Added capabilities:
+
+- Link media/type can be selected while drawing and edited later from the Properties panel.
+- Supported visual/documentation link types are Copper, Fibre, Wireless, LACP, VPN, Logical, and Other.
+- Copper, fibre, wireless, LACP, VPN, logical, and other links use distinct editor/PDF styles; wireless links are dashed.
+- Link labels and notes are visible on the canvas near the link midpoint, with link notes included when present.
+- Multiple separate links between the same two devices are allowed and are rendered with deterministic parallel offsets so they do not exactly overlap after save/reload.
+- Link type, label, source port, target port, notes, and multiple same-pair links round-trip through persistence and PDF export.
+
+Safety boundary:
+
+- Diagram links remain documentation-only.
+- Drawing, editing, deleting, styling, or exporting diagram links does not create, update, or delete endpoint monitoring dependencies.
+- Link media/type is visual/documentation metadata only and does not affect endpoint monitoring, state evaluation, dependency suppression, alerting, agents, or Startup Gate behaviour.
+
+Manual regression checklist for this slice:
+
+1. Enable `NetworkDiagramsEnabled`.
+2. Create/open a diagram.
+3. Draw a copper link.
+4. Draw a fibre link.
+5. Draw a wireless link and confirm it is dashed.
+6. Draw two or more links between the same two devices and confirm they are visually separated.
+7. Select each parallel link individually.
+8. Edit link type from the Properties panel and confirm the style updates immediately.
+9. Add notes to a link and confirm they appear on the link.
+10. Add label/source port/target port and confirm the on-canvas display is readable.
+11. Move connected nodes and confirm all parallel links and labels follow.
+12. Save, refresh, and confirm link types/notes/parallel links reload correctly.
+13. Export to PDF and confirm link styles/labels/parallel links are represented.
+14. Confirm no endpoint dependencies are created or modified.
+15. Disable `NetworkDiagramsEnabled` and confirm navigation/direct access remain blocked.
