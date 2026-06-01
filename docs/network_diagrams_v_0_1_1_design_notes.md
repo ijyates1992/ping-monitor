@@ -411,3 +411,48 @@ V0.1.1 introduces optional manually managed network diagrams. Admins can enable 
 - Should endpoint state summary be endpoint-wide or assignment-selected per node?
 - Should link styling be simple text-only initially, or include selectable link types such as fibre, copper, wireless, trunk, and LAG?
 
+
+## Current editor slice: monitored endpoint placement and draft links
+
+This V0.1.1 editor slice keeps the current diagram editor client-side draft-only. It does not add diagram, node, or link persistence and it intentionally keeps the visible “Layout is not saved yet” messaging.
+
+Implemented in this slice:
+
+- The editor toolbox lists monitored endpoints visible through the existing endpoint query path.
+- Endpoint toolbox entries can be added to the draft canvas as monitored endpoint visual nodes.
+- Adding the same monitored endpoint more than once is allowed; each placement is a separate visual draft instance and does not create or update an endpoint.
+- Custom draft devices remain available and draggable.
+- Draw link mode lets users create basic client-side links between non-note nodes.
+- Draft links can be selected, deleted, and edited with basic label, source port, target port, and notes metadata.
+- Link labels and port text are rendered on the SVG link overlay when provided.
+- Links are documentation/status-overlay objects only.
+
+Still not implemented in this slice:
+
+- Saved diagrams or persisted layouts.
+- Automatic topology discovery.
+- SNMP discovery.
+- Automatic endpoint creation.
+- Automatic monitoring dependency creation.
+- Physical link-state detection.
+- Monitoring, dependency suppression, alerting, or agent behaviour changes.
+
+Diagram links must not be interpreted as monitoring dependencies or real physical link state. Deleting a diagram link removes only the draft visual link and must not alter endpoint dependencies, monitoring history, alerting, or agent configuration.
+
+### Manual regression checklist for endpoint placement and draft links
+
+1. Enable `NetworkDiagramsEnabled`.
+2. Open the editor at 1920x1080.
+3. Open the editor at 1366x768.
+4. Confirm monitored endpoints appear in the toolbox.
+5. Add a monitored endpoint to the canvas.
+6. Add a custom device to the canvas.
+7. Drag both nodes and confirm they remain within the visible canvas.
+8. Switch to Draw link mode.
+9. Draw a link between the monitored endpoint node and the custom device node.
+10. Drag nodes after creating the link and confirm the line follows the node positions.
+11. Select the link and edit label, source port, target port, and notes text.
+12. Confirm the link label and port text display on or near the line.
+13. Delete the selected link and confirm both nodes remain on the canvas.
+14. Confirm deleting the visual link does not alter endpoint dependencies.
+15. Disable `NetworkDiagramsEnabled` and confirm navigation, linked access, and direct page access are blocked.
