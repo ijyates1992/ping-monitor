@@ -170,3 +170,43 @@ Marquee selection is intentionally left as future work for this slice so it does
 22. Confirm draw-link mode still works.
 23. Disable `NetworkDiagramsEnabled` and confirm nav/direct access are blocked.
 24. Confirm no endpoint dependencies are created, changed, or deleted.
+
+## Persistent editor slice (Issue #501)
+
+This slice converts the network diagram editor from a browser-only draft into a basic persistent editor backed by the main application database.
+
+Included persistence:
+
+- Saved diagrams with name, optional description, canvas size, created/updated timestamps, and editor view state.
+- Saved diagram nodes for monitored endpoint visual nodes, custom devices, and notes.
+- Saved visual links with label, source port label, target port label, notes, link type, and metadata storage.
+- Saved node positions in virtual world coordinates rather than browser screen coordinates.
+- Saved pan and zoom state so refreshing the editor reloads the previous view.
+
+Safety boundaries remain unchanged:
+
+- Network diagrams are documentation/status-overlay only.
+- Diagram links remain visual documentation only and do not create, update, or delete endpoint dependencies.
+- Saving a monitored endpoint diagram node does not rename, update, create, or delete the monitored endpoint.
+- Deleting a diagram node removes only the saved diagram node and attached visual links.
+- Deleting a diagram removes only the saved diagram, diagram nodes, and visual links.
+- Endpoint monitoring, dependency suppression, alerting, state evaluation, agents, assignments, check results, states, alerts, event logs, and monitoring history are not changed by diagram editing.
+
+Operator behaviour:
+
+- `NetworkDiagramsEnabled` still gates navigation and direct page/API access.
+- Admin users can create, open, save, and delete diagrams in this first persistence slice.
+- The editor tracks unsaved changes and warns before browser navigation when local edits have not been saved.
+- Save failures keep the local dirty diagram state in the browser and show an error instead of discarding edits.
+- Diagram deletion confirmation explicitly states: “This deletes only the saved network diagram. Monitoring endpoints and monitoring data will not be deleted.”
+
+Schema/release notes:
+
+- This is schema version 16.
+- New tables: `NetworkDiagrams`, `NetworkDiagramNodes`, and `NetworkDiagramLinks`.
+- Startup Gate schema apply creates the diagram tables explicitly and the required schema version metadata must remain aligned with release metadata.
+
+Backup/restore follow-up:
+
+- Network diagrams are configuration, not operational monitoring history.
+- Configuration backup/restore inclusion for `NetworkDiagrams`, `NetworkDiagramNodes`, and `NetworkDiagramLinks` remains a required follow-up before publishing V0.1.1 if it is not completed in the release branch.

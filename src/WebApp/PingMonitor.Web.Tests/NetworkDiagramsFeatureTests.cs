@@ -3,6 +3,7 @@ using PingMonitor.Web.Controllers;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.ViewModels.Endpoints;
 using PingMonitor.Web.Services;
+using PingMonitor.Web.Services.NetworkDiagrams;
 using PingMonitor.Web.Services.Endpoints;
 using PingMonitor.Web.ViewModels.Admin;
 using PingMonitor.Web.ViewModels.NetworkDiagrams;
@@ -61,7 +62,8 @@ public sealed class NetworkDiagramsFeatureTests
     {
         var controller = new NetworkDiagramsController(
             new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = false }),
-            new FakeEndpointManagementQueryService());
+            new FakeEndpointManagementQueryService(),
+            new FakeNetworkDiagramService());
 
         var result = await controller.Index(CancellationToken.None);
 
@@ -70,7 +72,7 @@ public sealed class NetworkDiagramsFeatureTests
     }
 
     [Fact]
-    public async Task NetworkDiagramsIndex_ReturnsEditorShellView_WhenFeatureEnabled()
+    public async Task NetworkDiagramsIndex_ReturnsListView_WhenFeatureEnabled()
     {
         var controller = new NetworkDiagramsController(
             new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = true }),
@@ -82,22 +84,17 @@ public sealed class NetworkDiagramsFeatureTests
                 Target = "192.0.2.1",
                 IconKey = "router",
                 CurrentState = EndpointStateKind.Up
-            }));
+            }),
+            new FakeNetworkDiagramService(new NetworkDiagram { DiagramId = "diagram-1", Name = "Core", UpdatedAtUtc = DateTimeOffset.UtcNow }));
 
         var result = await controller.Index(CancellationToken.None);
 
         var view = Assert.IsType<ViewResult>(result);
         Assert.Equal("Index", view.ViewName);
-        var model = Assert.IsType<NetworkDiagramsEditorPageViewModel>(view.Model);
-        Assert.Equal("Network diagrams", model.PageTitle);
-        Assert.Equal(NetworkDiagramsEditorPageViewModel.DocumentationOnlyNotice, model.Notice);
-        Assert.False(model.LayoutIsSaved);
-        var endpoint = Assert.Single(model.MonitoredEndpoints);
-        Assert.Equal("endpoint-1", endpoint.EndpointId);
-        Assert.Equal("Core router", endpoint.Name);
-        Assert.Equal("192.0.2.1", endpoint.Target);
-        Assert.Equal("router", endpoint.IconKey);
-        Assert.Equal(EndpointStateKind.Up, endpoint.SummaryState);
+        var model = Assert.IsType<NetworkDiagramListPageViewModel>(view.Model);
+        var diagram = Assert.Single(model.Diagrams);
+        Assert.Equal("diagram-1", diagram.DiagramId);
+        Assert.Equal("Core", diagram.Name);
     }
 
     [Fact]
@@ -111,7 +108,7 @@ public sealed class NetworkDiagramsFeatureTests
             "PingMonitor.Web",
             "Views",
             "NetworkDiagrams",
-            "Index.cshtml");
+            "Edit.cshtml");
 
         var viewMarkup = File.ReadAllText(viewPath);
 
@@ -141,7 +138,7 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("data-zoom-label", viewMarkup);
         Assert.Contains("Diagram links are visual documentation only and do not create monitoring dependencies.", viewMarkup);
         Assert.Contains("data-link-properties", viewMarkup);
-        Assert.Contains("Layout is not saved yet", viewMarkup);
+        Assert.Contains("data-save-status", viewMarkup);
         Assert.Contains("/js/network-diagrams-editor.js", viewMarkup);
         Assert.Contains("/css/network-diagrams.css", viewMarkup);
     }
@@ -186,6 +183,56 @@ public sealed class NetworkDiagramsFeatureTests
         public Task<RemoveEndpointDetails?> GetRemoveDetailsAsync(string assignmentId, CancellationToken cancellationToken)
         {
             return Task.FromResult<RemoveEndpointDetails?>(null);
+        }
+    }
+
+
+    private sealed class FakeNetworkDiagramService : INetworkDiagramService
+    {
+        private readonly List<NetworkDiagram> _diagrams;
+
+        public FakeNetworkDiagramService(params NetworkDiagram[] diagrams)
+        {
+            _diagrams = diagrams.ToList();
+        }
+
+        public Task<IReadOnlyList<NetworkDiagramListSummary>> ListAsync(CancellationToken cancellationToken)
+        {
+            IReadOnlyList<NetworkDiagramListSummary> result = _diagrams.Select(x => new NetworkDiagramListSummary
+            {
+                DiagramId = x.DiagramId,
+                Name = x.Name,
+                Description = x.Description,
+                UpdatedAtUtc = x.UpdatedAtUtc
+            }).ToArray();
+            return Task.FromResult(result);
+        }
+
+        public Task<NetworkDiagram?> GetDiagramAsync(string diagramId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_diagrams.FirstOrDefault(x => x.DiagramId == diagramId));
+        }
+
+        public Task<NetworkDiagram> CreateAsync(string name, string? description, string? userId, CancellationToken cancellationToken)
+        {
+            var diagram = new NetworkDiagram { DiagramId = "diagram-created", Name = name, Description = description, UpdatedAtUtc = DateTimeOffset.UtcNow };
+            _diagrams.Add(diagram);
+            return Task.FromResult(diagram);
+        }
+
+        public Task<NetworkDiagramDto?> LoadAsync(string diagramId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<NetworkDiagramDto?>(null);
+        }
+
+        public Task<NetworkDiagramDto> SaveAsync(string diagramId, NetworkDiagramSaveRequest request, string? userId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new NetworkDiagramDto { DiagramId = diagramId, Name = request.Name });
+        }
+
+        public Task<bool> DeleteAsync(string diagramId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_diagrams.RemoveAll(x => x.DiagramId == diagramId) > 0);
         }
     }
 

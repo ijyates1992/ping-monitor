@@ -42,6 +42,9 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<UserNotificationSettings> UserNotificationSettings => Set<UserNotificationSettings>();
     public DbSet<PendingTelegramLink> PendingTelegramLinks => Set<PendingTelegramLink>();
     public DbSet<TelegramAccount> TelegramAccounts => Set<TelegramAccount>();
+    public DbSet<NetworkDiagram> NetworkDiagrams => Set<NetworkDiagram>();
+    public DbSet<NetworkDiagramNode> NetworkDiagramNodes => Set<NetworkDiagramNode>();
+    public DbSet<NetworkDiagramLink> NetworkDiagramLinks => Set<NetworkDiagramLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -416,6 +419,68 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         telegramAccount.Property(x => x.IsActive).IsRequired();
         telegramAccount.HasIndex(x => x.UserId).IsUnique();
         telegramAccount.HasIndex(x => x.ChatId).IsUnique();
+
+        var networkDiagram = modelBuilder.Entity<NetworkDiagram>();
+        networkDiagram.ToTable("NetworkDiagrams");
+        networkDiagram.HasKey(x => x.DiagramId);
+        networkDiagram.Property(x => x.DiagramId).HasMaxLength(64);
+        networkDiagram.Property(x => x.Name).HasMaxLength(255).IsRequired();
+        networkDiagram.Property(x => x.Description).HasMaxLength(2048);
+        networkDiagram.Property(x => x.CanvasWidth).IsRequired().HasDefaultValue(4000d);
+        networkDiagram.Property(x => x.CanvasHeight).IsRequired().HasDefaultValue(2500d);
+        networkDiagram.Property(x => x.ViewportPanX).IsRequired();
+        networkDiagram.Property(x => x.ViewportPanY).IsRequired();
+        networkDiagram.Property(x => x.ViewportZoom).IsRequired().HasDefaultValue(1d);
+        networkDiagram.Property(x => x.CreatedAtUtc).IsRequired();
+        networkDiagram.Property(x => x.UpdatedAtUtc).IsRequired();
+        networkDiagram.Property(x => x.CreatedByUserId).HasMaxLength(255);
+        networkDiagram.Property(x => x.UpdatedByUserId).HasMaxLength(255);
+        networkDiagram.HasIndex(x => x.Name);
+
+        var networkDiagramNode = modelBuilder.Entity<NetworkDiagramNode>();
+        networkDiagramNode.ToTable("NetworkDiagramNodes");
+        networkDiagramNode.HasKey(x => x.NodeId);
+        networkDiagramNode.Property(x => x.NodeId).HasMaxLength(64);
+        networkDiagramNode.Property(x => x.DiagramId).HasMaxLength(64).IsRequired();
+        networkDiagramNode.Property(x => x.NodeType).HasConversion<string>().HasMaxLength(32).IsRequired();
+        networkDiagramNode.Property(x => x.EndpointId).HasMaxLength(64);
+        networkDiagramNode.Property(x => x.DisplayLabel).HasMaxLength(255).IsRequired();
+        networkDiagramNode.Property(x => x.IconKey).HasMaxLength(64).IsRequired();
+        networkDiagramNode.Property(x => x.X).IsRequired();
+        networkDiagramNode.Property(x => x.Y).IsRequired();
+        networkDiagramNode.Property(x => x.Width).IsRequired().HasDefaultValue(178d);
+        networkDiagramNode.Property(x => x.Height).IsRequired().HasDefaultValue(78d);
+        networkDiagramNode.Property(x => x.Notes).HasMaxLength(4096);
+        networkDiagramNode.Property(x => x.MetadataJson).HasColumnType("longtext");
+        networkDiagramNode.Property(x => x.CreatedAtUtc).IsRequired();
+        networkDiagramNode.Property(x => x.UpdatedAtUtc).IsRequired();
+        networkDiagramNode.HasIndex(x => new { x.DiagramId, x.EndpointId });
+        networkDiagramNode.HasOne(x => x.Diagram)
+            .WithMany(x => x.Nodes)
+            .HasForeignKey(x => x.DiagramId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var networkDiagramLink = modelBuilder.Entity<NetworkDiagramLink>();
+        networkDiagramLink.ToTable("NetworkDiagramLinks");
+        networkDiagramLink.HasKey(x => x.LinkId);
+        networkDiagramLink.Property(x => x.LinkId).HasMaxLength(64);
+        networkDiagramLink.Property(x => x.DiagramId).HasMaxLength(64).IsRequired();
+        networkDiagramLink.Property(x => x.SourceNodeId).HasMaxLength(64).IsRequired();
+        networkDiagramLink.Property(x => x.TargetNodeId).HasMaxLength(64).IsRequired();
+        networkDiagramLink.Property(x => x.Label).HasMaxLength(255);
+        networkDiagramLink.Property(x => x.SourcePortLabel).HasMaxLength(128);
+        networkDiagramLink.Property(x => x.TargetPortLabel).HasMaxLength(128);
+        networkDiagramLink.Property(x => x.Notes).HasMaxLength(4096);
+        networkDiagramLink.Property(x => x.LinkType).HasMaxLength(64).IsRequired().HasDefaultValue("default");
+        networkDiagramLink.Property(x => x.MetadataJson).HasColumnType("longtext");
+        networkDiagramLink.Property(x => x.CreatedAtUtc).IsRequired();
+        networkDiagramLink.Property(x => x.UpdatedAtUtc).IsRequired();
+        networkDiagramLink.HasIndex(x => x.DiagramId);
+        networkDiagramLink.HasIndex(x => new { x.DiagramId, x.SourceNodeId, x.TargetNodeId });
+        networkDiagramLink.HasOne(x => x.Diagram)
+            .WithMany(x => x.Links)
+            .HasForeignKey(x => x.DiagramId)
+            .OnDelete(DeleteBehavior.Cascade);
         var securitySettings = modelBuilder.Entity<SecuritySettings>();
         securitySettings.ToTable("SecuritySettings");
         securitySettings.HasKey(x => x.SecuritySettingsId);

@@ -1,0 +1,184 @@
+@model PingMonitor.Web.ViewModels.NetworkDiagrams.NetworkDiagramEditorPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.PageTitle</title>
+    <link rel="stylesheet" href="/css/network-diagrams.css" />
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main class="network-diagrams-main" data-network-diagram-editor data-diagram-id="@Model.DiagramId" data-load-url="@Model.LoadUrl" data-save-url="@Model.SaveUrl">
+    @Html.AntiForgeryToken()
+    <section class="diagram-editor-shell" aria-labelledby="network-diagrams-title">
+        <header class="diagram-editor-toolbar">
+            <div class="diagram-editor-heading">
+                <h1 id="network-diagrams-title">@Model.PageTitle</h1>
+                <p>@Model.Notice</p>
+                <p class="diagram-documentation-note">Diagram links are visual documentation only and do not create monitoring dependencies.</p>
+            </div>
+            <div class="diagram-editor-status" role="status" aria-live="polite">
+                <span class="status-pill" data-save-status>Saved</span>
+            </div>
+        </header>
+
+        <div class="diagram-editor-layout">
+            <aside class="diagram-toolbox" aria-label="Network diagram toolbox">
+                <section class="toolbox-section" aria-labelledby="toolbox-endpoints-title">
+                    <h2 id="toolbox-endpoints-title">Monitored endpoints</h2>
+                    @if (Model.MonitoredEndpoints.Count == 0)
+                    {
+                        <p class="toolbox-placeholder">No monitored endpoints are available to place on this diagram.</p>
+                    }
+                    else
+                    {
+                        <p class="toolbox-help">Use Add to place another visual instance of an endpoint on the diagram canvas.</p>
+                        <div class="endpoint-toolbox-list" data-endpoint-toolbox-list>
+                            @foreach (var endpoint in Model.MonitoredEndpoints)
+                            {
+                                <article class="endpoint-toolbox-item">
+                                    <div class="endpoint-toolbox-main">
+                                        <span class="endpoint-toolbox-icon" aria-hidden="true">@endpoint.IconKey</span>
+                                        <span class="endpoint-toolbox-text">
+                                            <strong>@endpoint.Name</strong>
+                                            @if (!string.IsNullOrWhiteSpace(endpoint.Target))
+                                            {
+                                                <span>@endpoint.Target</span>
+                                            }
+                                            <span class="endpoint-toolbox-state">State: @endpoint.SummaryState</span>
+                                        </span>
+                                    </div>
+                                    <button type="button"
+                                            data-add-endpoint-node
+                                            data-endpoint-id="@endpoint.EndpointId"
+                                            data-endpoint-name="@endpoint.Name"
+                                            data-endpoint-target="@endpoint.Target"
+                                            data-endpoint-icon="@endpoint.IconKey"
+                                            data-endpoint-state="@endpoint.SummaryState">
+                                        Add
+                                    </button>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <section class="toolbox-section" aria-labelledby="toolbox-devices-title">
+                    <h2 id="toolbox-devices-title">Custom devices</h2>
+                    <div class="toolbox-actions" aria-label="Add custom diagram node">
+                        <button type="button" data-add-node data-node-type="router" data-node-label="Router" data-node-symbol="RTR">Router</button>
+                        <button type="button" data-add-node data-node-type="switch" data-node-label="Switch" data-node-symbol="SW">Switch</button>
+                        <button type="button" data-add-node data-node-type="firewall" data-node-label="Firewall" data-node-symbol="FW">Firewall</button>
+                        <button type="button" data-add-node data-node-type="server" data-node-label="Server" data-node-symbol="SRV">Server</button>
+                        <button type="button" data-add-node data-node-type="generic-device" data-node-label="Generic device" data-node-symbol="DEV">Generic device</button>
+                    </div>
+                </section>
+
+                <section class="toolbox-section" aria-labelledby="toolbox-notes-title">
+                    <h2 id="toolbox-notes-title">Notes</h2>
+                    <div class="toolbox-actions">
+                        <button type="button" data-add-node data-node-type="note" data-node-label="Note" data-node-symbol="NOTE">Note</button>
+                    </div>
+                </section>
+            </aside>
+
+            <section class="diagram-workspace" aria-label="Network diagram workspace">
+                <div class="diagram-workspace-toolbar" aria-label="Network diagram tools">
+                    <button type="button" class="diagram-tool-button" data-tool-button="select" aria-pressed="true">Select / move</button>
+                    <button type="button" class="diagram-tool-button" data-tool-button="draw-link" aria-pressed="false">Draw link</button>
+                    <span class="diagram-toolbar-divider" aria-hidden="true"></span>
+                    <button type="button" class="diagram-tool-button" data-select-all>Select all nodes</button>
+                    <button type="button" class="diagram-tool-button" data-clear-selection disabled>Clear selection</button>
+                    <button type="button" class="diagram-tool-button danger-button" data-delete-selection disabled>Delete selected</button>
+                    <span class="diagram-toolbar-divider" aria-hidden="true"></span>
+                    <button type="button" class="diagram-tool-button" data-zoom-out aria-label="Zoom out">Zoom out</button>
+                    <button type="button" class="diagram-tool-button" data-zoom-in aria-label="Zoom in">Zoom in</button>
+                    <button type="button" class="diagram-tool-button" data-reset-view>Reset view</button>
+                    <button type="button" class="diagram-tool-button" data-fit-content>Fit content</button>
+                    <span class="diagram-zoom-label" data-zoom-label aria-live="polite">100%</span>
+                    <button type="button" class="diagram-tool-button" data-save-diagram>Save</button>
+                    <span class="diagram-tool-hint" data-tool-hint>Select nodes to move them. Draw link mode creates documentation-only links. Drag empty space to pan. Use mouse wheel to zoom.</span>
+                </div>
+                <div class="diagram-canvas-host" data-diagram-canvas-host>
+                    <div class="diagram-canvas" data-diagram-canvas role="application" aria-label="Network diagram canvas" tabindex="0">
+                        <div class="diagram-empty-state" data-empty-state>
+                            Add a monitored endpoint or custom device from the toolbox. Drag empty space to pan. Use mouse wheel to zoom.
+                        </div>
+                        <div class="diagram-world" data-diagram-world>
+                            <svg class="diagram-link-layer" data-link-layer aria-hidden="true"></svg>
+                            <div class="diagram-node-layer" data-node-layer></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="diagram-properties" aria-label="Diagram selection properties">
+                <h2>Properties</h2>
+                <div data-no-selection-panel>
+                    <p>Select a node or visual link to edit saved diagram properties. Shift/Ctrl-click nodes to multi-select and move them as a group.</p>
+                </div>
+                <form class="node-properties" data-node-properties hidden>
+                    <p class="toolbox-help" data-selected-node-kind>Selected diagram node</p>
+                    <p class="toolbox-help" data-selected-node-help>Node edits affect only this saved diagram. Monitored endpoints are not renamed or modified.</p>
+                    <dl class="diagram-property-summary">
+                        <div>
+                            <dt>Node type</dt>
+                            <dd data-selected-node-type>Diagram node</dd>
+                        </div>
+                        <div data-selected-node-endpoint-details hidden>
+                            <dt>Monitored endpoint</dt>
+                            <dd>
+                                <span data-selected-node-endpoint-name></span>
+                                <span data-selected-node-endpoint-target></span>
+                            </dd>
+                        </div>
+                    </dl>
+                    <label>
+                        Diagram display label
+                        <input type="text" data-node-field="label" maxlength="80" />
+                    </label>
+                    <label>
+                        Notes
+                        <textarea data-node-field="notes" rows="4" maxlength="400"></textarea>
+                    </label>
+                    <button type="button" class="danger-button" data-delete-selection>Delete selected node</button>
+                </form>
+                <div class="multi-node-properties" data-multi-node-properties hidden>
+                    <p><strong><span data-selected-node-count>0</span> nodes selected.</strong></p>
+                    <p class="toolbox-help">Drag any selected node to move the selected nodes together. Bulk editing is not enabled for this slice.</p>
+                    <button type="button" class="danger-button" data-delete-selection>Delete selected nodes</button>
+                </div>
+                <form class="link-properties" data-link-properties hidden>
+                    <p class="toolbox-help">This visual link does not create or modify monitoring dependencies. Link metadata is saved diagram documentation only.</p>
+                    <label>
+                        Link label
+                        <input type="text" data-link-field="label" maxlength="80" />
+                    </label>
+                    <label>
+                        Source port
+                        <input type="text" data-link-field="sourcePort" maxlength="80" />
+                    </label>
+                    <label>
+                        Target port
+                        <input type="text" data-link-field="targetPort" maxlength="80" />
+                    </label>
+                    <label>
+                        Notes
+                        <textarea data-link-field="notes" rows="4" maxlength="400"></textarea>
+                    </label>
+                    <button type="button" class="danger-button" data-delete-selection>Delete selected link</button>
+                </form>
+            </aside>
+        </div>
+
+        <footer class="diagram-status-bar">
+            <span>Unsaved changes are kept in this browser until you save. Visual links remain documentation-only.</span>
+            <span data-canvas-size>Canvas size pending</span>
+        </footer>
+    </section>
+</main>
+<script src="/js/network-diagrams-editor.js" defer></script>
+</body>
+</html>

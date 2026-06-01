@@ -761,3 +761,67 @@ html[data-theme="dark"] .diagram-link-port-label {
         border-bottom: 0;
     }
 }
+
+.diagram-list-create,
+.diagram-empty-list,
+.diagram-list {
+    padding: 1rem;
+}
+
+.diagram-create-form,
+.diagram-list-card {
+    display: grid;
+    gap: .75rem;
+    padding: 1rem;
+    border: 1px solid var(--diagram-border);
+    border-radius: .75rem;
+    background: var(--diagram-panel);
+}
+
+.diagram-create-form label {
+    display: grid;
+    gap: .35rem;
+}
+
+.diagram-create-form input,
+.diagram-create-form textarea {
+    min-height: 44px;
+    border: 1px solid var(--diagram-border);
+    border-radius: .5rem;
+    padding: .65rem;
+    background: var(--diagram-panel);
+    color: var(--diagram-text);
+}
+
+.diagram-list {
+    display: grid;
+    gap: .75rem;
+}
+
+.diagram-list-card {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+}
+
+.diagram-list-card form {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+}
+
+.status-pill[data-dirty="true"] {
+    background: var(--diagram-warning-soft);
+    border-color: var(--diagram-warning);
+}
+
+.status-pill[data-error="true"] {
+    background: #fee2e2;
+    border-color: #dc2626;
+    color: #7f1d1d;
+}
+
+@media (max-width: 720px) {
+    .diagram-list-card {
+        grid-template-columns: 1fr;
+    }
+}
