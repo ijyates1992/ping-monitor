@@ -309,6 +309,7 @@ Represents singleton control-plane settings managed from the admin page.
 - `defaultTimeoutMs`
 - `defaultFailureThreshold`
 - `defaultRecoveryThreshold`
+- `networkDiagramsEnabled` (default `false`; gates the placeholder Network diagrams UI)
 - `updatedAtUtc`
 
 ---

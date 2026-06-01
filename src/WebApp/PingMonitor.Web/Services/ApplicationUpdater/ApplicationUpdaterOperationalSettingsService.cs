@@ -69,6 +69,7 @@ internal sealed class ApplicationUpdaterOperationalSettingsService : IApplicatio
                 DegradedRttIncreasePercent = 20d,
                 DegradedJitterIncreasePercent = 20d,
                 DegradedMinimumSamples = 10,
+                NetworkDiagramsEnabled = false,
                 EnableAutomaticUpdateChecks = _updaterOptions.EnableAutomaticUpdateChecks,
                 AutomaticUpdateCheckIntervalMinutes = ResolveAutomaticCheckInterval(_updaterOptions.AutomaticUpdateCheckIntervalMinutes),
                 AutomaticallyDownloadAndStageUpdates = _updaterOptions.AutomaticallyDownloadAndStageUpdates,

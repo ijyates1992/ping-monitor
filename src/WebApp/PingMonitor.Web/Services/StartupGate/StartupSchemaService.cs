@@ -94,6 +94,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "DegradedRttIncreasePercent",
         "DegradedJitterIncreasePercent",
         "DegradedMinimumSamples",
+        "NetworkDiagramsEnabled",
         "EnableAutomaticUpdateChecks",
         "AutomaticUpdateCheckIntervalMinutes",
         "AutomaticallyDownloadAndStageUpdates",
@@ -448,6 +449,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `DegradedRttIncreasePercent` double NOT NULL DEFAULT 20,
                 `DegradedJitterIncreasePercent` double NOT NULL DEFAULT 20,
                 `DegradedMinimumSamples` int NOT NULL DEFAULT 10,
+                `NetworkDiagramsEnabled` tinyint(1) NOT NULL DEFAULT 0,
                 `EnableAutomaticUpdateChecks` tinyint(1) NOT NULL DEFAULT 1,
                 `AutomaticUpdateCheckIntervalMinutes` int NOT NULL DEFAULT 15,
                 `AutomaticallyDownloadAndStageUpdates` tinyint(1) NOT NULL DEFAULT 0,
@@ -1419,6 +1421,16 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """
                 ALTER TABLE `ApplicationSettings`
                 ADD COLUMN `EnableAutomaticUpdateChecks` tinyint(1) NOT NULL DEFAULT 1;
+                """,
+                cancellationToken);
+        }
+
+        if (!await HasApplicationSettingsColumnAsync(connection, "NetworkDiagramsEnabled", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `ApplicationSettings`
+                ADD COLUMN `NetworkDiagramsEnabled` tinyint(1) NOT NULL DEFAULT 0;
                 """,
                 cancellationToken);
         }

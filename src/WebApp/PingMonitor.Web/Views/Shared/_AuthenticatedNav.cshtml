@@ -1,7 +1,15 @@
 @using PingMonitor.Web.Services.Identity
+@inject PingMonitor.Web.Services.IApplicationSettingsService ApplicationSettingsService
 @{
     var path = Context?.Request?.Path.Value ?? string.Empty;
     var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    var networkDiagramsEnabled = false;
+    if (User.Identity?.IsAuthenticated == true)
+    {
+        var cancellationToken = Context?.RequestAborted ?? CancellationToken.None;
+        var applicationSettings = await ApplicationSettingsService.GetCurrentAsync(cancellationToken);
+        networkDiagramsEnabled = applicationSettings.NetworkDiagramsEnabled;
+    }
 
     static bool IsCurrent(string path, params string[] prefixes)
     {
@@ -16,7 +24,7 @@
         return false;
     }
 
-    var monitoringOpen = IsCurrent(path, "/", "/status", "/endpoints", "/groups");
+    var monitoringOpen = IsCurrent(path, "/", "/status", "/endpoints", "/groups", "/network-diagrams");
     var agentsOpen = IsCurrent(path, "/agents");
     var eventsOpen = IsCurrent(path, "/admin/security");
     var adminOpen = IsCurrent(path, "/admin", "/users", "/settings/notifications");
@@ -192,6 +200,10 @@
                 @if (isAdmin)
                 {
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/groups")" href="/groups">Manage groups</a>
+                }
+                @if (isAdmin && networkDiagramsEnabled)
+                {
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/network-diagrams")" href="/network-diagrams">Network diagrams</a>
                 }
             </div>
         </details>

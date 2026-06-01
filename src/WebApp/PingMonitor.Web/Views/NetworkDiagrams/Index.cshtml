@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Network diagrams</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --panel:#eef4ff; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 960px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+        .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .8rem 1rem; border-radius: 10px; border: 1px solid var(--border); color: var(--text); background: #fff; font-weight: 600; text-decoration: none; }
+        .muted { color: var(--muted); }
+        .placeholder-panel { border: 2px dashed var(--border); border-radius: 12px; background: var(--panel); min-height: 280px; display: grid; place-items: center; padding: 1rem; text-align: center; }
+        .placeholder-title { font-weight: 700; margin-bottom: .35rem; }
+        .note { border-left: 4px solid var(--accent); padding: .75rem 1rem; background: #fff; color: var(--text); }
+    </style>
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main>
+    <div class="stack">
+        <section class="card">
+            <h1>Network diagrams</h1>
+            <p class="muted">Network diagrams will allow monitored endpoints and custom devices to be placed on a manually maintained topology canvas.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/status">Back to status</a>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Future diagram editor</h2>
+            <div class="placeholder-panel" aria-label="Future network diagram editor placeholder">
+                <div>
+                    <div class="placeholder-title">Diagram editor placeholder</div>
+                    <div class="muted">Canvas, node, and link editing will be added in a future slice.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card note">
+            This feature is documentation-only and does not alter monitoring state, dependency suppression, alerting, or agent behaviour.
+        </section>
+    </div>
+</main>
+</body>
+</html>
