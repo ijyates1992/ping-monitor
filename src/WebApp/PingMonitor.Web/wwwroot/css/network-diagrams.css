@@ -343,3 +343,315 @@ body {
         min-height: 60vh;
     }
 }
+
+.diagram-documentation-note {
+    color: var(--diagram-warning) !important;
+    font-weight: 700;
+}
+
+.diagram-editor-layout {
+    grid-template-columns: minmax(230px, 300px) minmax(0, 1fr) minmax(220px, 280px);
+}
+
+.toolbox-help {
+    margin: 0;
+    color: var(--diagram-muted);
+    font-size: .84rem;
+    line-height: 1.35;
+}
+
+.endpoint-toolbox-list {
+    display: grid;
+    gap: .55rem;
+}
+
+.endpoint-toolbox-item {
+    display: grid;
+    gap: .55rem;
+    padding: .65rem;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+}
+
+.endpoint-toolbox-main {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .55rem;
+    align-items: start;
+}
+
+.endpoint-toolbox-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: #e8f0ff;
+    color: #0f62fe;
+    font-size: .68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.endpoint-toolbox-text {
+    display: grid;
+    gap: .15rem;
+    min-width: 0;
+    color: var(--diagram-muted);
+    font-size: .82rem;
+    line-height: 1.25;
+}
+
+.endpoint-toolbox-text strong {
+    color: var(--diagram-text);
+    overflow-wrap: anywhere;
+}
+
+.endpoint-toolbox-state {
+    font-weight: 700;
+}
+
+.endpoint-toolbox-item button,
+.diagram-tool-button,
+.link-properties button,
+.danger-button {
+    min-height: 44px;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+    color: var(--diagram-text);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    padding: .55rem .7rem;
+}
+
+.endpoint-toolbox-item button:hover,
+.endpoint-toolbox-item button:focus-visible,
+.diagram-tool-button:hover,
+.diagram-tool-button:focus-visible,
+.link-properties button:hover,
+.link-properties button:focus-visible {
+    outline: none;
+    border-color: var(--diagram-accent);
+    box-shadow: 0 0 0 3px var(--diagram-accent-soft);
+}
+
+.diagram-workspace {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: .65rem;
+}
+
+.diagram-workspace-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+}
+
+.diagram-tool-button[aria-pressed="true"] {
+    border-color: var(--diagram-accent);
+    background: var(--diagram-accent-soft);
+    color: var(--diagram-accent);
+}
+
+.diagram-tool-hint {
+    color: var(--diagram-muted);
+    font-size: .85rem;
+    line-height: 1.35;
+}
+
+.diagram-link-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.diagram-node-layer {
+    z-index: 2;
+}
+
+.diagram-link-hit {
+    pointer-events: stroke;
+    stroke: transparent;
+    stroke-width: 18;
+    cursor: pointer;
+}
+
+.diagram-link-line {
+    pointer-events: none;
+    stroke: #475467;
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+.diagram-link-group[data-selected="true"] .diagram-link-line {
+    stroke: var(--diagram-accent);
+    stroke-width: 4;
+}
+
+.diagram-link-label,
+.diagram-link-port-label {
+    pointer-events: none;
+    fill: var(--diagram-text);
+    paint-order: stroke;
+    stroke: var(--diagram-panel);
+    stroke-width: 4px;
+    stroke-linejoin: round;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.diagram-link-port-label {
+    fill: var(--diagram-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.diagram-node[data-node-kind="monitored-endpoint"] {
+    border-color: #7aa7ff;
+    background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+}
+
+.diagram-node[data-selected="true"] {
+    border-color: var(--diagram-accent);
+    box-shadow: 0 0 0 3px var(--diagram-accent-soft), 0 3px 8px rgba(16, 24, 40, .13);
+}
+
+.diagram-node[data-link-pending="true"] {
+    outline: 3px solid var(--diagram-warning);
+    outline-offset: 2px;
+}
+
+.diagram-node-target {
+    display: block;
+    margin-top: .15rem;
+    color: var(--diagram-muted);
+    font-size: .78rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.diagram-properties {
+    min-height: 0;
+    overflow-y: auto;
+    padding: .85rem;
+    border-left: 1px solid var(--diagram-border);
+    background: var(--diagram-panel-subtle);
+}
+
+.diagram-properties h2 {
+    margin: 0 0 .65rem 0;
+    font-size: .92rem;
+}
+
+.diagram-properties p {
+    margin: 0;
+    color: var(--diagram-muted);
+    font-size: .9rem;
+    line-height: 1.35;
+}
+
+.link-properties {
+    display: grid;
+    gap: .65rem;
+}
+
+.link-properties[hidden] {
+    display: none;
+}
+
+.link-properties label {
+    display: grid;
+    gap: .25rem;
+    color: var(--diagram-muted);
+    font-size: .84rem;
+    font-weight: 700;
+}
+
+.link-properties input,
+.link-properties textarea {
+    width: 100%;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+    color: var(--diagram-text);
+    font: inherit;
+    padding: .55rem .6rem;
+}
+
+.danger-button {
+    border-color: #f3b3b3;
+    background: #fff5f5;
+    color: #b42318;
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+    --diagram-bg: #111827;
+    --diagram-panel: #1f2937;
+    --diagram-panel-subtle: #172033;
+    --diagram-text: #f9fafb;
+    --diagram-muted: #cbd5e1;
+    --diagram-border: #374151;
+    --diagram-accent: #8ab4ff;
+    --diagram-accent-soft: rgba(138, 180, 255, .18);
+    --diagram-warning: #fbbf24;
+    --diagram-warning-soft: rgba(251, 191, 36, .16);
+    --diagram-shadow: none;
+}
+
+html[data-theme="dark"] .diagram-workspace {
+    background: #111827;
+}
+
+html[data-theme="dark"] .diagram-canvas-host {
+    border-color: #374151;
+    background:
+        linear-gradient(rgba(203, 213, 225, .08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(203, 213, 225, .08) 1px, transparent 1px),
+        #0f172a;
+    background-size: 24px 24px;
+}
+
+html[data-theme="dark"] .diagram-node[data-node-kind="monitored-endpoint"] {
+    background: linear-gradient(180deg, #1f2937 0%, #172554 100%);
+}
+
+html[data-theme="dark"] .diagram-link-line {
+    stroke: #cbd5e1;
+}
+
+html[data-theme="dark"] .diagram-link-label,
+html[data-theme="dark"] .diagram-link-port-label {
+    stroke: #1f2937;
+}
+
+@media (max-width: 980px) {
+    .diagram-editor-layout {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(60vh, 1fr) auto;
+    }
+
+    .diagram-toolbox,
+    .diagram-properties {
+        max-height: none;
+        overflow: visible;
+        border-right: 0;
+        border-left: 0;
+        border-bottom: 1px solid var(--diagram-border);
+    }
+
+    .diagram-properties {
+        border-top: 1px solid var(--diagram-border);
+        border-bottom: 0;
+    }
+}

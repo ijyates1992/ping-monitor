@@ -16,6 +16,7 @@
             <div class="diagram-editor-heading">
                 <h1 id="network-diagrams-title">@Model.PageTitle</h1>
                 <p>@Model.Notice</p>
+                <p class="diagram-documentation-note">Diagram links are visual documentation only and do not create monitoring dependencies.</p>
             </div>
             <div class="diagram-editor-status" role="status" aria-live="polite">
                 <span class="status-pill status-pill-warning">Layout is not saved yet</span>
@@ -26,7 +27,41 @@
             <aside class="diagram-toolbox" aria-label="Network diagram toolbox">
                 <section class="toolbox-section" aria-labelledby="toolbox-endpoints-title">
                     <h2 id="toolbox-endpoints-title">Monitored endpoints</h2>
-                    <p class="toolbox-placeholder">Endpoint placement will be connected in a later slice. No live monitoring data is shown here yet.</p>
+                    @if (Model.MonitoredEndpoints.Count == 0)
+                    {
+                        <p class="toolbox-placeholder">No monitored endpoints are available to place on this draft canvas.</p>
+                    }
+                    else
+                    {
+                        <p class="toolbox-help">Use Add to place another visual instance of an endpoint on the draft canvas.</p>
+                        <div class="endpoint-toolbox-list" data-endpoint-toolbox-list>
+                            @foreach (var endpoint in Model.MonitoredEndpoints)
+                            {
+                                <article class="endpoint-toolbox-item">
+                                    <div class="endpoint-toolbox-main">
+                                        <span class="endpoint-toolbox-icon" aria-hidden="true">@endpoint.IconKey</span>
+                                        <span class="endpoint-toolbox-text">
+                                            <strong>@endpoint.Name</strong>
+                                            @if (!string.IsNullOrWhiteSpace(endpoint.Target))
+                                            {
+                                                <span>@endpoint.Target</span>
+                                            }
+                                            <span class="endpoint-toolbox-state">State: @endpoint.SummaryState</span>
+                                        </span>
+                                    </div>
+                                    <button type="button"
+                                            data-add-endpoint-node
+                                            data-endpoint-id="@endpoint.EndpointId"
+                                            data-endpoint-name="@endpoint.Name"
+                                            data-endpoint-target="@endpoint.Target"
+                                            data-endpoint-icon="@endpoint.IconKey"
+                                            data-endpoint-state="@endpoint.SummaryState">
+                                        Add
+                                    </button>
+                                </article>
+                            }
+                        </div>
+                    }
                 </section>
 
                 <section class="toolbox-section" aria-labelledby="toolbox-devices-title">
@@ -49,19 +84,52 @@
             </aside>
 
             <section class="diagram-workspace" aria-label="Network diagram workspace">
+                <div class="diagram-workspace-toolbar" aria-label="Network diagram tools">
+                    <button type="button" class="diagram-tool-button" data-tool-button="select" aria-pressed="true">Select / move</button>
+                    <button type="button" class="diagram-tool-button" data-tool-button="draw-link" aria-pressed="false">Draw link</button>
+                    <span class="diagram-tool-hint" data-tool-hint>Select nodes to move them. Draw link mode creates documentation-only links.</span>
+                </div>
                 <div class="diagram-canvas-host" data-diagram-canvas-host>
                     <div class="diagram-canvas" data-diagram-canvas role="application" aria-label="Draft network diagram canvas">
                         <div class="diagram-empty-state" data-empty-state>
-                            Add a draft device from the toolbox.
+                            Add a monitored endpoint or draft device from the toolbox.
                         </div>
+                        <svg class="diagram-link-layer" data-link-layer aria-hidden="true"></svg>
                         <div class="diagram-node-layer" data-node-layer></div>
                     </div>
                 </div>
             </section>
+
+            <aside class="diagram-properties" aria-label="Diagram selection properties">
+                <h2>Properties</h2>
+                <div data-no-selection-panel>
+                    <p>Select a visual link to edit its draft label, ports, or notes.</p>
+                </div>
+                <form class="link-properties" data-link-properties hidden>
+                    <p class="toolbox-help">Selected link metadata is client-side draft documentation only.</p>
+                    <label>
+                        Link label
+                        <input type="text" data-link-field="label" maxlength="80" />
+                    </label>
+                    <label>
+                        Source port
+                        <input type="text" data-link-field="sourcePort" maxlength="80" />
+                    </label>
+                    <label>
+                        Target port
+                        <input type="text" data-link-field="targetPort" maxlength="80" />
+                    </label>
+                    <label>
+                        Notes
+                        <textarea data-link-field="notes" rows="4" maxlength="400"></textarea>
+                    </label>
+                    <button type="button" class="danger-button" data-delete-link>Delete selected link</button>
+                </form>
+            </aside>
         </div>
 
         <footer class="diagram-status-bar">
-            <span>Draft nodes are temporary client-side layout only.</span>
+            <span>Draft nodes and links are temporary client-side layout only.</span>
             <span data-canvas-size>Canvas size pending</span>
         </footer>
     </section>
