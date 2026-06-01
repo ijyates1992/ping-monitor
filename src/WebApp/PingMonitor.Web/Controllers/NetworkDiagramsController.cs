@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.ViewModels.NetworkDiagrams;
 
 namespace PingMonitor.Web.Controllers;
 
@@ -25,6 +26,6 @@ public sealed class NetworkDiagramsController : Controller
             return NotFound("Network diagrams are not enabled.");
         }
 
-        return View("Index");
+        return View("Index", new NetworkDiagramsEditorPageViewModel());
     }
 }

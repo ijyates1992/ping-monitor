@@ -1,51 +1,71 @@
+@model PingMonitor.Web.ViewModels.NetworkDiagrams.NetworkDiagramsEditorPageViewModel
 <!DOCTYPE html>
 <html lang="en">
 <head>
     @await Html.PartialAsync("_ThemeHead")
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Network diagrams</title>
-    <style>
-        :root { color-scheme: light; --bg:#f3f6f8; --card:#fff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --panel:#eef4ff; }
-        * { box-sizing: border-box; }
-        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
-        main { max-width: 960px; margin: 0 auto; padding: 1rem; }
-        .stack { display: grid; gap: 1rem; }
-        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
-        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
-        .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .8rem 1rem; border-radius: 10px; border: 1px solid var(--border); color: var(--text); background: #fff; font-weight: 600; text-decoration: none; }
-        .muted { color: var(--muted); }
-        .placeholder-panel { border: 2px dashed var(--border); border-radius: 12px; background: var(--panel); min-height: 280px; display: grid; place-items: center; padding: 1rem; text-align: center; }
-        .placeholder-title { font-weight: 700; margin-bottom: .35rem; }
-        .note { border-left: 4px solid var(--accent); padding: .75rem 1rem; background: #fff; color: var(--text); }
-    </style>
+    <title>@Model.PageTitle</title>
+    <link rel="stylesheet" href="/css/network-diagrams.css" />
 </head>
 <body>
 @await Html.PartialAsync("_AuthenticatedNav")
-<main>
-    <div class="stack">
-        <section class="card">
-            <h1>Network diagrams</h1>
-            <p class="muted">Network diagrams will allow monitored endpoints and custom devices to be placed on a manually maintained topology canvas.</p>
-            <div class="button-row">
-                <a class="button-secondary" href="/status">Back to status</a>
+<main class="network-diagrams-main" data-network-diagram-editor>
+    <section class="diagram-editor-shell" aria-labelledby="network-diagrams-title">
+        <header class="diagram-editor-toolbar">
+            <div class="diagram-editor-heading">
+                <h1 id="network-diagrams-title">@Model.PageTitle</h1>
+                <p>@Model.Notice</p>
             </div>
-        </section>
+            <div class="diagram-editor-status" role="status" aria-live="polite">
+                <span class="status-pill status-pill-warning">Layout is not saved yet</span>
+            </div>
+        </header>
 
-        <section class="card">
-            <h2>Future diagram editor</h2>
-            <div class="placeholder-panel" aria-label="Future network diagram editor placeholder">
-                <div>
-                    <div class="placeholder-title">Diagram editor placeholder</div>
-                    <div class="muted">Canvas, node, and link editing will be added in a future slice.</div>
+        <div class="diagram-editor-layout">
+            <aside class="diagram-toolbox" aria-label="Network diagram toolbox">
+                <section class="toolbox-section" aria-labelledby="toolbox-endpoints-title">
+                    <h2 id="toolbox-endpoints-title">Monitored endpoints</h2>
+                    <p class="toolbox-placeholder">Endpoint placement will be connected in a later slice. No live monitoring data is shown here yet.</p>
+                </section>
+
+                <section class="toolbox-section" aria-labelledby="toolbox-devices-title">
+                    <h2 id="toolbox-devices-title">Custom devices</h2>
+                    <div class="toolbox-actions" aria-label="Add custom diagram node">
+                        <button type="button" data-add-node data-node-type="router" data-node-label="Router" data-node-symbol="RTR">Router</button>
+                        <button type="button" data-add-node data-node-type="switch" data-node-label="Switch" data-node-symbol="SW">Switch</button>
+                        <button type="button" data-add-node data-node-type="firewall" data-node-label="Firewall" data-node-symbol="FW">Firewall</button>
+                        <button type="button" data-add-node data-node-type="server" data-node-label="Server" data-node-symbol="SRV">Server</button>
+                        <button type="button" data-add-node data-node-type="generic-device" data-node-label="Generic device" data-node-symbol="DEV">Generic device</button>
+                    </div>
+                </section>
+
+                <section class="toolbox-section" aria-labelledby="toolbox-notes-title">
+                    <h2 id="toolbox-notes-title">Notes</h2>
+                    <div class="toolbox-actions">
+                        <button type="button" data-add-node data-node-type="note" data-node-label="Note" data-node-symbol="NOTE">Note</button>
+                    </div>
+                </section>
+            </aside>
+
+            <section class="diagram-workspace" aria-label="Network diagram workspace">
+                <div class="diagram-canvas-host" data-diagram-canvas-host>
+                    <div class="diagram-canvas" data-diagram-canvas role="application" aria-label="Draft network diagram canvas">
+                        <div class="diagram-empty-state" data-empty-state>
+                            Add a draft device from the toolbox.
+                        </div>
+                        <div class="diagram-node-layer" data-node-layer></div>
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
 
-        <section class="card note">
-            This feature is documentation-only and does not alter monitoring state, dependency suppression, alerting, or agent behaviour.
-        </section>
-    </div>
+        <footer class="diagram-status-bar">
+            <span>Draft nodes are temporary client-side layout only.</span>
+            <span data-canvas-size>Canvas size pending</span>
+        </footer>
+    </section>
 </main>
+<script src="/js/network-diagrams-editor.js" defer></script>
 </body>
 </html>

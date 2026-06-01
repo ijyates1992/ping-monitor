@@ -3,6 +3,7 @@ using PingMonitor.Web.Controllers;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.ViewModels.Admin;
+using PingMonitor.Web.ViewModels.NetworkDiagrams;
 using Xunit;
 
 namespace PingMonitor.Web.Tests;
@@ -66,7 +67,7 @@ public sealed class NetworkDiagramsFeatureTests
     }
 
     [Fact]
-    public async Task NetworkDiagramsIndex_ReturnsPlaceholderView_WhenFeatureEnabled()
+    public async Task NetworkDiagramsIndex_ReturnsEditorShellView_WhenFeatureEnabled()
     {
         var controller = new NetworkDiagramsController(new FakeApplicationSettingsService(
             new ApplicationSettingsDto { NetworkDiagramsEnabled = true }));
@@ -75,6 +76,51 @@ public sealed class NetworkDiagramsFeatureTests
 
         var view = Assert.IsType<ViewResult>(result);
         Assert.Equal("Index", view.ViewName);
+        var model = Assert.IsType<NetworkDiagramsEditorPageViewModel>(view.Model);
+        Assert.Equal("Network diagrams", model.PageTitle);
+        Assert.Equal(NetworkDiagramsEditorPageViewModel.DocumentationOnlyNotice, model.Notice);
+        Assert.False(model.LayoutIsSaved);
+    }
+
+    [Fact]
+    public void NetworkDiagramsIndex_ViewIncludesEditorShellElements()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var viewPath = Path.Combine(
+            repoRoot,
+            "src",
+            "WebApp",
+            "PingMonitor.Web",
+            "Views",
+            "NetworkDiagrams",
+            "Index.cshtml");
+
+        var viewMarkup = File.ReadAllText(viewPath);
+
+        Assert.Contains("data-network-diagram-editor", viewMarkup);
+        Assert.Contains("data-diagram-canvas-host", viewMarkup);
+        Assert.Contains("Network diagram toolbox", viewMarkup);
+        Assert.Contains("Layout is not saved yet", viewMarkup);
+        Assert.Contains("/js/network-diagrams-editor.js", viewMarkup);
+        Assert.Contains("/css/network-diagrams.css", viewMarkup);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "AGENTS.md")) &&
+                Directory.Exists(Path.Combine(directory.FullName, "src", "WebApp")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate repository root.");
     }
 
     private sealed class FakeApplicationSettingsService : IApplicationSettingsService
