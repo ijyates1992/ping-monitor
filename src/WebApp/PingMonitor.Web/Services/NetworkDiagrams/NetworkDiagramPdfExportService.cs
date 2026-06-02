@@ -283,7 +283,7 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
             var ty = MapY(target.Y + target.Height / 2);
             var geometry = BuildLinkGeometry(sx, sy, tx, ty, offsetIndexes.GetValueOrDefault(link.LinkId));
             stream.AppendLine("q");
-            ApplyLinkStyle(stream, link.LinkType);
+            ApplyLinkStyle(stream, link);
             stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.##} {1:0.##} m {2:0.##} {3:0.##} l S\n", geometry.StartX, geometry.StartY, geometry.EndX, geometry.EndY);
             stream.AppendLine("Q");
 
@@ -375,38 +375,40 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
         return new LinkGeometry(startX, startY, endX, endY, (startX + endX) / 2, (startY + endY) / 2 + (offset == 0 ? 6 : Math.Sign(offset) * 6));
     }
 
-    private static void ApplyLinkStyle(StringBuilder stream, string? linkType)
+    private static void ApplyLinkStyle(StringBuilder stream, NetworkDiagramLinkDto link)
     {
-        switch (NetworkDiagramLinkTypes.Normalize(linkType))
+        var width = NetworkDiagramLinkTypes.Normalize(link.LinkType) == NetworkDiagramLinkTypes.Lacp ? 2.6d : 1.5d;
+        switch (NetworkDiagramLinkMediaTypes.Normalize(link.MediaType))
         {
-            case NetworkDiagramLinkTypes.Fibre:
+            case NetworkDiagramLinkMediaTypes.Fibre:
                 stream.AppendLine("0.49 0.23 0.93 RG");
-                stream.AppendLine("1.8 w");
+                stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.#} w\n", Math.Max(width, 1.8d));
                 stream.AppendLine("[] 0 d");
                 break;
-            case NetworkDiagramLinkTypes.Wireless:
+            case NetworkDiagramLinkMediaTypes.Copper:
+                stream.AppendLine("0.60 0.40 0 RG");
+                stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.#} w\n", width);
+                stream.AppendLine("[] 0 d");
+                break;
+            case NetworkDiagramLinkMediaTypes.Wireless:
                 stream.AppendLine("0.28 0.32 0.38 RG");
-                stream.AppendLine("1.5 w");
+                stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.#} w\n", width);
                 stream.AppendLine("[8 5] 0 d");
                 break;
-            case NetworkDiagramLinkTypes.Lacp:
+            case NetworkDiagramLinkMediaTypes.Vpn:
+            case NetworkDiagramLinkMediaTypes.Virtual:
                 stream.AppendLine("0.28 0.32 0.38 RG");
-                stream.AppendLine("2.4 w");
-                stream.AppendLine("[] 0 d");
-                break;
-            case NetworkDiagramLinkTypes.Vpn:
-                stream.AppendLine("0.28 0.32 0.38 RG");
-                stream.AppendLine("1.5 w");
+                stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.#} w\n", width);
                 stream.AppendLine("[9 4 2 4] 0 d");
                 break;
-            case NetworkDiagramLinkTypes.Logical:
-                stream.AppendLine("0.48 0.55 0.64 RG");
-                stream.AppendLine("1.2 w");
-                stream.AppendLine("[4 4] 0 d");
+            case NetworkDiagramLinkMediaTypes.Dac:
+                stream.AppendLine("0.06 0.46 0.43 RG");
+                stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.#} w\n", Math.Max(width, 1.8d));
+                stream.AppendLine("[] 0 d");
                 break;
             default:
                 stream.AppendLine("0.28 0.32 0.38 RG");
-                stream.AppendLine("1.5 w");
+                stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.#} w\n", width);
                 stream.AppendLine("[] 0 d");
                 break;
         }
@@ -434,11 +436,22 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
 
     private static string BuildLinkLabel(NetworkDiagramLinkDto link)
     {
-        var ports = !string.IsNullOrWhiteSpace(link.SourcePortLabel) || !string.IsNullOrWhiteSpace(link.TargetPortLabel)
+        var linkType = NetworkDiagramLinkTypes.Normalize(link.LinkType);
+        var mediaType = NetworkDiagramLinkMediaTypes.Normalize(link.MediaType).ToLowerInvariant();
+        var fibreSubtype = string.Equals(NetworkDiagramLinkMediaTypes.Normalize(link.MediaType), NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal)
+            ? NetworkDiagramFibreSubtypes.Normalize(link.FibreSubtype)
+            : null;
+        var speed = link.LinkSpeedValue is null || string.IsNullOrWhiteSpace(link.LinkSpeedUnit)
+            ? null
+            : $"{link.LinkSpeedValue:0.###} {NetworkDiagramLinkSpeedUnits.Normalize(link.LinkSpeedUnit)}";
+        var summary = linkType == NetworkDiagramLinkTypes.Lacp
+            ? string.Join(" ", new[] { "LACP", $"{link.LacpMemberCount ?? 2} x", speed, mediaType, fibreSubtype }.Where(x => !string.IsNullOrWhiteSpace(x)))
+            : string.Join(" ", new[] { linkType == NetworkDiagramLinkTypes.Standard ? null : linkType, speed, mediaType, fibreSubtype }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var ports = linkType != NetworkDiagramLinkTypes.Lacp && (!string.IsNullOrWhiteSpace(link.SourcePortLabel) || !string.IsNullOrWhiteSpace(link.TargetPortLabel))
             ? $"{link.SourcePortLabel ?? "?"} <-> {link.TargetPortLabel ?? "?"}"
             : null;
         var labelAndNotes = string.Join(" -- ", new[] { link.Label, link.Notes }.Where(x => !string.IsNullOrWhiteSpace(x)));
-        var parts = new[] { NetworkDiagramLinkTypes.Normalize(link.LinkType), ports, labelAndNotes }
+        var parts = new[] { summary, ports, labelAndNotes }
             .Where(x => !string.IsNullOrWhiteSpace(x));
         return string.Join(" • ", parts);
     }

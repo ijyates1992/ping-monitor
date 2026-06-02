@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
@@ -153,7 +154,13 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 SourcePortLabel = TrimOptional(linkRequest.SourcePortLabel, 128),
                 TargetPortLabel = TrimOptional(linkRequest.TargetPortLabel, 128),
                 Notes = TrimOptional(linkRequest.Notes, 4096),
-                LinkType = NetworkDiagramLinkTypes.Normalize(TrimOptional(linkRequest.LinkType, 64)),
+                MediaType = ResolveMediaType(linkRequest.MediaType, linkRequest.LinkType),
+                FibreSubtype = ResolveFibreSubtype(linkRequest.MediaType, linkRequest.FibreSubtype),
+                LinkType = ResolveLinkType(linkRequest.LinkType),
+                LinkSpeedValue = NormalizeLinkSpeedValue(linkRequest.LinkSpeedValue),
+                LinkSpeedUnit = ResolveLinkSpeedUnit(linkRequest.LinkSpeedValue, linkRequest.LinkSpeedUnit),
+                LacpMemberCount = ResolveLacpMemberCount(linkRequest.LinkType, linkRequest.LacpMemberCount),
+                LacpMemberPortsJson = NormalizeLacpMemberPortsJson(linkRequest.LinkType, linkRequest.LacpMemberPortsJson),
                 MetadataJson = TrimOptional(linkRequest.MetadataJson, 65535),
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -234,11 +241,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 throw new NetworkDiagramValidationException("Diagram links must reference nodes in the same diagram payload.");
             }
 
-            var linkType = TrimOptional(link.LinkType, 64);
-            if (!NetworkDiagramLinkTypes.IsAllowed(linkType))
-            {
-                throw new NetworkDiagramValidationException($"Unsupported link type '{linkType}'.");
-            }
+            ValidateLinkMetadata(link);
 
             _ = TrimOptional(link.Label, 255);
             _ = TrimOptional(link.SourcePortLabel, 128);
@@ -283,10 +286,201 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 SourcePortLabel = x.SourcePortLabel,
                 TargetPortLabel = x.TargetPortLabel,
                 Notes = x.Notes,
-                LinkType = NetworkDiagramLinkTypes.Normalize(x.LinkType),
+                MediaType = ResolveMediaType(x.MediaType, x.LinkType),
+                FibreSubtype = string.Equals(ResolveMediaType(x.MediaType, x.LinkType), NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal)
+                    ? NetworkDiagramFibreSubtypes.Normalize(x.FibreSubtype)
+                    : null,
+                LinkType = ResolveLinkType(x.LinkType),
+                LinkSpeedValue = NormalizeLinkSpeedValue(x.LinkSpeedValue),
+                LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Normalize(x.LinkSpeedUnit),
+                LacpMemberCount = ResolveLacpMemberCount(x.LinkType, x.LacpMemberCount),
+                LacpMemberPortsJson = NormalizeLacpMemberPortsJson(x.LinkType, x.LacpMemberPortsJson),
                 MetadataJson = x.MetadataJson
             }).ToArray()
         };
+    }
+
+    private static void ValidateLinkMetadata(NetworkDiagramLinkSaveRequest link)
+    {
+        var mediaType = ResolveMediaType(link.MediaType, link.LinkType);
+        if (!NetworkDiagramLinkMediaTypes.IsAllowed(mediaType))
+        {
+            throw new NetworkDiagramValidationException($"Unsupported media type '{mediaType}'.");
+        }
+
+        var linkType = ResolveLinkType(link.LinkType);
+        if (!NetworkDiagramLinkTypes.IsAllowed(linkType))
+        {
+            throw new NetworkDiagramValidationException($"Unsupported link type '{linkType}'.");
+        }
+
+        var fibreSubtype = NetworkDiagramFibreSubtypes.Normalize(link.FibreSubtype);
+        if (!NetworkDiagramFibreSubtypes.IsAllowed(fibreSubtype))
+        {
+            throw new NetworkDiagramValidationException($"Unsupported fibre subtype '{fibreSubtype}'.");
+        }
+
+        if (!string.Equals(mediaType, NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal) && fibreSubtype is not null)
+        {
+            throw new NetworkDiagramValidationException("Fibre subtype can only be set when media type is Fibre.");
+        }
+
+        var speedValue = NormalizeLinkSpeedValue(link.LinkSpeedValue);
+        var speedUnit = NetworkDiagramLinkSpeedUnits.Normalize(link.LinkSpeedUnit);
+        if (!NetworkDiagramLinkSpeedUnits.IsAllowed(speedUnit))
+        {
+            throw new NetworkDiagramValidationException($"Unsupported link speed unit '{speedUnit}'.");
+        }
+
+        if (speedValue is not null && speedUnit is null)
+        {
+            throw new NetworkDiagramValidationException("Link speed unit is required when link speed value is set.");
+        }
+
+        if (speedUnit is not null && speedValue is null)
+        {
+            throw new NetworkDiagramValidationException("Link speed value is required when link speed unit is set.");
+        }
+
+        var memberCount = ResolveLacpMemberCount(link.LinkType, link.LacpMemberCount);
+        if (!string.Equals(linkType, NetworkDiagramLinkTypes.Lacp, StringComparison.Ordinal) && (link.LacpMemberCount is not null || !string.IsNullOrWhiteSpace(link.LacpMemberPortsJson)))
+        {
+            throw new NetworkDiagramValidationException("LACP member metadata can only be set when link type is LACP.");
+        }
+
+        _ = memberCount;
+        _ = NormalizeLacpMemberPortsJson(link.LinkType, link.LacpMemberPortsJson);
+    }
+
+    private static string ResolveMediaType(string? mediaType, string? legacyLinkType)
+    {
+        var normalized = NetworkDiagramLinkMediaTypes.Normalize(mediaType);
+        if (!string.IsNullOrWhiteSpace(mediaType))
+        {
+            return normalized;
+        }
+
+        return NetworkDiagramLinkTypes.Normalize(legacyLinkType) switch
+        {
+            NetworkDiagramLinkTypes.Lacp => NetworkDiagramLinkMediaTypes.Other,
+            NetworkDiagramLinkTypes.Logical => NetworkDiagramLinkMediaTypes.Virtual,
+            _ => NetworkDiagramLinkMediaTypes.Allowed.Contains(NetworkDiagramLinkMediaTypes.Normalize(legacyLinkType))
+                ? NetworkDiagramLinkMediaTypes.Normalize(legacyLinkType)
+                : NetworkDiagramLinkMediaTypes.Copper
+        };
+    }
+
+    private static string ResolveLinkType(string? linkType)
+    {
+        var normalized = NetworkDiagramLinkTypes.Normalize(linkType);
+        if (NetworkDiagramLinkTypes.Allowed.Contains(normalized))
+        {
+            return normalized;
+        }
+
+        var legacyMedia = NetworkDiagramLinkMediaTypes.Normalize(linkType);
+        return NetworkDiagramLinkMediaTypes.Allowed.Contains(legacyMedia) ? NetworkDiagramLinkTypes.Standard : normalized;
+    }
+
+    private static string? ResolveFibreSubtype(string? mediaType, string? fibreSubtype)
+    {
+        return string.Equals(NetworkDiagramLinkMediaTypes.Normalize(mediaType), NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal)
+            ? NetworkDiagramFibreSubtypes.Normalize(fibreSubtype)
+            : null;
+    }
+
+    private static decimal? NormalizeLinkSpeedValue(decimal? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value < 0 || value > 1000000)
+        {
+            throw new NetworkDiagramValidationException("Link speed value must be between 0 and 1,000,000.");
+        }
+
+        return Math.Round(value.Value, 3);
+    }
+
+    private static string? ResolveLinkSpeedUnit(decimal? speedValue, string? speedUnit)
+    {
+        var normalized = NetworkDiagramLinkSpeedUnits.Normalize(speedUnit);
+        return speedValue is null ? null : normalized;
+    }
+
+    private static int? ResolveLacpMemberCount(string? linkType, int? count)
+    {
+        if (!string.Equals(ResolveLinkType(linkType), NetworkDiagramLinkTypes.Lacp, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var resolved = count ?? 2;
+        if (resolved < 1 || resolved > 16)
+        {
+            throw new NetworkDiagramValidationException("LACP member count must be between 1 and 16.");
+        }
+
+        return resolved;
+    }
+
+    private static string? NormalizeLacpMemberPortsJson(string? linkType, string? json)
+    {
+        if (!string.Equals(ResolveLinkType(linkType), NetworkDiagramLinkTypes.Lacp, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        if (json.Length > 65535)
+        {
+            throw new NetworkDiagramValidationException("LACP member port metadata is too large.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.GetArrayLength() > 16)
+            {
+                throw new NetworkDiagramValidationException("LACP member port metadata must be an array with at most 16 members.");
+            }
+
+            foreach (var member in document.RootElement.EnumerateArray())
+            {
+                if (member.ValueKind != JsonValueKind.Object)
+                {
+                    throw new NetworkDiagramValidationException("Each LACP member port entry must be an object.");
+                }
+
+                ValidateOptionalMemberPort(member, "sourcePort");
+                ValidateOptionalMemberPort(member, "targetPort");
+            }
+        }
+        catch (JsonException ex)
+        {
+            throw new NetworkDiagramValidationException($"LACP member port metadata must be valid JSON: {ex.Message}");
+        }
+
+        return json;
+    }
+
+    private static void ValidateOptionalMemberPort(JsonElement member, string propertyName)
+    {
+        if (!member.TryGetProperty(propertyName, out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return;
+        }
+
+        if (value.ValueKind != JsonValueKind.String || value.GetString() is { Length: > 128 })
+        {
+            throw new NetworkDiagramValidationException("LACP member port labels must be strings of 128 characters or fewer.");
+        }
     }
 
     private static string TrimRequired(string value, int maxLength, string fieldName)

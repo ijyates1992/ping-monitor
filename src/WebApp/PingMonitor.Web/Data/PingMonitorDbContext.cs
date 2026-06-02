@@ -471,7 +471,12 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         networkDiagramLink.Property(x => x.SourcePortLabel).HasMaxLength(128);
         networkDiagramLink.Property(x => x.TargetPortLabel).HasMaxLength(128);
         networkDiagramLink.Property(x => x.Notes).HasMaxLength(4096);
-        networkDiagramLink.Property(x => x.LinkType).HasMaxLength(64).IsRequired().HasDefaultValue("default");
+        networkDiagramLink.Property(x => x.MediaType).HasMaxLength(64).IsRequired().HasDefaultValue("Copper");
+        networkDiagramLink.Property(x => x.FibreSubtype).HasMaxLength(64);
+        networkDiagramLink.Property(x => x.LinkType).HasMaxLength(64).IsRequired().HasDefaultValue("Standard");
+        networkDiagramLink.Property(x => x.LinkSpeedValue).HasPrecision(10, 3);
+        networkDiagramLink.Property(x => x.LinkSpeedUnit).HasMaxLength(16);
+        networkDiagramLink.Property(x => x.LacpMemberPortsJson).HasColumnType("longtext");
         networkDiagramLink.Property(x => x.MetadataJson).HasColumnType("longtext");
         networkDiagramLink.Property(x => x.CreatedAtUtc).IsRequired();
         networkDiagramLink.Property(x => x.UpdatedAtUtc).IsRequired();

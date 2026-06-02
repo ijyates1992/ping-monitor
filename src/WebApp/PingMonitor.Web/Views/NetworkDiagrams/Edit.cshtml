@@ -89,13 +89,28 @@
                     <button type="button" class="diagram-tool-button" data-tool-button="select" aria-pressed="true">Select / move</button>
                     <button type="button" class="diagram-tool-button" data-tool-button="draw-link" aria-pressed="false">Draw link</button>
                     <label class="diagram-toolbar-select-label diagram-link-type-toolbar">
-                        Link type
-                        <select data-draw-link-type aria-label="Link type for newly drawn links">
+                        Media
+                        <select data-draw-media-type aria-label="Media type for newly drawn links">
                             <option value="Copper">Copper</option>
                             <option value="Fibre">Fibre</option>
                             <option value="Wireless">Wireless</option>
-                            <option value="LACP">LACP</option>
+                            <option value="DAC">DAC</option>
                             <option value="VPN">VPN</option>
+                            <option value="Virtual">Virtual</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
+                    <label class="diagram-toolbar-select-label diagram-link-type-toolbar">
+                        Link
+                        <select data-draw-link-type aria-label="Link type for newly drawn links">
+                            <option value="Standard">Standard</option>
+                            <option value="Trunk">Trunk</option>
+                            <option value="Access">Access</option>
+                            <option value="LACP">LACP</option>
+                            <option value="PointToPoint">Point-to-point</option>
+                            <option value="Backhaul">Backhaul</option>
+                            <option value="WAN">WAN</option>
+                            <option value="Management">Management</option>
                             <option value="Logical">Logical</option>
                             <option value="Other">Other</option>
                         </select>
@@ -139,7 +154,7 @@
                             Add a monitored endpoint or custom device from the toolbox. Drag empty space to pan. Use mouse wheel to zoom.
                         </div>
                         <div class="diagram-world" data-diagram-world>
-                            <svg class="diagram-link-layer" data-link-layer aria-hidden="true"></svg>
+                            <svg class="diagram-link-layer" data-link-layer></svg>
                             <div class="diagram-node-layer" data-node-layer></div>
                         </div>
                     </div>
@@ -183,19 +198,70 @@
                     <button type="button" class="danger-button" data-delete-selection>Delete selected nodes</button>
                 </div>
                 <form class="link-properties" data-link-properties hidden>
-                    <p class="toolbox-help">Link type controls diagram styling only. Links do not create monitoring dependencies.</p>
+                    <p class="toolbox-help">Media type describes the physical/transport medium. Link type describes the operational role. These fields are documentation only and do not create monitoring dependencies.</p>
                     <label>
-                        Link type / media
-                        <select data-link-field="linkType">
+                        Media type
+                        <select data-link-field="mediaType">
                             <option value="Copper">Copper</option>
                             <option value="Fibre">Fibre</option>
                             <option value="Wireless">Wireless</option>
-                            <option value="LACP">LACP</option>
+                            <option value="DAC">DAC</option>
                             <option value="VPN">VPN</option>
+                            <option value="Virtual">Virtual</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
+                    <label data-fibre-subtype-field hidden>
+                        Fibre subtype
+                        <select data-link-field="fibreSubtype">
+                            <option value="">None</option>
+                            <option value="OM1">OM1</option>
+                            <option value="OM2">OM2</option>
+                            <option value="OM3">OM3</option>
+                            <option value="OM4">OM4</option>
+                            <option value="OM5">OM5</option>
+                            <option value="OS1">OS1</option>
+                            <option value="OS2">OS2</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
+                    <label>
+                        Link type
+                        <select data-link-field="linkType">
+                            <option value="Standard">Standard</option>
+                            <option value="Trunk">Trunk</option>
+                            <option value="Access">Access</option>
+                            <option value="LACP">LACP</option>
+                            <option value="PointToPoint">Point-to-point</option>
+                            <option value="Backhaul">Backhaul</option>
+                            <option value="WAN">WAN</option>
+                            <option value="Management">Management</option>
                             <option value="Logical">Logical</option>
                             <option value="Other">Other</option>
                         </select>
                     </label>
+                    <div class="link-speed-fields">
+                        <label>
+                            Speed
+                            <input type="number" data-link-field="linkSpeedValue" min="0" max="1000000" step="0.001" />
+                        </label>
+                        <label>
+                            Unit
+                            <select data-link-field="linkSpeedUnit">
+                                <option value="">None</option>
+                                <option value="Mbps">Mbps</option>
+                                <option value="Gbps">Gbps</option>
+                                <option value="Tbps">Tbps</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div data-lacp-fields hidden>
+                        <label>
+                            LACP member count
+                            <input type="number" data-link-field="lacpMemberCount" min="1" max="16" step="1" />
+                        </label>
+                        <div class="lacp-member-ports" data-lacp-member-ports></div>
+                    </div>
                     <label>
                         Link label
                         <input type="text" data-link-field="label" maxlength="80" />

@@ -10,7 +10,13 @@ public sealed class NetworkDiagramLink
     public string? SourcePortLabel { get; set; }
     public string? TargetPortLabel { get; set; }
     public string? Notes { get; set; }
-    public string LinkType { get; set; } = "Copper";
+    public string MediaType { get; set; } = "Copper";
+    public string? FibreSubtype { get; set; }
+    public string LinkType { get; set; } = "Standard";
+    public decimal? LinkSpeedValue { get; set; }
+    public string? LinkSpeedUnit { get; set; }
+    public int? LacpMemberCount { get; set; }
+    public string? LacpMemberPortsJson { get; set; }
     public string? MetadataJson { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }

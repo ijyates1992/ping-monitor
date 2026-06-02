@@ -42,7 +42,11 @@
     const exportPaperSelect = editor.querySelector('[data-export-paper]');
     const canvasSizePresetSelect = editor.querySelector('[data-canvas-size-preset]');
     const canvasRatioWarning = editor.querySelector('[data-canvas-ratio-warning]');
+    const drawMediaTypeSelect = editor.querySelector('[data-draw-media-type]');
     const drawLinkTypeSelect = editor.querySelector('[data-draw-link-type]');
+    const fibreSubtypeField = editor.querySelector('[data-fibre-subtype-field]');
+    const lacpFields = editor.querySelector('[data-lacp-fields]');
+    const lacpMemberPorts = editor.querySelector('[data-lacp-member-ports]');
     const saveStatus = editor.querySelector('[data-save-status]');
     const antiforgeryToken = editor.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
     const loadUrl = editor.dataset.loadUrl || '';
@@ -58,7 +62,10 @@
     const zoomStep = 1.1;
     const nodeMargin = 8;
     const aSeriesLandscapeRatio = 1.41421356237;
-    const linkTypes = ['Copper', 'Fibre', 'Wireless', 'LACP', 'VPN', 'Logical', 'Other'];
+    const mediaTypes = ['Copper', 'Fibre', 'Wireless', 'DAC', 'VPN', 'Virtual', 'Other'];
+    const linkTypes = ['Standard', 'Trunk', 'Access', 'LACP', 'PointToPoint', 'Backhaul', 'WAN', 'Management', 'Logical', 'Other'];
+    const fibreSubtypes = ['OM1', 'OM2', 'OM3', 'OM4', 'OM5', 'OS1', 'OS2', 'Other'];
+    const linkSpeedUnits = ['Mbps', 'Gbps', 'Tbps'];
     const parallelLinkOffsetStep = 34;
     const canvasPresets = [
         { value: 'small', label: 'Small', width: 4000, height: 2828 },
@@ -83,7 +90,8 @@
         description: '',
         dirty: false,
         loading: true,
-        selectedDrawLinkType: 'Copper'
+        selectedDrawMediaType: 'Copper',
+        selectedDrawLinkType: 'Standard'
     };
 
     let nodeSequence = 0;
@@ -478,13 +486,60 @@
         return node && node.nodeType !== 'note';
     }
 
+    function normalizeMediaType(value, legacyLinkType) {
+        const requested = (value || '').trim();
+        if (requested) {
+            return mediaTypes.find(type => type.toLowerCase() === requested.toLowerCase()) || 'Other';
+        }
+
+        const legacy = (legacyLinkType || '').trim().toLowerCase();
+        if (!legacy || legacy === 'default') {
+            return 'Copper';
+        }
+        if (legacy === 'fibre') { return 'Fibre'; }
+        if (legacy === 'wireless') { return 'Wireless'; }
+        if (legacy === 'vpn') { return 'VPN'; }
+        if (legacy === 'logical') { return 'Virtual'; }
+        if (legacy === 'lacp') { return 'Other'; }
+        return mediaTypes.find(type => type.toLowerCase() === legacy) || 'Copper';
+    }
+
     function normalizeLinkType(value) {
         const requested = (value || '').trim();
         if (!requested || requested.toLowerCase() === 'default') {
-            return 'Copper';
+            return 'Standard';
         }
 
-        return linkTypes.find(type => type.toLowerCase() === requested.toLowerCase()) || 'Other';
+        const normalized = linkTypes.find(type => type.toLowerCase() === requested.toLowerCase());
+        if (normalized) {
+            return normalized;
+        }
+
+        const legacyMedia = mediaTypes.find(type => type.toLowerCase() === requested.toLowerCase());
+        return legacyMedia ? 'Standard' : 'Other';
+    }
+
+    function normalizeFibreSubtype(value, mediaType) {
+        if (normalizeMediaType(mediaType) !== 'Fibre') {
+            return '';
+        }
+
+        const requested = (value || '').trim();
+        return fibreSubtypes.find(type => type.toLowerCase() === requested.toLowerCase()) || '';
+    }
+
+    function normalizeSpeedUnit(value) {
+        const requested = (value || '').trim();
+        return linkSpeedUnits.find(unit => unit.toLowerCase() === requested.toLowerCase()) || '';
+    }
+
+    function normalizeLacpMemberCount(value, linkType) {
+        if (normalizeLinkType(linkType) !== 'LACP') {
+            return '';
+        }
+
+        const parsed = Number.parseInt(value, 10);
+        return String(clamp(Number.isFinite(parsed) ? parsed : 2, 1, 16));
     }
 
     function createLink(sourceNodeId, targetNodeId) {
@@ -501,7 +556,13 @@
             sourcePort: '',
             targetPort: '',
             notes: '',
-            linkType: normalizeLinkType(state.selectedDrawLinkType)
+            mediaType: normalizeMediaType(state.selectedDrawMediaType),
+            fibreSubtype: '',
+            linkType: normalizeLinkType(state.selectedDrawLinkType),
+            linkSpeedValue: '',
+            linkSpeedUnit: 'Gbps',
+            lacpMemberCount: normalizeLinkType(state.selectedDrawLinkType) === 'LACP' ? '2' : '',
+            lacpMemberPorts: []
         };
 
         state.links.push(link);
@@ -747,9 +808,31 @@
         return normalized.length <= maxLength ? normalized : `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
     }
 
+    function formatSpeed(value, unit) {
+        const speed = (value || '').toString().trim();
+        const normalizedUnit = normalizeSpeedUnit(unit);
+        return speed && normalizedUnit ? `${speed} ${normalizedUnit}` : '';
+    }
+
+    function buildLinkSummary(link) {
+        const media = normalizeMediaType(link.mediaType, link.linkType);
+        const type = normalizeLinkType(link.linkType);
+        const speed = formatSpeed(link.linkSpeedValue, link.linkSpeedUnit);
+        const fibre = normalizeFibreSubtype(link.fibreSubtype, media);
+        const mediaLabel = [media.toLowerCase(), fibre].filter(Boolean).join(' ');
+        if (type === 'LACP') {
+            const count = normalizeLacpMemberCount(link.lacpMemberCount, type) || '2';
+            return ['LACP', `${count} ×`, speed, mediaLabel].filter(Boolean).join(' ');
+        }
+
+        const typeLabel = type === 'Standard' ? '' : type;
+        return [typeLabel, speed, mediaLabel].filter(Boolean).join(' ');
+    }
+
     function buildVisibleLinkLabel(link) {
-        const main = [link.label, link.notes].filter(value => value && value.trim()).join(' — ');
-        const ports = link.sourcePort || link.targetPort
+        const summary = buildLinkSummary(link);
+        const main = [summary, link.label, link.notes].filter(value => value && value.trim()).join(' — ');
+        const ports = normalizeLinkType(link.linkType) !== 'LACP' && (link.sourcePort || link.targetPort)
             ? [link.sourcePort || '?', link.targetPort || '?'].join(' ↔ ')
             : '';
         return truncateLinkText([main, ports].filter(Boolean).join(' • '), 96);
@@ -771,6 +854,7 @@
             group.classList.add('diagram-link-group');
             group.dataset.linkId = link.id;
             group.dataset.selected = state.selectedLinkId === link.id ? 'true' : 'false';
+            group.dataset.mediaType = normalizeMediaType(link.mediaType, link.linkType).toLowerCase();
             group.dataset.linkType = normalizeLinkType(link.linkType).toLowerCase();
 
             const hit = createSvgElement('path');
@@ -870,6 +954,16 @@
             const propertyName = field.dataset.linkField;
             field.value = selectedLink && propertyName ? selectedLink[propertyName] || '' : '';
         });
+
+        const selectedMediaType = selectedLink ? normalizeMediaType(selectedLink.mediaType, selectedLink.linkType) : '';
+        const selectedLinkType = selectedLink ? normalizeLinkType(selectedLink.linkType) : '';
+        if (fibreSubtypeField) {
+            fibreSubtypeField.hidden = selectedMediaType !== 'Fibre';
+        }
+        if (lacpFields) {
+            lacpFields.hidden = selectedLinkType !== 'LACP';
+        }
+        renderLacpMemberPortFields(selectedLink);
     }
 
     function updateSelectedNodeField(event) {
@@ -890,6 +984,60 @@
         markDirty();
     }
 
+
+    function parseLacpMemberPorts(json) {
+        if (!json) {
+            return [];
+        }
+        try {
+            const parsed = JSON.parse(json);
+            return Array.isArray(parsed) ? parsed.slice(0, 16).map(member => ({
+                sourcePort: String(member?.sourcePort || '').slice(0, 128),
+                targetPort: String(member?.targetPort || '').slice(0, 128)
+            })) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function syncLacpMemberPortCount(link) {
+        if (!link || normalizeLinkType(link.linkType) !== 'LACP') {
+            return;
+        }
+
+        const count = Number.parseInt(normalizeLacpMemberCount(link.lacpMemberCount, link.linkType), 10);
+        link.lacpMemberPorts = Array.isArray(link.lacpMemberPorts) ? link.lacpMemberPorts.slice(0, count) : [];
+        while (link.lacpMemberPorts.length < count) {
+            link.lacpMemberPorts.push({ sourcePort: '', targetPort: '' });
+        }
+    }
+
+    function renderLacpMemberPortFields(link) {
+        if (!lacpMemberPorts) {
+            return;
+        }
+
+        lacpMemberPorts.replaceChildren();
+        if (!link || normalizeLinkType(link.linkType) !== 'LACP') {
+            return;
+        }
+
+        syncLacpMemberPortCount(link);
+        link.lacpMemberPorts.forEach((member, index) => {
+            const row = document.createElement('div');
+            row.className = 'lacp-member-port-row';
+            row.innerHTML = `<span>Member ${index + 1}</span><input type="text" maxlength="80" aria-label="LACP member ${index + 1} source port" placeholder="Source port" value="${escapeHtml(member.sourcePort || '')}"><input type="text" maxlength="80" aria-label="LACP member ${index + 1} target port" placeholder="Target port" value="${escapeHtml(member.targetPort || '')}">`;
+            const inputs = row.querySelectorAll('input');
+            inputs[0].addEventListener('input', event => { member.sourcePort = event.currentTarget.value; renderLinks(); markDirty(); });
+            inputs[1].addEventListener('input', event => { member.targetPort = event.currentTarget.value; renderLinks(); markDirty(); });
+            lacpMemberPorts.appendChild(row);
+        });
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]);
+    }
+
     function updateSelectedLinkField(event) {
         const selectedLink = state.selectedLinkId ? findLinkById(state.selectedLinkId) : null;
         const field = event.currentTarget;
@@ -898,8 +1046,25 @@
             return;
         }
 
-        selectedLink[propertyName] = field.value;
+        if (propertyName === 'mediaType') {
+            selectedLink.mediaType = normalizeMediaType(field.value);
+            selectedLink.fibreSubtype = normalizeFibreSubtype(selectedLink.fibreSubtype, selectedLink.mediaType);
+        } else if (propertyName === 'fibreSubtype') {
+            selectedLink.fibreSubtype = normalizeFibreSubtype(field.value, selectedLink.mediaType);
+        } else if (propertyName === 'linkType') {
+            selectedLink.linkType = normalizeLinkType(field.value);
+            selectedLink.lacpMemberCount = normalizeLacpMemberCount(selectedLink.lacpMemberCount, selectedLink.linkType);
+            syncLacpMemberPortCount(selectedLink);
+        } else if (propertyName === 'linkSpeedUnit') {
+            selectedLink.linkSpeedUnit = normalizeSpeedUnit(field.value);
+        } else if (propertyName === 'lacpMemberCount') {
+            selectedLink.lacpMemberCount = normalizeLacpMemberCount(field.value, selectedLink.linkType);
+            syncLacpMemberPortCount(selectedLink);
+        } else {
+            selectedLink[propertyName] = field.value;
+        }
         renderLinks();
+        updatePropertiesPanel();
         markDirty();
     }
 
@@ -1188,7 +1353,13 @@
             sourcePort: link.sourcePortLabel || '',
             targetPort: link.targetPortLabel || '',
             notes: link.notes || '',
-            linkType: normalizeLinkType(link.linkType)
+            mediaType: normalizeMediaType(link.mediaType, link.linkType),
+            fibreSubtype: normalizeFibreSubtype(link.fibreSubtype, link.mediaType),
+            linkType: normalizeLinkType(link.linkType),
+            linkSpeedValue: link.linkSpeedValue == null ? '' : String(link.linkSpeedValue),
+            linkSpeedUnit: normalizeSpeedUnit(link.linkSpeedUnit),
+            lacpMemberCount: normalizeLacpMemberCount(link.lacpMemberCount, link.linkType),
+            lacpMemberPorts: parseLacpMemberPorts(link.lacpMemberPortsJson)
         }));
         state.loading = false;
         state.dirty = false;
@@ -1240,7 +1411,13 @@
                 sourcePortLabel: link.sourcePort || null,
                 targetPortLabel: link.targetPort || null,
                 notes: link.notes || null,
+                mediaType: normalizeMediaType(link.mediaType, link.linkType),
+                fibreSubtype: normalizeMediaType(link.mediaType, link.linkType) === 'Fibre' ? normalizeFibreSubtype(link.fibreSubtype, link.mediaType) || null : null,
                 linkType: normalizeLinkType(link.linkType),
+                linkSpeedValue: link.linkSpeedValue === '' || link.linkSpeedValue == null ? null : Number(link.linkSpeedValue),
+                linkSpeedUnit: link.linkSpeedValue === '' || link.linkSpeedValue == null ? null : normalizeSpeedUnit(link.linkSpeedUnit) || null,
+                lacpMemberCount: normalizeLinkType(link.linkType) === 'LACP' ? Number(normalizeLacpMemberCount(link.lacpMemberCount, link.linkType)) : null,
+                lacpMemberPortsJson: normalizeLinkType(link.linkType) === 'LACP' ? JSON.stringify(link.lacpMemberPorts || []) : null,
                 metadataJson: null
             }))
         };
@@ -1305,6 +1482,13 @@
     toolButtons.forEach(button => {
         button.addEventListener('click', () => setTool(button.dataset.toolButton || 'select'));
     });
+
+    if (drawMediaTypeSelect) {
+        drawMediaTypeSelect.addEventListener('change', () => {
+            state.selectedDrawMediaType = normalizeMediaType(drawMediaTypeSelect.value);
+            drawMediaTypeSelect.value = state.selectedDrawMediaType;
+        });
+    }
 
     if (drawLinkTypeSelect) {
         drawLinkTypeSelect.addEventListener('change', () => {
