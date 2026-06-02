@@ -44,7 +44,10 @@
     const canvasRatioWarning = editor.querySelector('[data-canvas-ratio-warning]');
     const drawMediaTypeSelect = editor.querySelector('[data-draw-media-type]');
     const drawLinkTypeSelect = editor.querySelector('[data-draw-link-type]');
-    const fibreSubtypeField = editor.querySelector('[data-fibre-subtype-field]');
+    const mediaSubtypeField = editor.querySelector('[data-media-subtype-field]');
+    const mediaSubtypeSelect = editor.querySelector('[data-link-field="mediaSubtype"]');
+    const linkSpeedPresetSelect = editor.querySelector('[data-link-field="linkSpeedPreset"]');
+    const customSpeedFields = editor.querySelector('[data-custom-speed-fields]');
     const lacpFields = editor.querySelector('[data-lacp-fields]');
     const lacpMemberPorts = editor.querySelector('[data-lacp-member-ports]');
     const saveStatus = editor.querySelector('[data-save-status]');
@@ -64,7 +67,28 @@
     const aSeriesLandscapeRatio = 1.41421356237;
     const mediaTypes = ['Copper', 'Fibre', 'Wireless', 'DAC', 'VPN', 'Virtual', 'Other'];
     const linkTypes = ['Standard', 'Trunk', 'Access', 'LACP', 'PointToPoint', 'Backhaul', 'WAN', 'Management', 'Logical', 'Other'];
-    const fibreSubtypes = ['OM1', 'OM2', 'OM3', 'OM4', 'OM5', 'OS1', 'OS2', 'Other'];
+    const mediaSubtypeOptions = {
+        Copper: ['Cat5e', 'Cat6', 'Cat6a', 'Cat7', 'Cat8', 'Coax', 'Other'],
+        Fibre: ['OM1', 'OM2', 'OM3', 'OM4', 'OM5', 'OS1', 'OS2', 'Other'],
+        Wireless: ['802.11a', '802.11b', '802.11g', '802.11n / Wi-Fi 4', '802.11ac / Wi-Fi 5', '802.11ax / Wi-Fi 6', '802.11be / Wi-Fi 7', '60GHz', 'Other'],
+        DAC: ['Passive DAC', 'Active DAC', 'AOC', 'Other'],
+        VPN: ['IPsec', 'WireGuard', 'OpenVPN', 'GRE', 'Other'],
+        Virtual: ['Hyper-V vSwitch', 'VMware vSwitch', 'VLAN interface', 'Loopback', 'Other'],
+        Other: ['None', 'Other']
+    };
+    const speedPresets = [
+        { value: '', label: 'None', speedValue: '', unit: '' },
+        { value: '10 Mbps', label: '10 Mbps', speedValue: '10', unit: 'Mbps' },
+        { value: '100 Mbps', label: '100 Mbps', speedValue: '100', unit: 'Mbps' },
+        { value: '1 Gbps', label: '1 Gbps', speedValue: '1', unit: 'Gbps' },
+        { value: '2.5 Gbps', label: '2.5 Gbps', speedValue: '2.5', unit: 'Gbps' },
+        { value: '5 Gbps', label: '5 Gbps', speedValue: '5', unit: 'Gbps' },
+        { value: '10 Gbps', label: '10 Gbps', speedValue: '10', unit: 'Gbps' },
+        { value: '25 Gbps', label: '25 Gbps', speedValue: '25', unit: 'Gbps' },
+        { value: '40 Gbps', label: '40 Gbps', speedValue: '40', unit: 'Gbps' },
+        { value: '100 Gbps', label: '100 Gbps', speedValue: '100', unit: 'Gbps' },
+        { value: 'Other', label: 'Other', speedValue: '', unit: 'Gbps' }
+    ];
     const linkSpeedUnits = ['Mbps', 'Gbps', 'Tbps'];
     const parallelLinkOffsetStep = 34;
     const canvasPresets = [
@@ -519,13 +543,19 @@
         return legacyMedia ? 'Standard' : 'Other';
     }
 
-    function normalizeFibreSubtype(value, mediaType) {
-        if (normalizeMediaType(mediaType) !== 'Fibre') {
+    function getMediaSubtypeOptions(mediaType) {
+        return mediaSubtypeOptions[normalizeMediaType(mediaType)] || mediaSubtypeOptions.Other;
+    }
+
+    function normalizeMediaSubtype(value, mediaType) {
+        const requested = (value || '').trim();
+        if (!requested) {
             return '';
         }
 
-        const requested = (value || '').trim();
-        return fibreSubtypes.find(type => type.toLowerCase() === requested.toLowerCase()) || '';
+        const options = getMediaSubtypeOptions(mediaType);
+        const normalized = options.find(type => type.toLowerCase() === requested.toLowerCase()) || '';
+        return normalized === 'None' ? '' : normalized;
     }
 
     function normalizeSpeedUnit(value) {
@@ -557,10 +587,11 @@
             targetPort: '',
             notes: '',
             mediaType: normalizeMediaType(state.selectedDrawMediaType),
-            fibreSubtype: '',
+            mediaSubtype: '',
             linkType: normalizeLinkType(state.selectedDrawLinkType),
             linkSpeedValue: '',
-            linkSpeedUnit: 'Gbps',
+            linkSpeedUnit: '',
+            linkSpeedPreset: '',
             lacpMemberCount: normalizeLinkType(state.selectedDrawLinkType) === 'LACP' ? '2' : '',
             lacpMemberPorts: []
         };
@@ -814,12 +845,22 @@
         return speed && normalizedUnit ? `${speed} ${normalizedUnit}` : '';
     }
 
+
+    function getSpeedPreset(value, unit) {
+        const formatted = formatSpeed(value, unit);
+        if (!formatted) {
+            return '';
+        }
+
+        return speedPresets.some(preset => preset.value === formatted) ? formatted : 'Other';
+    }
+
     function buildLinkSummary(link) {
         const media = normalizeMediaType(link.mediaType, link.linkType);
         const type = normalizeLinkType(link.linkType);
         const speed = formatSpeed(link.linkSpeedValue, link.linkSpeedUnit);
-        const fibre = normalizeFibreSubtype(link.fibreSubtype, media);
-        const mediaLabel = [media.toLowerCase(), fibre].filter(Boolean).join(' ');
+        const mediaSubtype = normalizeMediaSubtype(link.mediaSubtype, media);
+        const mediaLabel = mediaSubtype && media === 'Copper' ? mediaSubtype : [media.toLowerCase(), mediaSubtype].filter(Boolean).join(' ');
         if (type === 'LACP') {
             const count = normalizeLacpMemberCount(link.lacpMemberCount, type) || '2';
             return ['LACP', `${count} ×`, speed, mediaLabel].filter(Boolean).join(' ');
@@ -880,6 +921,11 @@
                 label.setAttribute('y', String(geometry.label.y));
                 label.setAttribute('text-anchor', 'middle');
                 label.textContent = visibleLabel;
+                label.addEventListener('pointerdown', event => {
+                    selectLink(link.id);
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
                 group.appendChild(label);
             }
 
@@ -952,13 +998,37 @@
 
         linkFields.forEach(field => {
             const propertyName = field.dataset.linkField;
-            field.value = selectedLink && propertyName ? selectedLink[propertyName] || '' : '';
+            if (!selectedLink || !propertyName) {
+                field.value = '';
+            } else if (propertyName === 'linkSpeedPreset') {
+                field.value = getSpeedPreset(selectedLink.linkSpeedValue, selectedLink.linkSpeedUnit);
+            } else {
+                field.value = selectedLink[propertyName] || '';
+            }
         });
 
         const selectedMediaType = selectedLink ? normalizeMediaType(selectedLink.mediaType, selectedLink.linkType) : '';
         const selectedLinkType = selectedLink ? normalizeLinkType(selectedLink.linkType) : '';
-        if (fibreSubtypeField) {
-            fibreSubtypeField.hidden = selectedMediaType !== 'Fibre';
+        if (mediaSubtypeSelect) {
+            const currentValue = selectedLink ? normalizeMediaSubtype(selectedLink.mediaSubtype, selectedMediaType) : '';
+            mediaSubtypeSelect.replaceChildren();
+            const none = document.createElement('option');
+            none.value = '';
+            none.textContent = 'None';
+            mediaSubtypeSelect.appendChild(none);
+            getMediaSubtypeOptions(selectedMediaType || 'Other').forEach(optionValue => {
+                const option = document.createElement('option');
+                option.value = optionValue === 'None' ? '' : optionValue;
+                option.textContent = optionValue;
+                mediaSubtypeSelect.appendChild(option);
+            });
+            mediaSubtypeSelect.value = currentValue;
+        }
+        if (mediaSubtypeField) {
+            mediaSubtypeField.hidden = !selectedLink;
+        }
+        if (customSpeedFields) {
+            customSpeedFields.hidden = !selectedLink || getSpeedPreset(selectedLink.linkSpeedValue, selectedLink.linkSpeedUnit) !== 'Other';
         }
         if (lacpFields) {
             lacpFields.hidden = selectedLinkType !== 'LACP';
@@ -1048,20 +1118,37 @@
 
         if (propertyName === 'mediaType') {
             selectedLink.mediaType = normalizeMediaType(field.value);
-            selectedLink.fibreSubtype = normalizeFibreSubtype(selectedLink.fibreSubtype, selectedLink.mediaType);
-        } else if (propertyName === 'fibreSubtype') {
-            selectedLink.fibreSubtype = normalizeFibreSubtype(field.value, selectedLink.mediaType);
+            selectedLink.mediaSubtype = normalizeMediaSubtype(selectedLink.mediaSubtype, selectedLink.mediaType);
+        } else if (propertyName === 'mediaSubtype') {
+            selectedLink.mediaSubtype = normalizeMediaSubtype(field.value, selectedLink.mediaType);
         } else if (propertyName === 'linkType') {
             selectedLink.linkType = normalizeLinkType(field.value);
             selectedLink.lacpMemberCount = normalizeLacpMemberCount(selectedLink.lacpMemberCount, selectedLink.linkType);
             syncLacpMemberPortCount(selectedLink);
+        } else if (propertyName === 'linkSpeedPreset') {
+            const preset = speedPresets.find(item => item.value === field.value) || speedPresets[0];
+            selectedLink.linkSpeedPreset = preset.value;
+            if (preset.value !== 'Other') {
+                selectedLink.linkSpeedValue = preset.speedValue;
+                selectedLink.linkSpeedUnit = preset.unit;
+            } else if (!selectedLink.linkSpeedUnit) {
+                selectedLink.linkSpeedUnit = 'Gbps';
+            }
         } else if (propertyName === 'linkSpeedUnit') {
             selectedLink.linkSpeedUnit = normalizeSpeedUnit(field.value);
+            selectedLink.linkSpeedPreset = getSpeedPreset(selectedLink.linkSpeedValue, selectedLink.linkSpeedUnit);
         } else if (propertyName === 'lacpMemberCount') {
             selectedLink.lacpMemberCount = normalizeLacpMemberCount(field.value, selectedLink.linkType);
             syncLacpMemberPortCount(selectedLink);
         } else {
             selectedLink[propertyName] = field.value;
+            if (propertyName === 'linkSpeedValue') {
+                const parsed = Number(field.value);
+                if (field.value !== '' && (!Number.isFinite(parsed) || parsed <= 0)) {
+                    selectedLink.linkSpeedValue = '';
+                }
+                selectedLink.linkSpeedPreset = getSpeedPreset(selectedLink.linkSpeedValue, selectedLink.linkSpeedUnit);
+            }
         }
         renderLinks();
         updatePropertiesPanel();
@@ -1354,10 +1441,11 @@
             targetPort: link.targetPortLabel || '',
             notes: link.notes || '',
             mediaType: normalizeMediaType(link.mediaType, link.linkType),
-            fibreSubtype: normalizeFibreSubtype(link.fibreSubtype, link.mediaType),
+            mediaSubtype: normalizeMediaSubtype(link.mediaSubtype, link.mediaType),
             linkType: normalizeLinkType(link.linkType),
             linkSpeedValue: link.linkSpeedValue == null ? '' : String(link.linkSpeedValue),
             linkSpeedUnit: normalizeSpeedUnit(link.linkSpeedUnit),
+            linkSpeedPreset: getSpeedPreset(link.linkSpeedValue == null ? '' : String(link.linkSpeedValue), link.linkSpeedUnit),
             lacpMemberCount: normalizeLacpMemberCount(link.lacpMemberCount, link.linkType),
             lacpMemberPorts: parseLacpMemberPorts(link.lacpMemberPortsJson)
         }));
@@ -1412,7 +1500,8 @@
                 targetPortLabel: link.targetPort || null,
                 notes: link.notes || null,
                 mediaType: normalizeMediaType(link.mediaType, link.linkType),
-                fibreSubtype: normalizeMediaType(link.mediaType, link.linkType) === 'Fibre' ? normalizeFibreSubtype(link.fibreSubtype, link.mediaType) || null : null,
+                mediaSubtype: normalizeMediaSubtype(link.mediaSubtype, link.mediaType) || null,
+                fibreSubtype: normalizeMediaType(link.mediaType, link.linkType) === 'Fibre' ? normalizeMediaSubtype(link.mediaSubtype, link.mediaType) || null : null,
                 linkType: normalizeLinkType(link.linkType),
                 linkSpeedValue: link.linkSpeedValue === '' || link.linkSpeedValue == null ? null : Number(link.linkSpeedValue),
                 linkSpeedUnit: link.linkSpeedValue === '' || link.linkSpeedValue == null ? null : normalizeSpeedUnit(link.linkSpeedUnit) || null,

@@ -134,6 +134,9 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Media type describes the physical/transport medium.", viewMarkup);
         Assert.Contains("data-draw-link-type", viewMarkup);
         Assert.Contains(@"data-link-field=""linkType""", viewMarkup);
+        Assert.Contains(@"data-link-field=""mediaSubtype""", viewMarkup);
+        Assert.Contains(@"data-link-field=""linkSpeedPreset""", viewMarkup);
+        Assert.Contains("Media subtype", viewMarkup);
         Assert.Contains("Wireless", viewMarkup);
         Assert.Contains("Zoom in", viewMarkup);
         Assert.Contains("Zoom out", viewMarkup);
@@ -212,9 +215,40 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.DoesNotContain("linkExists(sourceNodeId, targetNodeId)", script);
         Assert.Contains("getParallelOffsetIndexes", script);
         Assert.Contains("buildVisibleLinkLabel", script);
+        Assert.Contains("diagram-link-hit", script);
+        Assert.Contains("group.dataset.linkId = link.id", script);
+        Assert.Contains("selectLink(link.id)", script);
         Assert.Contains(@"data-media-type=""wireless""", styles);
         Assert.Contains("stroke-dasharray: 12 8", styles);
+        Assert.Contains("stroke-width: 28", styles);
+        Assert.Contains("pointer-events: all", styles);
         Assert.Contains(@"data-media-type=""fibre""", styles);
+    }
+
+
+    [Theory]
+    [InlineData(NetworkDiagramLinkMediaTypes.Copper, "Cat5e")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Copper, "Cat6")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Copper, "Cat6a")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Fibre, "OM1")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Fibre, "OM4")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Fibre, "OS2")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Wireless, "802.11ac / Wi-Fi 5")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Wireless, "802.11ax / Wi-Fi 6")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Dac, "Passive DAC")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Vpn, "WireGuard")]
+    [InlineData(NetworkDiagramLinkMediaTypes.Virtual, "VMware vSwitch")]
+    public void NetworkDiagramMediaSubtypes_ValidateAgainstMediaType(string mediaType, string subtype)
+    {
+        Assert.True(NetworkDiagramMediaSubtypes.IsAllowed(subtype, mediaType));
+        Assert.Equal(subtype, NetworkDiagramMediaSubtypes.Normalize(subtype.ToLowerInvariant(), mediaType));
+    }
+
+    [Fact]
+    public void NetworkDiagramMediaSubtypes_RejectInvalidSubtypeForMediaType()
+    {
+        Assert.False(NetworkDiagramMediaSubtypes.IsAllowed("OM4", NetworkDiagramLinkMediaTypes.Copper));
+        Assert.False(NetworkDiagramMediaSubtypes.IsAllowed("Cat6", NetworkDiagramLinkMediaTypes.Wireless));
     }
 
     [Fact]
@@ -263,9 +297,9 @@ public sealed class NetworkDiagramsFeatureTests
             ],
             Links =
             [
-                new NetworkDiagramLinkDto { LinkId = "link-1", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "uplink", SourcePortLabel = "Gi1/0/1", TargetPortLabel = "eth0", MediaType = NetworkDiagramLinkMediaTypes.Copper, LinkType = NetworkDiagramLinkTypes.Standard },
-                new NetworkDiagramLinkDto { LinkId = "link-2", SourceNodeId = "node-2", TargetNodeId = "node-1", Label = "backup", Notes = "wireless failover", MediaType = NetworkDiagramLinkMediaTypes.Wireless, LinkType = NetworkDiagramLinkTypes.PointToPoint },
-                new NetworkDiagramLinkDto { LinkId = "link-3", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "storage", Notes = "10Gb fibre", MediaType = NetworkDiagramLinkMediaTypes.Fibre, LinkType = NetworkDiagramLinkTypes.Standard }
+                new NetworkDiagramLinkDto { LinkId = "link-1", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "uplink", SourcePortLabel = "Gi1/0/1", TargetPortLabel = "eth0", MediaType = NetworkDiagramLinkMediaTypes.Copper, MediaSubtype = "Cat6", LinkType = NetworkDiagramLinkTypes.Standard, LinkSpeedValue = 1, LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Gbps },
+                new NetworkDiagramLinkDto { LinkId = "link-2", SourceNodeId = "node-2", TargetNodeId = "node-1", Label = "backup", Notes = "wireless failover", MediaType = NetworkDiagramLinkMediaTypes.Wireless, MediaSubtype = "802.11ac / Wi-Fi 5", LinkType = NetworkDiagramLinkTypes.PointToPoint },
+                new NetworkDiagramLinkDto { LinkId = "link-3", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "storage", Notes = "10Gb fibre", MediaType = NetworkDiagramLinkMediaTypes.Fibre, MediaSubtype = "OM4", LinkType = NetworkDiagramLinkTypes.Lacp, LinkSpeedValue = 10, LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Gbps, LacpMemberCount = 2 }
             ]
         };
 
@@ -278,8 +312,10 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Router", pdfText);
         Assert.Contains("Web server", pdfText);
         Assert.Contains("uplink", pdfText);
-        Assert.Contains("wireless failover", pdfText);
+        Assert.Contains("backup", pdfText);
         Assert.Contains("10Gb fibre", pdfText);
+        Assert.Contains("Cat6", pdfText);
+        Assert.Contains("LACP", pdfText);
         Assert.Contains("[8 5] 0 d", pdfText);
         Assert.Contains("0.49 0.23 0.93 RG", pdfText);
         Assert.Contains("Diagram links are visual documentation only", pdfText);

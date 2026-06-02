@@ -155,7 +155,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 TargetPortLabel = TrimOptional(linkRequest.TargetPortLabel, 128),
                 Notes = TrimOptional(linkRequest.Notes, 4096),
                 MediaType = ResolveMediaType(linkRequest.MediaType, linkRequest.LinkType),
-                FibreSubtype = ResolveFibreSubtype(linkRequest.MediaType, linkRequest.FibreSubtype),
+                FibreSubtype = ResolveMediaSubtype(linkRequest.MediaType, linkRequest.MediaSubtype ?? linkRequest.FibreSubtype),
                 LinkType = ResolveLinkType(linkRequest.LinkType),
                 LinkSpeedValue = NormalizeLinkSpeedValue(linkRequest.LinkSpeedValue),
                 LinkSpeedUnit = ResolveLinkSpeedUnit(linkRequest.LinkSpeedValue, linkRequest.LinkSpeedUnit),
@@ -287,11 +287,12 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 TargetPortLabel = x.TargetPortLabel,
                 Notes = x.Notes,
                 MediaType = ResolveMediaType(x.MediaType, x.LinkType),
+                MediaSubtype = ResolveMediaSubtype(x.MediaType, x.FibreSubtype),
                 FibreSubtype = string.Equals(ResolveMediaType(x.MediaType, x.LinkType), NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal)
-                    ? NetworkDiagramFibreSubtypes.Normalize(x.FibreSubtype)
+                    ? NetworkDiagramMediaSubtypes.Normalize(x.FibreSubtype, NetworkDiagramLinkMediaTypes.Fibre)
                     : null,
                 LinkType = ResolveLinkType(x.LinkType),
-                LinkSpeedValue = NormalizeLinkSpeedValue(x.LinkSpeedValue),
+                LinkSpeedValue = x.LinkSpeedValue is > 0 ? NormalizeLinkSpeedValue(x.LinkSpeedValue) : null,
                 LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Normalize(x.LinkSpeedUnit),
                 LacpMemberCount = ResolveLacpMemberCount(x.LinkType, x.LacpMemberCount),
                 LacpMemberPortsJson = NormalizeLacpMemberPortsJson(x.LinkType, x.LacpMemberPortsJson),
@@ -314,15 +315,10 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
             throw new NetworkDiagramValidationException($"Unsupported link type '{linkType}'.");
         }
 
-        var fibreSubtype = NetworkDiagramFibreSubtypes.Normalize(link.FibreSubtype);
-        if (!NetworkDiagramFibreSubtypes.IsAllowed(fibreSubtype))
+        var mediaSubtype = NetworkDiagramMediaSubtypes.Normalize(link.MediaSubtype ?? link.FibreSubtype, mediaType);
+        if (!NetworkDiagramMediaSubtypes.IsAllowed(mediaSubtype, mediaType))
         {
-            throw new NetworkDiagramValidationException($"Unsupported fibre subtype '{fibreSubtype}'.");
-        }
-
-        if (!string.Equals(mediaType, NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal) && fibreSubtype is not null)
-        {
-            throw new NetworkDiagramValidationException("Fibre subtype can only be set when media type is Fibre.");
+            throw new NetworkDiagramValidationException($"Unsupported media subtype '{mediaSubtype}' for media type '{mediaType}'.");
         }
 
         var speedValue = NormalizeLinkSpeedValue(link.LinkSpeedValue);
@@ -382,11 +378,11 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
         return NetworkDiagramLinkMediaTypes.Allowed.Contains(legacyMedia) ? NetworkDiagramLinkTypes.Standard : normalized;
     }
 
-    private static string? ResolveFibreSubtype(string? mediaType, string? fibreSubtype)
+    private static string? ResolveMediaSubtype(string? mediaType, string? mediaSubtype)
     {
-        return string.Equals(NetworkDiagramLinkMediaTypes.Normalize(mediaType), NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal)
-            ? NetworkDiagramFibreSubtypes.Normalize(fibreSubtype)
-            : null;
+        var resolvedMediaType = NetworkDiagramLinkMediaTypes.Normalize(mediaType);
+        var normalized = NetworkDiagramMediaSubtypes.Normalize(mediaSubtype, resolvedMediaType);
+        return NetworkDiagramMediaSubtypes.IsAllowed(normalized, resolvedMediaType) ? normalized : null;
     }
 
     private static decimal? NormalizeLinkSpeedValue(decimal? value)
@@ -396,9 +392,9 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
             return null;
         }
 
-        if (value < 0 || value > 1000000)
+        if (value <= 0 || value > 1000000)
         {
-            throw new NetworkDiagramValidationException("Link speed value must be between 0 and 1,000,000.");
+            throw new NetworkDiagramValidationException("Link speed value must be greater than 0 and no more than 1,000,000.");
         }
 
         return Math.Round(value.Value, 3);

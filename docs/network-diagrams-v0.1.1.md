@@ -295,3 +295,29 @@ Links may record structured speed metadata as a numeric value plus unit (`Mbps`,
 When the link type is `LACP`, diagrams may record a member count from 1 through 16 and per-member source/target port labels. Member port details are stored as structured JSON metadata on the diagram link so they remain documentation-only and cascade with the saved diagram link. Non-LACP links continue to use the simple source and target port label fields.
 
 Multiple visual links may exist between the same two devices. Parallel links are offset visually on the editor canvas and PDF export so each link can be selected, edited, deleted, saved, reloaded, and exported independently.
+
+## Link selection and documentation metadata
+
+Diagram links are documentation/status-overlay objects only. Selecting, editing, saving, deleting, or exporting a diagram link must not create, update, or remove endpoint monitoring dependencies, suppression relationships, alert rules, agent assignments, or automatically discovered topology.
+
+In the editor, each visual link is selectable from the canvas. The rendered link includes a visible path plus a wider transparent hit-test path following the same geometry so thin, dashed, dotted, curved, and parallel/offset links remain selectable at different zoom and pan positions. Link labels and notes are non-blocking; clicking the label area should not prevent the underlying visual link from being selected. Selecting a link clears node selection, shows the link properties panel, and delete selected removes only that visual link.
+
+Link metadata uses separate concepts:
+
+- **Media type** describes the physical or transport medium: Copper, Fibre, Wireless, DAC, VPN, Virtual, or Other.
+- **Media subtype** documents a medium-specific subtype. Existing saved fibre subtype data continues to load as media subtype data.
+- **Link type** describes the operational role: Standard, Trunk, Access, LACP, Point-to-point, Backhaul, WAN, Management, Logical, or Other.
+
+Media subtype options are dependent on media type:
+
+- Copper: Cat5e, Cat6, Cat6a, Cat7, Cat8, Coax, Other.
+- Fibre: OM1, OM2, OM3, OM4, OM5, OS1, OS2, Other.
+- Wireless: 802.11a, 802.11b, 802.11g, 802.11n / Wi-Fi 4, 802.11ac / Wi-Fi 5, 802.11ax / Wi-Fi 6, 802.11be / Wi-Fi 7, 60GHz, Other.
+- DAC: Passive DAC, Active DAC, AOC, Other.
+- VPN: IPsec, WireGuard, OpenVPN, GRE, Other.
+- Virtual: Hyper-V vSwitch, VMware vSwitch, VLAN interface, Loopback, Other.
+- Other: None, Other.
+
+Link speed is documented with common presets: 10 Mbps, 100 Mbps, 1 Gbps, 2.5 Gbps, 5 Gbps, 10 Gbps, 25 Gbps, 40 Gbps, and 100 Gbps. Selecting Other exposes custom speed value and unit fields. Saved custom speed values must be positive and use a supported unit. For LACP links, the speed is per physical member link; labels and PDF export use summaries such as `LACP 2 × 10 Gbps` or `LACP 4 × 1 Gbps`.
+
+Link visual summaries include useful media, subtype, non-standard link type, speed, LACP member count, labels, ports, and notes where space allows. PDF export uses the same documentation metadata while keeping wireless links dashed, fibre and copper visually distinct, LACP emphasized, and parallel links separated.
