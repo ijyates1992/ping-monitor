@@ -217,11 +217,22 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("buildVisibleLinkLabel", script);
         Assert.Contains("diagram-link-hit", script);
         Assert.Contains("group.dataset.linkId = link.id", script);
+        Assert.Contains("hit.dataset.linkId = link.id", script);
+        Assert.Contains("line.dataset.linkId = link.id", script);
+        Assert.Contains("const selectRenderedLink = event =>", script);
+        Assert.Contains("label.addEventListener('pointerdown', selectRenderedLink)", script);
         Assert.Contains("selectLink(link.id)", script);
+        Assert.Contains("event.stopPropagation();", script);
+        Assert.Contains("group.append(line, hit)", script);
         Assert.Contains(@"data-media-type=""wireless""", styles);
         Assert.Contains("stroke-dasharray: 12 8", styles);
-        Assert.Contains("stroke-width: 28", styles);
+        Assert.Contains("stroke-width: 18", styles);
+        Assert.Contains("vector-effect: non-scaling-stroke", styles);
         Assert.Contains("pointer-events: all", styles);
+        Assert.Contains("pointer-events: stroke", styles);
+        Assert.Contains(".diagram-node-layer", styles);
+        Assert.Contains("pointer-events: none", styles);
+        Assert.Contains("pointer-events: auto", styles);
         Assert.Contains(@"data-media-type=""fibre""", styles);
     }
 

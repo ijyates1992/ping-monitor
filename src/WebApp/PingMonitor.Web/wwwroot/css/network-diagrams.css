@@ -224,11 +224,14 @@ body {
 .diagram-node-layer {
     position: absolute;
     inset: 0;
+    /* Keep the full-size node overlay from blocking SVG link hit targets underneath. */
+    pointer-events: none;
 }
 
 .diagram-node {
     position: absolute;
     left: 0;
+    pointer-events: auto;
     top: 0;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -543,12 +546,13 @@ body {
     fill: none;
     pointer-events: all;
     stroke: rgba(0, 0, 0, .001);
-    stroke-width: 28;
+    stroke-width: 18;
+    vector-effect: non-scaling-stroke;
     cursor: pointer;
 }
 
 .diagram-link-line {
-    pointer-events: none;
+    pointer-events: stroke;
     fill: none;
     stroke: #475467;
     stroke-width: 3;
@@ -600,9 +604,9 @@ body {
 
 .diagram-link-group[data-selected="true"] .diagram-link-line {
     stroke: var(--diagram-accent);
-    stroke-width: 5;
+    stroke-width: 7;
     opacity: 1;
-    filter: drop-shadow(0 0 2px var(--diagram-accent-soft));
+    filter: drop-shadow(0 0 3px var(--diagram-accent)) drop-shadow(0 0 7px var(--diagram-accent-soft));
 }
 
 .diagram-link-label,

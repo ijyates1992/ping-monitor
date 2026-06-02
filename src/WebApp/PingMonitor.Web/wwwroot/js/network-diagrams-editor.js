@@ -898,20 +898,30 @@
             group.dataset.mediaType = normalizeMediaType(link.mediaType, link.linkType).toLowerCase();
             group.dataset.linkType = normalizeLinkType(link.linkType).toLowerCase();
 
-            const hit = createSvgElement('path');
-            hit.classList.add('diagram-link-hit');
-            hit.setAttribute('d', geometry.path);
-            hit.addEventListener('pointerdown', event => {
+            const selectRenderedLink = event => {
+                if (state.currentTool !== 'select') {
+                    return;
+                }
+
                 selectLink(link.id);
+                canvas.focus({ preventScroll: true });
                 event.preventDefault();
                 event.stopPropagation();
-            });
+            };
 
             const line = createSvgElement('path');
             line.classList.add('diagram-link-line');
+            line.dataset.linkId = link.id;
             line.setAttribute('d', geometry.path);
+            line.addEventListener('pointerdown', selectRenderedLink);
 
-            group.append(hit, line);
+            const hit = createSvgElement('path');
+            hit.classList.add('diagram-link-hit');
+            hit.dataset.linkId = link.id;
+            hit.setAttribute('d', geometry.path);
+            hit.addEventListener('pointerdown', selectRenderedLink);
+
+            group.append(line, hit);
 
             const visibleLabel = buildVisibleLinkLabel(link);
             if (visibleLabel) {
@@ -921,11 +931,7 @@
                 label.setAttribute('y', String(geometry.label.y));
                 label.setAttribute('text-anchor', 'middle');
                 label.textContent = visibleLabel;
-                label.addEventListener('pointerdown', event => {
-                    selectLink(link.id);
-                    event.preventDefault();
-                    event.stopPropagation();
-                });
+                label.addEventListener('pointerdown', selectRenderedLink);
                 group.appendChild(label);
             }
 

@@ -300,7 +300,9 @@ Multiple visual links may exist between the same two devices. Parallel links are
 
 Diagram links are documentation/status-overlay objects only. Selecting, editing, saving, deleting, or exporting a diagram link must not create, update, or remove endpoint monitoring dependencies, suppression relationships, alert rules, agent assignments, or automatically discovered topology.
 
-In the editor, each visual link is selectable from the canvas. The rendered link includes a visible path plus a wider transparent hit-test path following the same geometry so thin, dashed, dotted, curved, and parallel/offset links remain selectable at different zoom and pan positions. Link labels and notes are non-blocking; clicking the label area should not prevent the underlying visual link from being selected. Selecting a link clears node selection, shows the link properties panel, and delete selected removes only that visual link.
+In the editor, each visual link is selectable from the canvas. The rendered link includes a visible path plus a wider transparent hit-test path following the same geometry so thin, dashed, dotted, curved, and parallel/offset links remain selectable at different zoom and pan positions. The node overlay layer must not intercept empty-space SVG clicks; only actual node cards should receive node pointer events. Link labels and notes are non-blocking; clicking the label area should not prevent the underlying visual link from being selected. Selecting a link clears node selection, shows the link properties panel, and delete selected removes only that visual link.
+
+Deleting a visual link changes only the saved diagram documentation. It does not delete nodes and does not create, remove, or update endpoint dependencies, monitoring state, dependency suppression, alerting, agent assignments, or discovered topology.
 
 Link metadata uses separate concepts:
 
