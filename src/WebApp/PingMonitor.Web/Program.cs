@@ -231,6 +231,7 @@ builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryS
 builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
 builder.Services.AddScoped<PingMonitor.Web.Services.NetworkDiagrams.INetworkDiagramService, PingMonitor.Web.Services.NetworkDiagrams.NetworkDiagramService>();
 builder.Services.AddScoped<PingMonitor.Web.Services.NetworkDiagrams.INetworkDiagramPdfExportService, PingMonitor.Web.Services.NetworkDiagrams.NetworkDiagramPdfExportService>();
+builder.Services.AddScoped<PingMonitor.Web.Services.NetworkDiagrams.INetworkDiagramLiveOverlayService, PingMonitor.Web.Services.NetworkDiagrams.NetworkDiagramLiveOverlayService>();
 builder.Services.AddScoped<IEndpointManagementService, EndpointManagementService>();
 builder.Services.AddScoped<IEndpointPerformanceQueryService, EndpointPerformanceQueryService>();
 builder.Services.AddScoped<IGroupManagementService, GroupManagementService>();

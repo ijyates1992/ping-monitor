@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Controllers;
 using PingMonitor.Web.Models;
@@ -65,7 +67,9 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = false }),
             new FakeEndpointManagementQueryService(),
             new FakeNetworkDiagramService(),
-            new FakeNetworkDiagramPdfExportService());
+            new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService());
 
         var result = await controller.Index(CancellationToken.None);
 
@@ -88,7 +92,9 @@ public sealed class NetworkDiagramsFeatureTests
                 CurrentState = EndpointStateKind.Up
             }),
             new FakeNetworkDiagramService(new NetworkDiagram { DiagramId = "diagram-1", Name = "Core", UpdatedAtUtc = DateTimeOffset.UtcNow }),
-            new FakeNetworkDiagramPdfExportService());
+            new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService());
 
         var result = await controller.Index(CancellationToken.None);
 
@@ -441,14 +447,24 @@ public sealed class NetworkDiagramsFeatureTests
     }
 
     [Fact]
-    public void NetworkDiagramsController_RequiresAdminAuthorizationForExport()
+    public void NetworkDiagramsController_AllowsAuthenticatedViewerAndRequiresAdminForEditAndExport()
     {
-        var authorize = typeof(NetworkDiagramsController)
+        var controllerAuthorize = typeof(NetworkDiagramsController)
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+            .Single();
+        var editAuthorize = typeof(NetworkDiagramsController).GetMethod(nameof(NetworkDiagramsController.Edit))!
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+            .Single();
+        var exportAuthorize = typeof(NetworkDiagramsController).GetMethod(nameof(NetworkDiagramsController.ExportPdf))!
             .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
             .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
             .Single();
 
-        Assert.Equal(ApplicationRoles.Admin, authorize.Roles);
+        Assert.Null(controllerAuthorize.Roles);
+        Assert.Equal(ApplicationRoles.Admin, editAuthorize.Roles);
+        Assert.Equal(ApplicationRoles.Admin, exportAuthorize.Roles);
     }
 
     [Fact]
@@ -458,7 +474,9 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = false }),
             new FakeEndpointManagementQueryService(),
             new FakeNetworkDiagramService(),
-            new FakeNetworkDiagramPdfExportService());
+            new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService());
 
         var result = await controller.ExportPdf("missing", "A4", CancellationToken.None);
 
@@ -473,7 +491,9 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = true }),
             new FakeEndpointManagementQueryService(),
             new FakeNetworkDiagramService(),
-            new FakeNetworkDiagramPdfExportService());
+            new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService());
 
         var result = await controller.ExportPdf("missing", "A4", CancellationToken.None);
 
@@ -496,7 +516,9 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = true }),
             new FakeEndpointManagementQueryService(),
             service,
-            new FakeNetworkDiagramPdfExportService());
+            new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService());
 
         var result = await controller.ExportPdf("diagram-1", "A4", CancellationToken.None);
 
@@ -504,6 +526,65 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Equal("application/pdf", file.ContentType);
         Assert.StartsWith("PingMonitor-NetworkDiagram-Core", file.FileDownloadName);
         Assert.StartsWith("%PDF", System.Text.Encoding.ASCII.GetString(file.FileContents));
+    }
+
+
+    [Fact]
+    public void NetworkDiagramViewer_HasReadOnlyCanvasAndLiveOverlayControls()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var viewMarkup = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Views", "NetworkDiagrams", "View.cshtml"));
+        var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-viewer.js"));
+
+        Assert.Contains("data-network-diagram-viewer", viewMarkup);
+        Assert.Contains("data-live-data-url", viewMarkup);
+        Assert.Contains("Read-only viewer", viewMarkup);
+        Assert.DoesNotContain("data-save-diagram", viewMarkup);
+        Assert.DoesNotContain("data-add-endpoint-node", viewMarkup);
+        Assert.DoesNotContain("data-delete-selection", viewMarkup);
+        Assert.DoesNotContain("Draw link", viewMarkup);
+        Assert.Contains("refreshIntervalMs = 20000", script);
+        Assert.Contains("State: ${stateLabel(stateValue)}", script);
+        Assert.Contains("24h:", script);
+        Assert.Contains("RTT:", script);
+    }
+
+    [Fact]
+    public async Task NetworkDiagramsViewer_ReturnsViewer_WhenFeatureEnabled()
+    {
+        var controller = new NetworkDiagramsController(
+            new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = true }),
+            new FakeEndpointManagementQueryService(),
+            new FakeNetworkDiagramService(new NetworkDiagram { DiagramId = "diagram-1", Name = "Core", UpdatedAtUtc = DateTimeOffset.UtcNow }),
+            new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService(isAdmin: true));
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity("test")) } };
+
+        var result = await controller.ViewDiagram("diagram-1", CancellationToken.None);
+
+        var view = Assert.IsType<ViewResult>(result);
+        Assert.Equal("View", view.ViewName);
+        var model = Assert.IsType<NetworkDiagramViewerPageViewModel>(view.Model);
+        Assert.Equal("diagram-1", model.DiagramId);
+        Assert.True(model.IsAdmin);
+    }
+
+    [Fact]
+    public async Task NetworkDiagramsLiveData_ReturnsNotFound_WhenFeatureDisabled()
+    {
+        var controller = new NetworkDiagramsController(
+            new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = false }),
+            new FakeEndpointManagementQueryService(),
+            new FakeNetworkDiagramService(new NetworkDiagram { DiagramId = "diagram-1", Name = "Core", UpdatedAtUtc = DateTimeOffset.UtcNow }),
+            new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService());
+
+        var result = await controller.LiveData("diagram-1", CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        Assert.Contains("Network diagrams are not enabled", notFound.Value!.ToString());
     }
 
     private static string FindRepositoryRoot()
@@ -607,6 +688,52 @@ public sealed class NetworkDiagramsFeatureTests
         {
             return new NetworkDiagramPdfExportResult(System.Text.Encoding.ASCII.GetBytes("%PDF test"), "application/pdf", $"PingMonitor-NetworkDiagram-{diagram.Name}-{options.ExportedAtUtc:yyyyMMdd-HHmm}.pdf");
         }
+    }
+
+
+    private sealed class FakeNetworkDiagramLiveOverlayService : INetworkDiagramLiveOverlayService
+    {
+        public Task<NetworkDiagramLiveOverlayResponse> GetOverlayAsync(string diagramId, ClaimsPrincipal user, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new NetworkDiagramLiveOverlayResponse
+            {
+                DiagramId = diagramId,
+                RefreshedAtUtc = DateTimeOffset.UtcNow,
+                Nodes =
+                [
+                    new NetworkDiagramNodeLiveOverlayDto
+                    {
+                        NodeId = "node-1",
+                        EndpointId = "endpoint-1",
+                        SummaryState = EndpointStateKind.Up,
+                        SummaryStateLabel = "Up",
+                        UptimePercent24h = 99.9,
+                        UptimeDisplay = "99.9%",
+                        LastRttMs = 4.2
+                    }
+                ]
+            });
+        }
+    }
+
+    private sealed class FakeUserAccessScopeService : IUserAccessScopeService
+    {
+        private readonly bool _isAdmin;
+
+        public FakeUserAccessScopeService(bool isAdmin = true)
+        {
+            _isAdmin = isAdmin;
+        }
+
+        public Task<bool> IsAdminAsync(ClaimsPrincipal principal) => Task.FromResult(_isAdmin);
+
+        public Task<IReadOnlySet<string>> GetVisibleEndpointIdsAsync(ClaimsPrincipal principal, CancellationToken cancellationToken)
+        {
+            IReadOnlySet<string> result = new HashSet<string>(StringComparer.Ordinal) { "endpoint-1" };
+            return Task.FromResult(result);
+        }
+
+        public Task<bool> CanAccessAssignmentAsync(ClaimsPrincipal principal, string assignmentId, CancellationToken cancellationToken) => Task.FromResult(_isAdmin);
     }
 
     private sealed class FakeApplicationSettingsService : IApplicationSettingsService

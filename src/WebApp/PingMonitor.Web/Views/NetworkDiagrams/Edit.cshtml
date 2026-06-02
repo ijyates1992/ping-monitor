@@ -145,6 +145,10 @@
                         </select>
                     </label>
                     <button type="button" class="diagram-tool-button" data-export-pdf>Export PDF</button>
+                    @if (!string.IsNullOrWhiteSpace(Model.ViewerUrl))
+                    {
+                        <a class="diagram-tool-button" href="@Model.ViewerUrl">View diagram</a>
+                    }
                     <button type="button" class="diagram-tool-button" data-save-diagram>Save</button>
                     <span class="diagram-tool-hint" data-tool-hint>Select nodes to move them. Draw link mode creates documentation-only links. Drag empty space to pan. Use mouse wheel to zoom.</span>
                 </div>
