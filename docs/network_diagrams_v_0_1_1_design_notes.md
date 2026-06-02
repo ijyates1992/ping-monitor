@@ -468,3 +468,9 @@ The Properties panel supports draft-only edits for exactly one selected node: di
 The link Properties panel supports draft-only edits for label, source port, target port, and notes, and repeats that visual links do not create or modify monitoring dependencies. Deleting a selected link removes only the draft visual link. Deleting selected node(s) removes only draft diagram nodes and attached draft visual links; it does not delete endpoints, assignments, monitoring data, dependencies, alerts, or agent state.
 
 This remains a client-side draft-only slice. No saved diagram layout, database persistence, monitoring state evaluation, dependency suppression, alerting, Startup Gate, or agent behavior is changed. Marquee selection remains future work to avoid risking pan/zoom regressions.
+
+## Link Styling/Label Enhancement Notes
+
+Network diagram links now support documentation-only media/type metadata for Copper, Fibre, Wireless, LACP, VPN, Logical, and Other. The selected type controls editor and PDF styling only; wireless uses a dashed line, fibre is visually distinct from copper, and LACP/VPN/logical links use pattern/weight differences so the styling is not colour-only.
+
+Link labels and notes are drawn on-canvas near the link midpoint, and multiple links between the same unordered node pair are grouped and offset deterministically so A → B and B → A links do not overlap after save/reload. These visual links remain separate from monitoring dependencies: creating, editing, deleting, saving, or exporting links must not alter endpoint monitoring, dependency suppression, state evaluation, alerting, agents, or Startup Gate behaviour.

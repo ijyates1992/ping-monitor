@@ -88,6 +88,18 @@
                 <div class="diagram-workspace-toolbar" aria-label="Network diagram tools">
                     <button type="button" class="diagram-tool-button" data-tool-button="select" aria-pressed="true">Select / move</button>
                     <button type="button" class="diagram-tool-button" data-tool-button="draw-link" aria-pressed="false">Draw link</button>
+                    <label class="diagram-toolbar-select-label diagram-link-type-toolbar">
+                        Link type
+                        <select data-draw-link-type aria-label="Link type for newly drawn links">
+                            <option value="Copper">Copper</option>
+                            <option value="Fibre">Fibre</option>
+                            <option value="Wireless">Wireless</option>
+                            <option value="LACP">LACP</option>
+                            <option value="VPN">VPN</option>
+                            <option value="Logical">Logical</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
                     <span class="diagram-toolbar-divider" aria-hidden="true"></span>
                     <button type="button" class="diagram-tool-button" data-select-all>Select all nodes</button>
                     <button type="button" class="diagram-tool-button" data-clear-selection disabled>Clear selection</button>
@@ -171,7 +183,19 @@
                     <button type="button" class="danger-button" data-delete-selection>Delete selected nodes</button>
                 </div>
                 <form class="link-properties" data-link-properties hidden>
-                    <p class="toolbox-help">This visual link does not create or modify monitoring dependencies. Link metadata is saved diagram documentation only.</p>
+                    <p class="toolbox-help">Link type controls diagram styling only. Links do not create monitoring dependencies.</p>
+                    <label>
+                        Link type / media
+                        <select data-link-field="linkType">
+                            <option value="Copper">Copper</option>
+                            <option value="Fibre">Fibre</option>
+                            <option value="Wireless">Wireless</option>
+                            <option value="LACP">LACP</option>
+                            <option value="VPN">VPN</option>
+                            <option value="Logical">Logical</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
                     <label>
                         Link label
                         <input type="text" data-link-field="label" maxlength="80" />

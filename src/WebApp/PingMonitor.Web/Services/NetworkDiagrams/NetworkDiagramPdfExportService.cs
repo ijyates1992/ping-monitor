@@ -269,6 +269,7 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
         double MapHeight(double worldHeight) => worldHeight * scale;
 
         var nodeLookup = diagram.Nodes.ToDictionary(x => x.NodeId, StringComparer.Ordinal);
+        var offsetIndexes = GetParallelOffsetIndexes(diagram.Links);
         foreach (var link in diagram.Links)
         {
             if (!nodeLookup.TryGetValue(link.SourceNodeId, out var source) || !nodeLookup.TryGetValue(link.TargetNodeId, out var target))
@@ -280,17 +281,17 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
             var sy = MapY(source.Y + source.Height / 2);
             var tx = MapX(target.X + target.Width / 2);
             var ty = MapY(target.Y + target.Height / 2);
+            var geometry = BuildLinkGeometry(sx, sy, tx, ty, offsetIndexes.GetValueOrDefault(link.LinkId));
             stream.AppendLine("q");
-            stream.AppendLine("0.28 0.32 0.38 RG");
-            stream.AppendLine("1.5 w");
-            stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.##} {1:0.##} m {2:0.##} {3:0.##} l S\n", sx, sy, tx, ty);
+            ApplyLinkStyle(stream, link.LinkType);
+            stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.##} {1:0.##} m {2:0.##} {3:0.##} l S\n", geometry.StartX, geometry.StartY, geometry.EndX, geometry.EndY);
             stream.AppendLine("Q");
 
             var label = BuildLinkLabel(link);
             if (!string.IsNullOrWhiteSpace(label))
             {
-                var fittedLabel = NetworkDiagramPdfTextFitter.Fit(label, maxWidth: 90, maxLines: 1, fontSize: 7, minimumFontSize: 5, useEllipsis: true);
-                AddFittedText(stream, (sx + tx) / 2 - 45, (sy + ty) / 2 + 5, fittedLabel, bold: false);
+                var fittedLabel = NetworkDiagramPdfTextFitter.Fit(label, maxWidth: 132, maxLines: 1, fontSize: 7, minimumFontSize: 5, useEllipsis: true);
+                AddFittedText(stream, geometry.LabelX - 66, geometry.LabelY + 5, fittedLabel, bold: false);
             }
         }
 
@@ -334,6 +335,83 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
         return stream.ToString();
     }
 
+
+    private static Dictionary<string, double> GetParallelOffsetIndexes(IReadOnlyList<NetworkDiagramLinkDto> links)
+    {
+        var result = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var group in links.GroupBy(link => string.CompareOrdinal(link.SourceNodeId, link.TargetNodeId) <= 0
+            ? $"{link.SourceNodeId}::{link.TargetNodeId}"
+            : $"{link.TargetNodeId}::{link.SourceNodeId}"))
+        {
+            var ordered = group.OrderBy(link => link.LinkId, StringComparer.Ordinal).ToArray();
+            var center = (ordered.Length - 1) / 2d;
+            for (var i = 0; i < ordered.Length; i++)
+            {
+                result[ordered[i].LinkId] = i - center;
+            }
+        }
+
+        return result;
+    }
+
+    private static LinkGeometry BuildLinkGeometry(double sx, double sy, double tx, double ty, double offsetIndex)
+    {
+        var dx = tx - sx;
+        var dy = ty - sy;
+        var length = Math.Sqrt(dx * dx + dy * dy);
+        if (length <= 0.01d)
+        {
+            length = 1d;
+        }
+
+        var px = -dy / length;
+        var py = dx / length;
+        var offset = offsetIndex * 9d;
+        var startX = sx + px * offset;
+        var startY = sy + py * offset;
+        var endX = tx + px * offset;
+        var endY = ty + py * offset;
+
+        return new LinkGeometry(startX, startY, endX, endY, (startX + endX) / 2, (startY + endY) / 2 + (offset == 0 ? 6 : Math.Sign(offset) * 6));
+    }
+
+    private static void ApplyLinkStyle(StringBuilder stream, string? linkType)
+    {
+        switch (NetworkDiagramLinkTypes.Normalize(linkType))
+        {
+            case NetworkDiagramLinkTypes.Fibre:
+                stream.AppendLine("0.49 0.23 0.93 RG");
+                stream.AppendLine("1.8 w");
+                stream.AppendLine("[] 0 d");
+                break;
+            case NetworkDiagramLinkTypes.Wireless:
+                stream.AppendLine("0.28 0.32 0.38 RG");
+                stream.AppendLine("1.5 w");
+                stream.AppendLine("[8 5] 0 d");
+                break;
+            case NetworkDiagramLinkTypes.Lacp:
+                stream.AppendLine("0.28 0.32 0.38 RG");
+                stream.AppendLine("2.4 w");
+                stream.AppendLine("[] 0 d");
+                break;
+            case NetworkDiagramLinkTypes.Vpn:
+                stream.AppendLine("0.28 0.32 0.38 RG");
+                stream.AppendLine("1.5 w");
+                stream.AppendLine("[9 4 2 4] 0 d");
+                break;
+            case NetworkDiagramLinkTypes.Logical:
+                stream.AppendLine("0.48 0.55 0.64 RG");
+                stream.AppendLine("1.2 w");
+                stream.AppendLine("[4 4] 0 d");
+                break;
+            default:
+                stream.AppendLine("0.28 0.32 0.38 RG");
+                stream.AppendLine("1.5 w");
+                stream.AppendLine("[] 0 d");
+                break;
+        }
+    }
+
     private static DiagramBounds GetExportBounds(NetworkDiagramDto diagram)
     {
         if (diagram.Nodes.Count == 0)
@@ -356,7 +434,11 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
 
     private static string BuildLinkLabel(NetworkDiagramLinkDto link)
     {
-        var parts = new[] { link.SourcePortLabel, link.Label, link.TargetPortLabel }
+        var ports = !string.IsNullOrWhiteSpace(link.SourcePortLabel) || !string.IsNullOrWhiteSpace(link.TargetPortLabel)
+            ? $"{link.SourcePortLabel ?? "?"} <-> {link.TargetPortLabel ?? "?"}"
+            : null;
+        var labelAndNotes = string.Join(" -- ", new[] { link.Label, link.Notes }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var parts = new[] { NetworkDiagramLinkTypes.Normalize(link.LinkType), ports, labelAndNotes }
             .Where(x => !string.IsNullOrWhiteSpace(x));
         return string.Join(" • ", parts);
     }
@@ -469,6 +551,7 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
     }
 
     private sealed record PdfPaper(string Name, double WidthPoints, double HeightPoints);
+    private sealed record LinkGeometry(double StartX, double StartY, double EndX, double EndY, double LabelX, double LabelY);
     private sealed record DiagramBounds(double MinX, double MinY, double MaxX, double MaxY)
     {
         public double Width => Math.Max(1, MaxX - MinX);

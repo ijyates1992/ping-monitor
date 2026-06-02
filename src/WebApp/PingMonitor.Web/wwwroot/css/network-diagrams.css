@@ -540,22 +540,53 @@ body {
 }
 
 .diagram-link-hit {
+    fill: none;
     pointer-events: stroke;
     stroke: transparent;
-    stroke-width: 18;
+    stroke-width: 22;
     cursor: pointer;
 }
 
 .diagram-link-line {
     pointer-events: none;
+    fill: none;
     stroke: #475467;
     stroke-width: 3;
     stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.diagram-link-group[data-link-type="fibre"] .diagram-link-line {
+    stroke: #7c3aed;
+    stroke-width: 3.4;
+}
+
+.diagram-link-group[data-link-type="wireless"] .diagram-link-line {
+    stroke-dasharray: 12 8;
+}
+
+.diagram-link-group[data-link-type="lacp"] .diagram-link-line {
+    stroke-width: 5;
+}
+
+.diagram-link-group[data-link-type="vpn"] .diagram-link-line {
+    stroke-dasharray: 14 6 3 6;
+}
+
+.diagram-link-group[data-link-type="logical"] .diagram-link-line {
+    opacity: .72;
+    stroke-dasharray: 5 7;
+}
+
+.diagram-link-group[data-link-type="other"] .diagram-link-line {
+    stroke: #667085;
 }
 
 .diagram-link-group[data-selected="true"] .diagram-link-line {
     stroke: var(--diagram-accent);
-    stroke-width: 4;
+    stroke-width: 5;
+    opacity: 1;
+    filter: drop-shadow(0 0 2px var(--diagram-accent-soft));
 }
 
 .diagram-link-label,
@@ -734,6 +765,14 @@ html[data-theme="dark"] .diagram-node[data-node-kind="monitored-endpoint"] {
 
 html[data-theme="dark"] .diagram-link-line {
     stroke: #cbd5e1;
+}
+
+html[data-theme="dark"] .diagram-link-group[data-link-type="fibre"] .diagram-link-line {
+    stroke: #c4b5fd;
+}
+
+html[data-theme="dark"] .diagram-link-group[data-link-type="other"] .diagram-link-line {
+    stroke: #94a3b8;
 }
 
 html[data-theme="dark"] .diagram-link-label,

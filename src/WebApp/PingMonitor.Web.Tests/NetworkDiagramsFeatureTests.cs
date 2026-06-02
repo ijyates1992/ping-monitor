@@ -131,7 +131,10 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains(@"data-node-field=""label""", viewMarkup);
         Assert.Contains(@"data-node-field=""notes""", viewMarkup);
         Assert.Contains("data-multi-node-properties", viewMarkup);
-        Assert.Contains("This visual link does not create or modify monitoring dependencies.", viewMarkup);
+        Assert.Contains("Link type controls diagram styling only. Links do not create monitoring dependencies.", viewMarkup);
+        Assert.Contains("data-draw-link-type", viewMarkup);
+        Assert.Contains(@"data-link-field=""linkType""", viewMarkup);
+        Assert.Contains("Wireless", viewMarkup);
         Assert.Contains("Zoom in", viewMarkup);
         Assert.Contains("Zoom out", viewMarkup);
         Assert.Contains("Reset view", viewMarkup);
@@ -175,7 +178,42 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Export uses the last saved diagram", script);
     }
 
+    [Fact]
+    public void NetworkDiagramLinkTypes_NormalizesOldAndMissingValuesToCopper()
+    {
+        Assert.Equal(NetworkDiagramLinkTypes.Copper, NetworkDiagramLinkTypes.Normalize(null));
+        Assert.Equal(NetworkDiagramLinkTypes.Copper, NetworkDiagramLinkTypes.Normalize("default"));
+        Assert.Equal(NetworkDiagramLinkTypes.Fibre, NetworkDiagramLinkTypes.Normalize("fibre"));
+        Assert.True(NetworkDiagramLinkTypes.IsAllowed("Wireless"));
+        Assert.False(NetworkDiagramLinkTypes.IsAllowed("unsupported"));
+    }
 
+    [Fact]
+    public void NetworkDiagramService_ValidatesAndPersistsLinkTypeMetadata()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var serviceSource = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Services", "NetworkDiagrams", "NetworkDiagramService.cs"));
+
+        Assert.Contains("Unsupported link type", serviceSource);
+        Assert.Contains("NetworkDiagramLinkTypes.Normalize(TrimOptional(linkRequest.LinkType, 64))", serviceSource);
+        Assert.Contains("LinkType = NetworkDiagramLinkTypes.Normalize(x.LinkType)", serviceSource);
+        Assert.DoesNotContain("same two", serviceSource, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NetworkDiagramEditor_AllowsParallelLinksAndRendersLabelsByType()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-editor.js"));
+        var styles = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "css", "network-diagrams.css"));
+
+        Assert.DoesNotContain("linkExists(sourceNodeId, targetNodeId)", script);
+        Assert.Contains("getParallelOffsetIndexes", script);
+        Assert.Contains("buildVisibleLinkLabel", script);
+        Assert.Contains(@"data-link-type=""wireless""", styles);
+        Assert.Contains("stroke-dasharray: 12 8", styles);
+        Assert.Contains(@"data-link-type=""fibre""", styles);
+    }
 
     [Fact]
     public void NetworkDiagramPdfTextFitter_WrapsShortMultiWordLabels()
@@ -223,7 +261,9 @@ public sealed class NetworkDiagramsFeatureTests
             ],
             Links =
             [
-                new NetworkDiagramLinkDto { LinkId = "link-1", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "uplink", SourcePortLabel = "Gi1/0/1", TargetPortLabel = "eth0" }
+                new NetworkDiagramLinkDto { LinkId = "link-1", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "uplink", SourcePortLabel = "Gi1/0/1", TargetPortLabel = "eth0", LinkType = NetworkDiagramLinkTypes.Copper },
+                new NetworkDiagramLinkDto { LinkId = "link-2", SourceNodeId = "node-2", TargetNodeId = "node-1", Label = "backup", Notes = "wireless failover", LinkType = NetworkDiagramLinkTypes.Wireless },
+                new NetworkDiagramLinkDto { LinkId = "link-3", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "storage", Notes = "10Gb fibre", LinkType = NetworkDiagramLinkTypes.Fibre }
             ]
         };
 
@@ -236,6 +276,10 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Router", pdfText);
         Assert.Contains("Web server", pdfText);
         Assert.Contains("uplink", pdfText);
+        Assert.Contains("wireless failover", pdfText);
+        Assert.Contains("10Gb fibre", pdfText);
+        Assert.Contains("[8 5] 0 d", pdfText);
+        Assert.Contains("0.49 0.23 0.93 RG", pdfText);
         Assert.Contains("Diagram links are visual documentation only", pdfText);
     }
 

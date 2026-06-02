@@ -10,7 +10,7 @@ public sealed class NetworkDiagramLink
     public string? SourcePortLabel { get; set; }
     public string? TargetPortLabel { get; set; }
     public string? Notes { get; set; }
-    public string LinkType { get; set; } = "default";
+    public string LinkType { get; set; } = "Copper";
     public string? MetadataJson { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }

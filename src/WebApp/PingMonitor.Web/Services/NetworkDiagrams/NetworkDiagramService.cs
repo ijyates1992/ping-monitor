@@ -153,7 +153,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 SourcePortLabel = TrimOptional(linkRequest.SourcePortLabel, 128),
                 TargetPortLabel = TrimOptional(linkRequest.TargetPortLabel, 128),
                 Notes = TrimOptional(linkRequest.Notes, 4096),
-                LinkType = TrimOptional(linkRequest.LinkType, 64) ?? "default",
+                LinkType = NetworkDiagramLinkTypes.Normalize(TrimOptional(linkRequest.LinkType, 64)),
                 MetadataJson = TrimOptional(linkRequest.MetadataJson, 65535),
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
@@ -233,6 +233,17 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
             {
                 throw new NetworkDiagramValidationException("Diagram links must reference nodes in the same diagram payload.");
             }
+
+            var linkType = TrimOptional(link.LinkType, 64);
+            if (!NetworkDiagramLinkTypes.IsAllowed(linkType))
+            {
+                throw new NetworkDiagramValidationException($"Unsupported link type '{linkType}'.");
+            }
+
+            _ = TrimOptional(link.Label, 255);
+            _ = TrimOptional(link.SourcePortLabel, 128);
+            _ = TrimOptional(link.TargetPortLabel, 128);
+            _ = TrimOptional(link.Notes, 4096);
         }
     }
 
@@ -272,7 +283,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 SourcePortLabel = x.SourcePortLabel,
                 TargetPortLabel = x.TargetPortLabel,
                 Notes = x.Notes,
-                LinkType = x.LinkType,
+                LinkType = NetworkDiagramLinkTypes.Normalize(x.LinkType),
                 MetadataJson = x.MetadataJson
             }).ToArray()
         };
