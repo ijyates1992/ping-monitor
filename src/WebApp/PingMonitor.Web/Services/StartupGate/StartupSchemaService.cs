@@ -956,7 +956,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             await connection.OpenAsync(cancellationToken);
         }
 
-        var missingColumns = await GetMissingColumnsAsync((MySqlConnection)connection, "NetworkDiagramLinks", RequiredNetworkDiagramLinkColumns, cancellationToken);
+        var missingColumns = await GetMissingColumnsAsync(connection, "NetworkDiagramLinks", RequiredNetworkDiagramLinkColumns, cancellationToken);
         foreach (var column in missingColumns)
         {
             var alterSql = column switch
@@ -1139,7 +1139,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
     }
 
 
-    private static async Task<string[]> GetMissingColumnsAsync(MySqlConnection connection, string tableName, IReadOnlyCollection<string> requiredColumns, CancellationToken cancellationToken)
+    private static async Task<string[]> GetMissingColumnsAsync(System.Data.Common.DbConnection connection, string tableName, IReadOnlyCollection<string> requiredColumns, CancellationToken cancellationToken)
     {
         var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
@@ -1149,7 +1149,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             WHERE table_schema = DATABASE()
               AND table_name = @tableName;
             """;
-        command.Parameters.AddWithValue("@tableName", tableName);
+
+        var tableNameParameter = command.CreateParameter();
+        tableNameParameter.ParameterName = "@tableName";
+        tableNameParameter.Value = tableName;
+        command.Parameters.Add(tableNameParameter);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
