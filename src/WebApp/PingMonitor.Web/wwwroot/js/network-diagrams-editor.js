@@ -126,6 +126,7 @@
     let dragState = null;
     let panState = null;
     let pendingLinkSourceId = null;
+    let vlanSequence = 0;
 
     function updateNavHeight() {
         const height = nav ? nav.getBoundingClientRect().height : 0;
@@ -843,6 +844,11 @@
     }
 
 
+    function createVlanClientId() {
+        vlanSequence += 1;
+        return `vlan-${Date.now().toString(36)}-${vlanSequence.toString(36)}`;
+    }
+
     function normalizeVlanMode(value) {
         const requested = (value || '').trim();
         return vlanModes.find(mode => mode.toLowerCase() === requested.toLowerCase()) || 'Tagged';
@@ -853,12 +859,35 @@
             return [];
         }
 
-        return vlans.map(vlan => ({
+        return vlans.map((vlan, index) => ({
+            clientId: String(vlan?.clientId || vlan?.linkVlanId || createVlanClientId()),
             vlanId: vlan?.vlanId == null || vlan.vlanId === '' ? '' : String(vlan.vlanId).slice(0, 4),
             name: String(vlan?.name || '').slice(0, 128),
             mode: normalizeVlanMode(vlan?.mode),
-            notes: String(vlan?.notes || '').slice(0, 512)
-        }));
+            notes: String(vlan?.notes || '').slice(0, 512),
+            sortOrder: Number.isFinite(Number(vlan?.sortOrder)) ? Number(vlan.sortOrder) : index
+        })).sort((left, right) => left.sortOrder - right.sortOrder);
+    }
+
+    function isBlankVlan(vlan) {
+        return !vlan.vlanId && !vlan.name && !vlan.notes;
+    }
+
+    function validateVlanForSave(vlan) {
+        if (isBlankVlan(vlan)) {
+            return null;
+        }
+
+        const vlanId = Number(vlan.vlanId);
+        if (!Number.isInteger(vlanId) || vlanId < 1 || vlanId > 4094) {
+            throw new Error('VLAN ID must be between 1 and 4094.');
+        }
+
+        if (!vlanModes.includes(normalizeVlanMode(vlan.mode))) {
+            throw new Error('Select a VLAN mode.');
+        }
+
+        return vlanId;
     }
 
     function buildVlanSummary(link, maxLength = 72) {
@@ -1082,17 +1111,30 @@
         renderVlanFields(selectedLink);
     }
 
-    function addLinkVlan() {
+    function addLinkVlan(event) {
+        event?.preventDefault();
         const selectedLink = state.selectedLinkId ? findLinkById(state.selectedLinkId) : null;
         if (!selectedLink) {
             return;
         }
 
         selectedLink.vlans = normalizeVlans(selectedLink.vlans);
-        selectedLink.vlans.push({ vlanId: '', name: '', mode: 'Tagged', notes: '' });
+        const nextSortOrder = selectedLink.vlans.length === 0
+            ? 0
+            : Math.max(...selectedLink.vlans.map(vlan => vlan.sortOrder || 0)) + 1;
+        const newVlan = {
+            clientId: createVlanClientId(),
+            vlanId: '',
+            name: '',
+            mode: 'Tagged',
+            notes: '',
+            sortOrder: nextSortOrder
+        };
+        selectedLink.vlans.push(newVlan);
         renderVlanFields(selectedLink);
         renderLinks();
         markDirty();
+        linkVlanList?.querySelector(`[data-vlan-client-id="${CSS.escape(newVlan.clientId)}"] [data-vlan-field="vlanId"]`)?.focus();
     }
 
     function renderVlanFields(link) {
@@ -1117,11 +1159,16 @@
         link.vlans.forEach((vlan, index) => {
             const card = document.createElement('div');
             card.className = 'link-vlan-card';
-            card.innerHTML = `<div class="link-vlan-card-header"><strong>VLAN ${index + 1}</strong><button type="button" aria-label="Remove VLAN ${index + 1}">Remove</button></div><label>ID<input type="number" min="1" max="4094" step="1" value="${escapeHtml(vlan.vlanId)}" placeholder="10"></label><label>Name<input type="text" maxlength="128" value="${escapeHtml(vlan.name)}" placeholder="LAN"></label><label>Mode<select>${vlanModes.map(mode => `<option value="${mode}"${mode === vlan.mode ? ' selected' : ''}>${mode}</option>`).join('')}</select></label><label>Notes<textarea rows="2" maxlength="512">${escapeHtml(vlan.notes)}</textarea></label>`;
+            card.dataset.vlanClientId = vlan.clientId;
+            card.innerHTML = `<div class="link-vlan-card-header"><strong>VLAN ${index + 1}</strong><button type="button" aria-label="Remove VLAN ${index + 1}">Remove</button></div><label>ID<input type="number" data-vlan-field="vlanId" min="1" max="4094" step="1" value="${escapeHtml(vlan.vlanId)}" placeholder="10"></label><label>Name<input type="text" data-vlan-field="name" maxlength="128" value="${escapeHtml(vlan.name)}" placeholder="LAN"></label><label>Mode<select data-vlan-field="mode">${vlanModes.map(mode => `<option value="${mode}"${mode === vlan.mode ? ' selected' : ''}>${mode}</option>`).join('')}</select></label><label>Notes<textarea data-vlan-field="notes" rows="2" maxlength="512">${escapeHtml(vlan.notes)}</textarea></label>`;
             const remove = card.querySelector('button');
             const inputs = card.querySelectorAll('input, select, textarea');
-            remove.addEventListener('click', () => {
-                link.vlans.splice(index, 1);
+            remove.addEventListener('click', event => {
+                event.preventDefault();
+                const currentIndex = link.vlans.findIndex(entry => entry.clientId === vlan.clientId);
+                if (currentIndex >= 0) {
+                    link.vlans.splice(currentIndex, 1);
+                }
                 renderVlanFields(link);
                 renderLinks();
                 markDirty();
@@ -1607,13 +1654,16 @@
                 lacpMemberCount: normalizeLinkType(link.linkType) === 'LACP' ? Number(normalizeLacpMemberCount(link.lacpMemberCount, link.linkType)) : null,
                 lacpMemberPortsJson: normalizeLinkType(link.linkType) === 'LACP' ? JSON.stringify(link.lacpMemberPorts || []) : null,
                 metadataJson: null,
-                vlans: normalizeVlans(link.vlans).filter(vlan => vlan.vlanId || vlan.name || vlan.notes).map((vlan, index) => ({
-                    vlanId: vlan.vlanId === '' ? null : Number(vlan.vlanId),
-                    name: vlan.name || null,
-                    mode: normalizeVlanMode(vlan.mode),
-                    notes: vlan.notes || null,
-                    sortOrder: index
-                }))
+                vlans: normalizeVlans(link.vlans).map((vlan, index) => {
+                    const vlanId = validateVlanForSave(vlan);
+                    return vlanId === null ? null : {
+                        vlanId,
+                        name: vlan.name || null,
+                        mode: normalizeVlanMode(vlan.mode),
+                        notes: vlan.notes || null,
+                        sortOrder: index
+                    };
+                }).filter(Boolean)
             }))
         };
     }
@@ -1734,6 +1784,10 @@
 
     if (exportPdfButton) {
         exportPdfButton.addEventListener('click', exportPdf);
+    }
+
+    if (addLinkVlanButton) {
+        addLinkVlanButton.addEventListener('click', addLinkVlan);
     }
 
     if (saveButton) {

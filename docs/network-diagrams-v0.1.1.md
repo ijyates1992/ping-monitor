@@ -337,6 +337,8 @@ VLAN metadata is documentation-only. It does not configure switches, routers, wi
 
 When VLAN entries are present, a compact VLAN summary is shown on the canvas link label and included in PDF export where space allows. Examples include `T:10 LAN,20 CCTV`, `U:5 Management`, and `Native:1`.
 
+In the editor Properties panel, selecting a visual link exposes an **Add VLAN** action. Add VLAN inserts a new editable VLAN metadata row immediately for that selected visual link, with blank VLAN ID/name/notes and `Tagged` mode selected by default. Operators can edit VLAN ID, name/label, mode, and notes, remove individual VLAN rows, save the diagram, and reload the saved VLAN metadata later. Blank rows may be used while editing; saved rows must have a valid VLAN ID from 1 through 4094.
+
 Schema note:
 
 - This adds schema version 18 with the `NetworkDiagramLinkVlans` table.
