@@ -276,3 +276,22 @@ Manual regression checklist for this slice:
 13. Export to PDF and confirm link styles/labels/parallel links are represented.
 14. Confirm no endpoint dependencies are created or modified.
 15. Disable `NetworkDiagramsEnabled` and confirm navigation/direct access remain blocked.
+
+## Link media/type metadata refinement
+
+Network diagram links model visual documentation only. Editing, drawing, or deleting a diagram link does not create, update, or delete monitoring dependencies and does not affect endpoint state evaluation, dependency suppression, alerting, or agents.
+
+Link metadata separates:
+
+- **Media type**: the physical or transport medium (`Copper`, `Fibre`, `Wireless`, `DAC`, `VPN`, `Virtual`, `Other`).
+- **Link type**: the operational or logical role (`Standard`, `Trunk`, `Access`, `LACP`, `PointToPoint`, `Backhaul`, `WAN`, `Management`, `Logical`, `Other`).
+
+This means an LACP bundle can be documented as copper or fibre independently, and wireless links can be documented as point-to-point or backhaul links without treating those roles as physical media.
+
+Fibre links may optionally record a fibre subtype (`OM1`, `OM2`, `OM3`, `OM4`, `OM5`, `OS1`, `OS2`, `Other`). The fibre subtype is only valid when the media type is `Fibre`.
+
+Links may record structured speed metadata as a numeric value plus unit (`Mbps`, `Gbps`, or `Tbps`). For non-LACP links, the speed describes the visual link. For LACP links, the speed describes each physical member rather than an aggregate bundle speed. Example summaries include `10 Gbps fibre OM4`, `LACP 4 x 1 Gbps copper`, and `LACP 2 x 10 Gbps fibre OM4`.
+
+When the link type is `LACP`, diagrams may record a member count from 1 through 16 and per-member source/target port labels. Member port details are stored as structured JSON metadata on the diagram link so they remain documentation-only and cascade with the saved diagram link. Non-LACP links continue to use the simple source and target port label fields.
+
+Multiple visual links may exist between the same two devices. Parallel links are offset visually on the editor canvas and PDF export so each link can be selected, edited, deleted, saved, reloaded, and exported independently.

@@ -92,7 +92,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SourcePortLabel",
         "TargetPortLabel",
         "Notes",
+        "MediaType",
+        "FibreSubtype",
         "LinkType",
+        "LinkSpeedValue",
+        "LinkSpeedUnit",
+        "LacpMemberCount",
+        "LacpMemberPortsJson",
         "MetadataJson",
         "CreatedAtUtc",
         "UpdatedAtUtc"
@@ -885,7 +891,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `SourcePortLabel` varchar(128) NULL,
                 `TargetPortLabel` varchar(128) NULL,
                 `Notes` varchar(4096) NULL,
-                `LinkType` varchar(64) NOT NULL DEFAULT 'default',
+                `MediaType` varchar(64) NOT NULL DEFAULT 'Copper',
+                `FibreSubtype` varchar(64) NULL,
+                `LinkType` varchar(64) NOT NULL DEFAULT 'Standard',
+                `LinkSpeedValue` decimal(10,3) NULL,
+                `LinkSpeedUnit` varchar(16) NULL,
+                `LacpMemberCount` int NULL,
+                `LacpMemberPortsJson` longtext NULL,
                 `MetadataJson` longtext NULL,
                 `CreatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
@@ -930,8 +942,61 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureAspNetUsersColumnsAsync(dbContext, cancellationToken);
         await EnsureCheckResultsNormalizedSchemaAsync(dbContext, cancellationToken);
         await EnsureRttPrecisionSchemaAsync(dbContext, cancellationToken);
+        await EnsureNetworkDiagramLinkMetadataColumnsAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
+    }
+
+
+    private static async Task EnsureNetworkDiagramLinkMetadataColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        var missingColumns = await GetMissingColumnsAsync((MySqlConnection)connection, "NetworkDiagramLinks", RequiredNetworkDiagramLinkColumns, cancellationToken);
+        foreach (var column in missingColumns)
+        {
+            var alterSql = column switch
+            {
+                "MediaType" => "ALTER TABLE `NetworkDiagramLinks` ADD COLUMN `MediaType` varchar(64) NOT NULL DEFAULT 'Copper';",
+                "FibreSubtype" => "ALTER TABLE `NetworkDiagramLinks` ADD COLUMN `FibreSubtype` varchar(64) NULL;",
+                "LinkSpeedValue" => "ALTER TABLE `NetworkDiagramLinks` ADD COLUMN `LinkSpeedValue` decimal(10,3) NULL;",
+                "LinkSpeedUnit" => "ALTER TABLE `NetworkDiagramLinks` ADD COLUMN `LinkSpeedUnit` varchar(16) NULL;",
+                "LacpMemberCount" => "ALTER TABLE `NetworkDiagramLinks` ADD COLUMN `LacpMemberCount` int NULL;",
+                "LacpMemberPortsJson" => "ALTER TABLE `NetworkDiagramLinks` ADD COLUMN `LacpMemberPortsJson` longtext NULL;",
+                _ => null
+            };
+
+            if (alterSql is not null)
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(alterSql, cancellationToken);
+            }
+        }
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            UPDATE `NetworkDiagramLinks`
+            SET
+                `MediaType` = CASE
+                    WHEN LOWER(`LinkType`) IN ('copper', 'default') THEN 'Copper'
+                    WHEN LOWER(`LinkType`) = 'fibre' THEN 'Fibre'
+                    WHEN LOWER(`LinkType`) = 'wireless' THEN 'Wireless'
+                    WHEN LOWER(`LinkType`) = 'vpn' THEN 'VPN'
+                    WHEN LOWER(`LinkType`) = 'logical' THEN 'Virtual'
+                    WHEN LOWER(`LinkType`) = 'lacp' THEN 'Other'
+                    ELSE `MediaType`
+                END,
+                `LinkType` = CASE
+                    WHEN LOWER(`LinkType`) IN ('copper', 'fibre', 'wireless', 'vpn', 'default') THEN 'Standard'
+                    WHEN LOWER(`LinkType`) = 'logical' THEN 'Logical'
+                    WHEN LOWER(`LinkType`) = 'lacp' THEN 'LACP'
+                    ELSE `LinkType`
+                END
+            WHERE `MediaType` = 'Copper'
+              AND LOWER(`LinkType`) IN ('copper', 'fibre', 'wireless', 'vpn', 'logical', 'lacp', 'default');
+            """, cancellationToken);
     }
 
     private static async Task EnsureMetricsIndexesAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)

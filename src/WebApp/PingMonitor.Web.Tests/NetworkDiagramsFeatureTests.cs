@@ -131,7 +131,7 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains(@"data-node-field=""label""", viewMarkup);
         Assert.Contains(@"data-node-field=""notes""", viewMarkup);
         Assert.Contains("data-multi-node-properties", viewMarkup);
-        Assert.Contains("Link type controls diagram styling only. Links do not create monitoring dependencies.", viewMarkup);
+        Assert.Contains("Media type describes the physical/transport medium.", viewMarkup);
         Assert.Contains("data-draw-link-type", viewMarkup);
         Assert.Contains(@"data-link-field=""linkType""", viewMarkup);
         Assert.Contains("Wireless", viewMarkup);
@@ -181,10 +181,12 @@ public sealed class NetworkDiagramsFeatureTests
     [Fact]
     public void NetworkDiagramLinkTypes_NormalizesOldAndMissingValuesToCopper()
     {
-        Assert.Equal(NetworkDiagramLinkTypes.Copper, NetworkDiagramLinkTypes.Normalize(null));
-        Assert.Equal(NetworkDiagramLinkTypes.Copper, NetworkDiagramLinkTypes.Normalize("default"));
-        Assert.Equal(NetworkDiagramLinkTypes.Fibre, NetworkDiagramLinkTypes.Normalize("fibre"));
-        Assert.True(NetworkDiagramLinkTypes.IsAllowed("Wireless"));
+        Assert.Equal(NetworkDiagramLinkMediaTypes.Copper, NetworkDiagramLinkMediaTypes.Normalize(null));
+        Assert.Equal(NetworkDiagramLinkMediaTypes.Copper, NetworkDiagramLinkMediaTypes.Normalize("default"));
+        Assert.Equal(NetworkDiagramLinkMediaTypes.Fibre, NetworkDiagramLinkMediaTypes.Normalize("fibre"));
+        Assert.True(NetworkDiagramLinkMediaTypes.IsAllowed("Wireless"));
+        Assert.Equal(NetworkDiagramLinkTypes.Standard, NetworkDiagramLinkTypes.Normalize(null));
+        Assert.Equal(NetworkDiagramLinkTypes.Lacp, NetworkDiagramLinkTypes.Normalize("lacp"));
         Assert.False(NetworkDiagramLinkTypes.IsAllowed("unsupported"));
     }
 
@@ -195,8 +197,8 @@ public sealed class NetworkDiagramsFeatureTests
         var serviceSource = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Services", "NetworkDiagrams", "NetworkDiagramService.cs"));
 
         Assert.Contains("Unsupported link type", serviceSource);
-        Assert.Contains("NetworkDiagramLinkTypes.Normalize(TrimOptional(linkRequest.LinkType, 64))", serviceSource);
-        Assert.Contains("LinkType = NetworkDiagramLinkTypes.Normalize(x.LinkType)", serviceSource);
+        Assert.Contains("ResolveMediaType(linkRequest.MediaType, linkRequest.LinkType)", serviceSource);
+        Assert.Contains("ResolveLinkType(linkRequest.LinkType)", serviceSource);
         Assert.DoesNotContain("same two", serviceSource, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -210,9 +212,9 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.DoesNotContain("linkExists(sourceNodeId, targetNodeId)", script);
         Assert.Contains("getParallelOffsetIndexes", script);
         Assert.Contains("buildVisibleLinkLabel", script);
-        Assert.Contains(@"data-link-type=""wireless""", styles);
+        Assert.Contains(@"data-media-type=""wireless""", styles);
         Assert.Contains("stroke-dasharray: 12 8", styles);
-        Assert.Contains(@"data-link-type=""fibre""", styles);
+        Assert.Contains(@"data-media-type=""fibre""", styles);
     }
 
     [Fact]
@@ -261,9 +263,9 @@ public sealed class NetworkDiagramsFeatureTests
             ],
             Links =
             [
-                new NetworkDiagramLinkDto { LinkId = "link-1", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "uplink", SourcePortLabel = "Gi1/0/1", TargetPortLabel = "eth0", LinkType = NetworkDiagramLinkTypes.Copper },
-                new NetworkDiagramLinkDto { LinkId = "link-2", SourceNodeId = "node-2", TargetNodeId = "node-1", Label = "backup", Notes = "wireless failover", LinkType = NetworkDiagramLinkTypes.Wireless },
-                new NetworkDiagramLinkDto { LinkId = "link-3", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "storage", Notes = "10Gb fibre", LinkType = NetworkDiagramLinkTypes.Fibre }
+                new NetworkDiagramLinkDto { LinkId = "link-1", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "uplink", SourcePortLabel = "Gi1/0/1", TargetPortLabel = "eth0", MediaType = NetworkDiagramLinkMediaTypes.Copper, LinkType = NetworkDiagramLinkTypes.Standard },
+                new NetworkDiagramLinkDto { LinkId = "link-2", SourceNodeId = "node-2", TargetNodeId = "node-1", Label = "backup", Notes = "wireless failover", MediaType = NetworkDiagramLinkMediaTypes.Wireless, LinkType = NetworkDiagramLinkTypes.PointToPoint },
+                new NetworkDiagramLinkDto { LinkId = "link-3", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "storage", Notes = "10Gb fibre", MediaType = NetworkDiagramLinkMediaTypes.Fibre, LinkType = NetworkDiagramLinkTypes.Standard }
             ]
         };
 
