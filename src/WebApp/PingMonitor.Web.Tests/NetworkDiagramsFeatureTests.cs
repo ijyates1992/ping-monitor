@@ -243,6 +243,31 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("link-vlan-card", styles);
     }
 
+    [Fact]
+    public void NetworkDiagramEditor_WiresAddVlanAndPersistsVlanPayload()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-editor.js"));
+
+        Assert.Contains("addLinkVlanButton.addEventListener('click', addLinkVlan)", script);
+        Assert.Contains("function addLinkVlan(event)", script);
+        Assert.Contains("event?.preventDefault();", script);
+        Assert.Contains("state.selectedLinkId ? findLinkById(state.selectedLinkId) : null", script);
+        Assert.Contains("selectedLink.vlans = normalizeVlans(selectedLink.vlans);", script);
+        Assert.Contains("clientId: createVlanClientId()", script);
+        Assert.Contains("mode: 'Tagged'", script);
+        Assert.Contains("sortOrder: nextSortOrder", script);
+        Assert.Contains("markDirty();", script);
+        Assert.Contains("data-vlan-field=\"vlanId\"", script);
+        Assert.Contains("data-vlan-field=\"name\"", script);
+        Assert.Contains("data-vlan-field=\"mode\"", script);
+        Assert.Contains("data-vlan-field=\"notes\"", script);
+        Assert.Contains("validateVlanForSave", script);
+        Assert.Contains("VLAN ID must be between 1 and 4094.", script);
+        Assert.Contains("vlans: normalizeVlans(link.vlans).map", script);
+        Assert.Contains("vlanId,", script);
+        Assert.Contains("sortOrder: index", script);
+    }
 
 
     [Fact]
