@@ -453,9 +453,43 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
             ? $"{link.SourcePortLabel ?? "?"} <-> {link.TargetPortLabel ?? "?"}"
             : null;
         var labelAndNotes = string.Join(" -- ", new[] { link.Label, link.Notes }.Where(x => !string.IsNullOrWhiteSpace(x)));
-        var parts = new[] { summary, ports, labelAndNotes }
+        var vlanSummary = BuildVlanSummary(link);
+        var parts = new[] { summary, ports, labelAndNotes, vlanSummary }
             .Where(x => !string.IsNullOrWhiteSpace(x));
         return string.Join(" • ", parts);
+    }
+
+
+    private static string? BuildVlanSummary(NetworkDiagramLinkDto link)
+    {
+        if (link.Vlans.Count == 0)
+        {
+            return null;
+        }
+
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [NetworkDiagramVlanModes.Tagged] = "T",
+            [NetworkDiagramVlanModes.Untagged] = "U",
+            [NetworkDiagramVlanModes.Native] = "Native",
+            [NetworkDiagramVlanModes.Management] = "Mgmt",
+            [NetworkDiagramVlanModes.Other] = "Other"
+        };
+
+        var parts = NetworkDiagramVlanModes.Allowed
+            .Select(mode =>
+            {
+                var values = link.Vlans
+                    .Where(vlan => string.Equals(NetworkDiagramVlanModes.Normalize(vlan.Mode), mode, StringComparison.Ordinal))
+                    .OrderBy(vlan => vlan.SortOrder)
+                    .ThenBy(vlan => vlan.VlanId)
+                    .Select(vlan => string.IsNullOrWhiteSpace(vlan.Name) ? vlan.VlanId.ToString(CultureInfo.InvariantCulture) : $"{vlan.VlanId} {vlan.Name}")
+                    .ToArray();
+                return values.Length == 0 ? null : $"{labels[mode]}:{string.Join(",", values)}";
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x));
+
+        return Truncate(string.Join(" · ", parts), 80);
     }
 
     private static string FormatNodeType(string nodeType)

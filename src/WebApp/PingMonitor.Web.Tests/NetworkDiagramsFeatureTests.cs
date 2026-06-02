@@ -147,6 +147,9 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("data-zoom-label", viewMarkup);
         Assert.Contains("Diagram links are visual documentation only and do not create monitoring dependencies.", viewMarkup);
         Assert.Contains("data-link-properties", viewMarkup);
+        Assert.Contains("data-link-vlan-section", viewMarkup);
+        Assert.Contains("data-add-link-vlan", viewMarkup);
+        Assert.Contains("VLANs are documentation metadata for this visual link only", viewMarkup);
         Assert.Contains("data-save-status", viewMarkup);
         Assert.Contains("/js/network-diagrams-editor.js", viewMarkup);
         Assert.Contains("/css/network-diagrams.css", viewMarkup);
@@ -234,8 +237,64 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("pointer-events: none", styles);
         Assert.Contains("pointer-events: auto", styles);
         Assert.Contains(@"data-media-type=""fibre""", styles);
+        Assert.Contains("buildVlanSummary", script);
+        Assert.Contains("normalizeVlans", script);
+        Assert.Contains("data-link-vlan-list", script);
+        Assert.Contains("link-vlan-card", styles);
     }
 
+    [Fact]
+    public void NetworkDiagramEditor_WiresAddVlanAndPersistsVlanPayload()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-editor.js"));
+
+        Assert.Contains("addLinkVlanButton.addEventListener('click', addLinkVlan)", script);
+        Assert.Contains("function addLinkVlan(event)", script);
+        Assert.Contains("event?.preventDefault();", script);
+        Assert.Contains("state.selectedLinkId ? findLinkById(state.selectedLinkId) : null", script);
+        Assert.Contains("selectedLink.vlans = normalizeVlans(selectedLink.vlans);", script);
+        Assert.Contains("clientId: createVlanClientId()", script);
+        Assert.Contains("mode: 'Tagged'", script);
+        Assert.Contains("sortOrder: nextSortOrder", script);
+        Assert.Contains("markDirty();", script);
+        Assert.Contains("data-vlan-field=\"vlanId\"", script);
+        Assert.Contains("data-vlan-field=\"name\"", script);
+        Assert.Contains("data-vlan-field=\"mode\"", script);
+        Assert.Contains("data-vlan-field=\"notes\"", script);
+        Assert.Contains("validateVlanForSave", script);
+        Assert.Contains("VLAN ID must be between 1 and 4094.", script);
+        Assert.Contains("vlans: normalizeVlans(link.vlans).map", script);
+        Assert.Contains("vlanId,", script);
+        Assert.Contains("sortOrder: index", script);
+    }
+
+
+    [Fact]
+    public void NetworkDiagramVlanModes_ValidateAllowedValues()
+    {
+        Assert.Equal(NetworkDiagramVlanModes.Tagged, NetworkDiagramVlanModes.Normalize("tagged"));
+        Assert.True(NetworkDiagramVlanModes.IsAllowed("Untagged"));
+        Assert.True(NetworkDiagramVlanModes.IsAllowed("Native"));
+        Assert.True(NetworkDiagramVlanModes.IsAllowed("Management"));
+        Assert.True(NetworkDiagramVlanModes.IsAllowed("Other"));
+        Assert.False(NetworkDiagramVlanModes.IsAllowed("Invalid"));
+    }
+
+    [Fact]
+    public void NetworkDiagramService_SourceContainsVlanValidationAndPersistenceGuards()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var serviceSource = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Services", "NetworkDiagrams", "NetworkDiagramService.cs"));
+        var schemaSource = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Services", "StartupGate", "StartupSchemaService.cs"));
+
+        Assert.Contains("VLAN ID must be between 1 and 4094.", serviceSource);
+        Assert.Contains("This link already contains VLAN", serviceSource);
+        Assert.Contains("Select a VLAN mode.", serviceSource);
+        Assert.Contains("NetworkDiagramLinkVlan", serviceSource);
+        Assert.Contains("NetworkDiagramLinkVlans", schemaSource);
+        Assert.Contains("ON DELETE CASCADE", schemaSource);
+    }
 
     [Theory]
     [InlineData(NetworkDiagramLinkMediaTypes.Copper, "Cat5e")]
@@ -308,7 +367,7 @@ public sealed class NetworkDiagramsFeatureTests
             ],
             Links =
             [
-                new NetworkDiagramLinkDto { LinkId = "link-1", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "uplink", SourcePortLabel = "Gi1/0/1", TargetPortLabel = "eth0", MediaType = NetworkDiagramLinkMediaTypes.Copper, MediaSubtype = "Cat6", LinkType = NetworkDiagramLinkTypes.Standard, LinkSpeedValue = 1, LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Gbps },
+                new NetworkDiagramLinkDto { LinkId = "link-1", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "uplink", SourcePortLabel = "Gi1/0/1", TargetPortLabel = "eth0", MediaType = NetworkDiagramLinkMediaTypes.Copper, MediaSubtype = "Cat6", LinkType = NetworkDiagramLinkTypes.Standard, LinkSpeedValue = 1, LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Gbps, Vlans = [new NetworkDiagramLinkVlanDto { VlanId = 10, Name = "LAN", Mode = NetworkDiagramVlanModes.Tagged }, new NetworkDiagramLinkVlanDto { VlanId = 5, Name = "Mgmt", Mode = NetworkDiagramVlanModes.Untagged }] },
                 new NetworkDiagramLinkDto { LinkId = "link-2", SourceNodeId = "node-2", TargetNodeId = "node-1", Label = "backup", Notes = "wireless failover", MediaType = NetworkDiagramLinkMediaTypes.Wireless, MediaSubtype = "802.11ac / Wi-Fi 5", LinkType = NetworkDiagramLinkTypes.PointToPoint },
                 new NetworkDiagramLinkDto { LinkId = "link-3", SourceNodeId = "node-1", TargetNodeId = "node-2", Label = "storage", Notes = "10Gb fibre", MediaType = NetworkDiagramLinkMediaTypes.Fibre, MediaSubtype = "OM4", LinkType = NetworkDiagramLinkTypes.Lacp, LinkSpeedValue = 10, LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Gbps, LacpMemberCount = 2 }
             ]
@@ -326,6 +385,8 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("backup", pdfText);
         Assert.Contains("10Gb fibre", pdfText);
         Assert.Contains("Cat6", pdfText);
+        Assert.Contains("T:10 LAN", pdfText);
+        Assert.Contains("U:5", pdfText);
         Assert.Contains("LACP", pdfText);
         Assert.Contains("[8 5] 0 d", pdfText);
         Assert.Contains("0.49 0.23 0.93 RG", pdfText);

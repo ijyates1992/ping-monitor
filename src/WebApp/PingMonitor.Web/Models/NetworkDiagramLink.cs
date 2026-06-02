@@ -21,4 +21,5 @@ public sealed class NetworkDiagramLink
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public NetworkDiagram? Diagram { get; set; }
+    public List<NetworkDiagramLinkVlan> Vlans { get; set; } = [];
 }

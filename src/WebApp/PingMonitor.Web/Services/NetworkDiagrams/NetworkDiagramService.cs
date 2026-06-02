@@ -90,6 +90,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
             .AsNoTracking()
             .Include(x => x.Nodes)
             .Include(x => x.Links)
+                .ThenInclude(x => x.Vlans)
             .FirstOrDefaultAsync(x => x.DiagramId == diagramId, cancellationToken);
 
         return diagram is null ? null : ToDto(diagram);
@@ -100,6 +101,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
         var diagram = await _dbContext.NetworkDiagrams
             .Include(x => x.Nodes)
             .Include(x => x.Links)
+                .ThenInclude(x => x.Vlans)
             .FirstOrDefaultAsync(x => x.DiagramId == diagramId, cancellationToken)
             ?? throw new NetworkDiagramValidationException("Diagram does not exist.");
 
@@ -144,7 +146,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
 
         foreach (var linkRequest in request.Links)
         {
-            diagram.Links.Add(new NetworkDiagramLink
+            var link = new NetworkDiagramLink
             {
                 LinkId = TrimRequired(linkRequest.LinkId, 64, "Link ID"),
                 DiagramId = diagram.DiagramId,
@@ -164,7 +166,26 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 MetadataJson = TrimOptional(linkRequest.MetadataJson, 65535),
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
-            });
+            };
+
+            foreach (var vlan in NormalizeVlans(linkRequest.Vlans))
+            {
+                link.Vlans.Add(new NetworkDiagramLinkVlan
+                {
+                    LinkVlanId = Guid.NewGuid().ToString("N"),
+                    LinkId = link.LinkId,
+                    DiagramId = diagram.DiagramId,
+                    VlanId = vlan.VlanId,
+                    Name = vlan.Name,
+                    Mode = vlan.Mode,
+                    Notes = vlan.Notes,
+                    SortOrder = vlan.SortOrder,
+                    CreatedAtUtc = now,
+                    UpdatedAtUtc = now
+                });
+            }
+
+            diagram.Links.Add(link);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -242,6 +263,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
             }
 
             ValidateLinkMetadata(link);
+            _ = NormalizeVlans(link.Vlans);
 
             _ = TrimOptional(link.Label, 255);
             _ = TrimOptional(link.SourcePortLabel, 128);
@@ -296,7 +318,15 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Normalize(x.LinkSpeedUnit),
                 LacpMemberCount = ResolveLacpMemberCount(x.LinkType, x.LacpMemberCount),
                 LacpMemberPortsJson = NormalizeLacpMemberPortsJson(x.LinkType, x.LacpMemberPortsJson),
-                MetadataJson = x.MetadataJson
+                MetadataJson = x.MetadataJson,
+                Vlans = x.Vlans.OrderBy(v => v.SortOrder).ThenBy(v => v.VlanId).Select(v => new NetworkDiagramLinkVlanDto
+                {
+                    VlanId = v.VlanId,
+                    Name = v.Name,
+                    Mode = NetworkDiagramVlanModes.Normalize(v.Mode),
+                    Notes = v.Notes,
+                    SortOrder = v.SortOrder
+                }).ToArray()
             }).ToArray()
         };
     }
@@ -346,6 +376,53 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
 
         _ = memberCount;
         _ = NormalizeLacpMemberPortsJson(link.LinkType, link.LacpMemberPortsJson);
+    }
+
+
+    private static IReadOnlyList<NetworkDiagramLinkVlanDto> NormalizeVlans(IReadOnlyList<NetworkDiagramLinkVlanSaveRequest>? vlans)
+    {
+        if (vlans is null || vlans.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new List<NetworkDiagramLinkVlanDto>();
+        var seenVlanIds = new HashSet<int>();
+        var sortOrder = 0;
+        foreach (var vlan in vlans)
+        {
+            if (vlan.VlanId is null && string.IsNullOrWhiteSpace(vlan.Name) && string.IsNullOrWhiteSpace(vlan.Mode) && string.IsNullOrWhiteSpace(vlan.Notes))
+            {
+                continue;
+            }
+
+            if (vlan.VlanId is null or < 1 or > 4094)
+            {
+                throw new NetworkDiagramValidationException("VLAN ID must be between 1 and 4094.");
+            }
+
+            if (!seenVlanIds.Add(vlan.VlanId.Value))
+            {
+                throw new NetworkDiagramValidationException($"This link already contains VLAN {vlan.VlanId.Value}.");
+            }
+
+            var mode = NetworkDiagramVlanModes.Normalize(vlan.Mode);
+            if (!NetworkDiagramVlanModes.IsAllowed(mode))
+            {
+                throw new NetworkDiagramValidationException("Select a VLAN mode.");
+            }
+
+            result.Add(new NetworkDiagramLinkVlanDto
+            {
+                VlanId = vlan.VlanId.Value,
+                Name = TrimOptional(vlan.Name, 128),
+                Mode = mode,
+                Notes = TrimOptional(vlan.Notes, 512),
+                SortOrder = sortOrder++
+            });
+        }
+
+        return result.OrderBy(x => x.SortOrder).ToArray();
     }
 
     private static string ResolveMediaType(string? mediaType, string? legacyLinkType)

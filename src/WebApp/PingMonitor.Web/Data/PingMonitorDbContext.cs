@@ -45,6 +45,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<NetworkDiagram> NetworkDiagrams => Set<NetworkDiagram>();
     public DbSet<NetworkDiagramNode> NetworkDiagramNodes => Set<NetworkDiagramNode>();
     public DbSet<NetworkDiagramLink> NetworkDiagramLinks => Set<NetworkDiagramLink>();
+    public DbSet<NetworkDiagramLinkVlan> NetworkDiagramLinkVlans => Set<NetworkDiagramLinkVlan>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -485,6 +486,27 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         networkDiagramLink.HasOne(x => x.Diagram)
             .WithMany(x => x.Links)
             .HasForeignKey(x => x.DiagramId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+
+        var networkDiagramLinkVlan = modelBuilder.Entity<NetworkDiagramLinkVlan>();
+        networkDiagramLinkVlan.ToTable("NetworkDiagramLinkVlans");
+        networkDiagramLinkVlan.HasKey(x => x.LinkVlanId);
+        networkDiagramLinkVlan.Property(x => x.LinkVlanId).HasMaxLength(64);
+        networkDiagramLinkVlan.Property(x => x.LinkId).HasMaxLength(64).IsRequired();
+        networkDiagramLinkVlan.Property(x => x.DiagramId).HasMaxLength(64).IsRequired();
+        networkDiagramLinkVlan.Property(x => x.VlanId).IsRequired();
+        networkDiagramLinkVlan.Property(x => x.Name).HasMaxLength(128);
+        networkDiagramLinkVlan.Property(x => x.Mode).HasMaxLength(32).IsRequired();
+        networkDiagramLinkVlan.Property(x => x.Notes).HasMaxLength(512);
+        networkDiagramLinkVlan.Property(x => x.SortOrder).IsRequired();
+        networkDiagramLinkVlan.Property(x => x.CreatedAtUtc).IsRequired();
+        networkDiagramLinkVlan.Property(x => x.UpdatedAtUtc).IsRequired();
+        networkDiagramLinkVlan.HasIndex(x => x.DiagramId);
+        networkDiagramLinkVlan.HasIndex(x => new { x.LinkId, x.VlanId }).IsUnique();
+        networkDiagramLinkVlan.HasOne(x => x.Link)
+            .WithMany(x => x.Vlans)
+            .HasForeignKey(x => x.LinkId)
             .OnDelete(DeleteBehavior.Cascade);
         var securitySettings = modelBuilder.Entity<SecuritySettings>();
         securitySettings.ToTable("SecuritySettings");

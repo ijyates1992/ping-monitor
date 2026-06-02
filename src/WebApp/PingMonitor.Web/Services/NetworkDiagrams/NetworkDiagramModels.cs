@@ -78,6 +78,38 @@ public static class NetworkDiagramLinkTypes
     public static bool IsAllowed(string? value) => Allowed.Contains(Normalize(value));
 }
 
+
+public static class NetworkDiagramVlanModes
+{
+    public const string Tagged = "Tagged";
+    public const string Untagged = "Untagged";
+    public const string Native = "Native";
+    public const string Management = "Management";
+    public const string Other = "Other";
+
+    public static readonly IReadOnlySet<string> Allowed = new HashSet<string>(StringComparer.Ordinal)
+    {
+        Tagged,
+        Untagged,
+        Native,
+        Management,
+        Other
+    };
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        return Allowed.FirstOrDefault(allowed => string.Equals(allowed, trimmed, StringComparison.OrdinalIgnoreCase)) ?? trimmed;
+    }
+
+    public static bool IsAllowed(string? value) => Allowed.Contains(Normalize(value));
+}
+
 public static class NetworkDiagramMediaSubtypes
 {
     public const string None = "None";
@@ -221,6 +253,15 @@ public sealed class NetworkDiagramLinkSaveRequest
     public int? LacpMemberCount { get; init; }
     public string? LacpMemberPortsJson { get; init; }
     public string? MetadataJson { get; init; }
+    public IReadOnlyList<NetworkDiagramLinkVlanSaveRequest> Vlans { get; init; } = [];
+}
+
+public sealed class NetworkDiagramLinkVlanSaveRequest
+{
+    public int? VlanId { get; init; }
+    public string? Name { get; init; }
+    public string? Mode { get; init; }
+    public string? Notes { get; init; }
 }
 
 public sealed class NetworkDiagramDto
@@ -271,4 +312,14 @@ public sealed class NetworkDiagramLinkDto
     public int? LacpMemberCount { get; init; }
     public string? LacpMemberPortsJson { get; init; }
     public string? MetadataJson { get; init; }
+    public IReadOnlyList<NetworkDiagramLinkVlanDto> Vlans { get; init; } = [];
+}
+
+public sealed class NetworkDiagramLinkVlanDto
+{
+    public int VlanId { get; init; }
+    public string? Name { get; init; }
+    public string Mode { get; init; } = NetworkDiagramVlanModes.Tagged;
+    public string? Notes { get; init; }
+    public int SortOrder { get; init; }
 }
