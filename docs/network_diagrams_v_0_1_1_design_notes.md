@@ -474,3 +474,7 @@ This remains a client-side draft-only slice. No saved diagram layout, database p
 Network diagram links now support documentation-only media/type metadata for Copper, Fibre, Wireless, LACP, VPN, Logical, and Other. The selected type controls editor and PDF styling only; wireless uses a dashed line, fibre is visually distinct from copper, and LACP/VPN/logical links use pattern/weight differences so the styling is not colour-only.
 
 Link labels and notes are drawn on-canvas near the link midpoint, and multiple links between the same unordered node pair are grouped and offset deterministically so A → B and B → A links do not overlap after save/reload. These visual links remain separate from monitoring dependencies: creating, editing, deleting, saving, or exporting links must not alter endpoint monitoring, dependency suppression, state evaluation, alerting, agents, or Startup Gate behaviour.
+
+## Link VLAN metadata addendum
+
+Visual links may carry structured VLAN documentation metadata. VLAN entries support an ID, optional label, mode (Tagged, Untagged, Native, Management, Other), optional notes, and deterministic ordering. This metadata is intentionally scoped to the diagram link as documentation only: it must not configure network devices, infer topology, create endpoints, create dependencies, or influence monitoring state, suppression, or alerting.

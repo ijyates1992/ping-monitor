@@ -323,3 +323,25 @@ Media subtype options are dependent on media type:
 Link speed is documented with common presets: 10 Mbps, 100 Mbps, 1 Gbps, 2.5 Gbps, 5 Gbps, 10 Gbps, 25 Gbps, 40 Gbps, and 100 Gbps. Selecting Other exposes custom speed value and unit fields. Saved custom speed values must be positive and use a supported unit. For LACP links, the speed is per physical member link; labels and PDF export use summaries such as `LACP 2 × 10 Gbps` or `LACP 4 × 1 Gbps`.
 
 Link visual summaries include useful media, subtype, non-standard link type, speed, LACP member count, labels, ports, and notes where space allows. PDF export uses the same documentation metadata while keeping wireless links dashed, fibre and copper visually distinct, LACP emphasized, and parallel links separated.
+
+## Visual link VLAN metadata
+
+Network diagram links can include optional VLAN metadata for documentation. Each visual link may have zero or more VLAN entries with:
+
+- VLAN ID from 1 through 4094.
+- Optional name or label.
+- Mode: Tagged, Untagged, Native, Management, or Other.
+- Optional notes.
+
+VLAN metadata is documentation-only. It does not configure switches, routers, wireless equipment, VLAN interfaces, or any other network device. It does not create, update, or delete endpoint monitoring dependencies, and it does not affect state evaluation, dependency suppression, alerts, or agents.
+
+When VLAN entries are present, a compact VLAN summary is shown on the canvas link label and included in PDF export where space allows. Examples include `T:10 LAN,20 CCTV`, `U:5 Management`, and `Native:1`.
+
+Schema note:
+
+- This adds schema version 18 with the `NetworkDiagramLinkVlans` table.
+- VLAN rows cascade with their parent visual diagram link/diagram data only.
+
+Backup/restore follow-up:
+
+- Configuration backup/restore inclusion for network diagrams remains a required follow-up before publishing V0.1.1 if it is not completed in the release branch; that follow-up must include `NetworkDiagramLinkVlans` alongside `NetworkDiagrams`, `NetworkDiagramNodes`, and `NetworkDiagramLinks`.

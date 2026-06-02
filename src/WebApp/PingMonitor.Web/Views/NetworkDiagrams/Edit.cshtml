@@ -285,6 +285,14 @@
                         Notes
                         <textarea data-link-field="notes" rows="4" maxlength="400"></textarea>
                     </label>
+                    <section class="link-vlan-section" data-link-vlan-section aria-label="Link VLAN metadata">
+                        <div class="link-vlan-section-header">
+                            <h3>VLANs</h3>
+                            <button type="button" data-add-link-vlan>Add VLAN</button>
+                        </div>
+                        <p class="toolbox-help">VLANs are documentation metadata for this visual link only. They do not configure switches or affect monitoring dependencies.</p>
+                        <div class="link-vlan-list" data-link-vlan-list></div>
+                    </section>
                     <button type="button" class="danger-button" data-delete-selection>Delete selected link</button>
                 </form>
             </aside>

@@ -103,6 +103,20 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "CreatedAtUtc",
         "UpdatedAtUtc"
     ];
+
+    private static readonly string[] RequiredNetworkDiagramLinkVlanColumns =
+    [
+        "LinkVlanId",
+        "LinkId",
+        "DiagramId",
+        "VlanId",
+        "Name",
+        "Mode",
+        "Notes",
+        "SortOrder",
+        "CreatedAtUtc",
+        "UpdatedAtUtc"
+    ];
     private static readonly string[] RequiredEndpointDependencyColumns =
     [
         "EndpointDependencyId",
@@ -418,6 +432,15 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"NetworkDiagramLinks table is missing required columns: {string.Join(", ", missingNetworkDiagramLinkColumns)}.");
+            return status;
+        }
+
+
+        var missingNetworkDiagramLinkVlanColumns = await GetMissingColumnsAsync(connection, "NetworkDiagramLinkVlans", RequiredNetworkDiagramLinkVlanColumns, cancellationToken);
+        if (missingNetworkDiagramLinkVlanColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"NetworkDiagramLinkVlans table is missing required columns: {string.Join(", ", missingNetworkDiagramLinkVlanColumns)}.");
             return status;
         }
 
@@ -908,6 +931,27 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+
+
+        const string createNetworkDiagramLinkVlansSql = """
+            CREATE TABLE IF NOT EXISTS `NetworkDiagramLinkVlans` (
+                `LinkVlanId` varchar(64) NOT NULL,
+                `LinkId` varchar(64) NOT NULL,
+                `DiagramId` varchar(64) NOT NULL,
+                `VlanId` int NOT NULL,
+                `Name` varchar(128) NULL,
+                `Mode` varchar(32) NOT NULL,
+                `Notes` varchar(512) NULL,
+                `SortOrder` int NOT NULL DEFAULT 0,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`LinkVlanId`),
+                UNIQUE KEY `IX_NetworkDiagramLinkVlans_LinkId_VlanId` (`LinkId`, `VlanId`),
+                KEY `IX_NetworkDiagramLinkVlans_DiagramId` (`DiagramId`),
+                CONSTRAINT `FK_NetworkDiagramLinkVlans_NetworkDiagramLinks_LinkId` FOREIGN KEY (`LinkId`) REFERENCES `NetworkDiagramLinks` (`LinkId`) ON DELETE CASCADE
+            );
+            """;
+
         await dbContext.Database.ExecuteSqlRawAsync(createEndpointStatesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createStateTransitionsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAssignmentMetrics24hSql, cancellationToken);
@@ -931,6 +975,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramNodesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramLinksSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramLinkVlansSql, cancellationToken);
         await EnsureEndpointDependenciesColumnsAsync(dbContext, cancellationToken);
         await EnsureEndpointColumnsAsync(dbContext, cancellationToken);
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
@@ -943,10 +988,34 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureCheckResultsNormalizedSchemaAsync(dbContext, cancellationToken);
         await EnsureRttPrecisionSchemaAsync(dbContext, cancellationToken);
         await EnsureNetworkDiagramLinkMetadataColumnsAsync(dbContext, cancellationToken);
+        await EnsureNetworkDiagramLinkVlanTableAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
         await MigrateLegacyEndpointDependenciesAsync(dbContext, cancellationToken);
     }
 
+
+
+    private static async Task EnsureNetworkDiagramLinkVlanTableAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS `NetworkDiagramLinkVlans` (
+                `LinkVlanId` varchar(64) NOT NULL,
+                `LinkId` varchar(64) NOT NULL,
+                `DiagramId` varchar(64) NOT NULL,
+                `VlanId` int NOT NULL,
+                `Name` varchar(128) NULL,
+                `Mode` varchar(32) NOT NULL,
+                `Notes` varchar(512) NULL,
+                `SortOrder` int NOT NULL DEFAULT 0,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`LinkVlanId`),
+                UNIQUE KEY `IX_NetworkDiagramLinkVlans_LinkId_VlanId` (`LinkId`, `VlanId`),
+                KEY `IX_NetworkDiagramLinkVlans_DiagramId` (`DiagramId`),
+                CONSTRAINT `FK_NetworkDiagramLinkVlans_NetworkDiagramLinks_LinkId` FOREIGN KEY (`LinkId`) REFERENCES `NetworkDiagramLinks` (`LinkId`) ON DELETE CASCADE
+            );
+            """, cancellationToken);
+    }
 
     private static async Task EnsureNetworkDiagramLinkMetadataColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {

@@ -951,3 +951,57 @@ html[data-theme="dark"] .diagram-link-port-label {
     font-size: .78rem;
     font-weight: 800;
 }
+
+.link-vlan-section {
+    display: grid;
+    gap: .5rem;
+    padding: .6rem;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+}
+
+.link-vlan-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.link-vlan-section-header h3 {
+    margin: 0;
+    font-size: .88rem;
+}
+
+.link-vlan-list {
+    display: grid;
+    gap: .5rem;
+    max-height: 340px;
+    overflow-y: auto;
+}
+
+.link-vlan-card {
+    display: grid;
+    gap: .45rem;
+    padding: .5rem;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel-subtle);
+}
+
+.link-vlan-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.link-vlan-card-header strong {
+    font-size: .82rem;
+}
+
+.link-vlan-card-header button,
+.link-vlan-section-header button {
+    min-height: 36px;
+    padding: .35rem .55rem;
+}

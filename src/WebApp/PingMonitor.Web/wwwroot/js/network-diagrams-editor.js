@@ -50,6 +50,8 @@
     const customSpeedFields = editor.querySelector('[data-custom-speed-fields]');
     const lacpFields = editor.querySelector('[data-lacp-fields]');
     const lacpMemberPorts = editor.querySelector('[data-lacp-member-ports]');
+    const linkVlanList = editor.querySelector('[data-link-vlan-list]');
+    const addLinkVlanButton = editor.querySelector('[data-add-link-vlan]');
     const saveStatus = editor.querySelector('[data-save-status]');
     const antiforgeryToken = editor.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
     const loadUrl = editor.dataset.loadUrl || '';
@@ -90,6 +92,7 @@
         { value: 'Other', label: 'Other', speedValue: '', unit: 'Gbps' }
     ];
     const linkSpeedUnits = ['Mbps', 'Gbps', 'Tbps'];
+    const vlanModes = ['Tagged', 'Untagged', 'Native', 'Management', 'Other'];
     const parallelLinkOffsetStep = 34;
     const canvasPresets = [
         { value: 'small', label: 'Small', width: 4000, height: 2828 },
@@ -839,6 +842,42 @@
         return normalized.length <= maxLength ? normalized : `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
     }
 
+
+    function normalizeVlanMode(value) {
+        const requested = (value || '').trim();
+        return vlanModes.find(mode => mode.toLowerCase() === requested.toLowerCase()) || 'Tagged';
+    }
+
+    function normalizeVlans(vlans) {
+        if (!Array.isArray(vlans)) {
+            return [];
+        }
+
+        return vlans.map(vlan => ({
+            vlanId: vlan?.vlanId == null || vlan.vlanId === '' ? '' : String(vlan.vlanId).slice(0, 4),
+            name: String(vlan?.name || '').slice(0, 128),
+            mode: normalizeVlanMode(vlan?.mode),
+            notes: String(vlan?.notes || '').slice(0, 512)
+        }));
+    }
+
+    function buildVlanSummary(link, maxLength = 72) {
+        const vlans = normalizeVlans(link?.vlans);
+        if (vlans.length === 0) {
+            return '';
+        }
+
+        const labels = { Tagged: 'T', Untagged: 'U', Native: 'Native', Management: 'Mgmt', Other: 'Other' };
+        const parts = vlanModes.map(mode => {
+            const values = vlans
+                .filter(vlan => vlan.mode === mode && vlan.vlanId)
+                .map(vlan => vlan.name ? `${vlan.vlanId} ${vlan.name}` : vlan.vlanId);
+            return values.length > 0 ? `${labels[mode]}:${values.join(',')}` : '';
+        }).filter(Boolean);
+
+        return truncateLinkText(parts.join(' · '), maxLength);
+    }
+
     function formatSpeed(value, unit) {
         const speed = (value || '').toString().trim();
         const normalizedUnit = normalizeSpeedUnit(unit);
@@ -876,7 +915,7 @@
         const ports = normalizeLinkType(link.linkType) !== 'LACP' && (link.sourcePort || link.targetPort)
             ? [link.sourcePort || '?', link.targetPort || '?'].join(' ↔ ')
             : '';
-        return truncateLinkText([main, ports].filter(Boolean).join(' • '), 96);
+        return truncateLinkText([main, ports, buildVlanSummary(link)].filter(Boolean).join(' • '), 116);
     }
 
     function renderLinks() {
@@ -1040,6 +1079,59 @@
             lacpFields.hidden = selectedLinkType !== 'LACP';
         }
         renderLacpMemberPortFields(selectedLink);
+        renderVlanFields(selectedLink);
+    }
+
+    function addLinkVlan() {
+        const selectedLink = state.selectedLinkId ? findLinkById(state.selectedLinkId) : null;
+        if (!selectedLink) {
+            return;
+        }
+
+        selectedLink.vlans = normalizeVlans(selectedLink.vlans);
+        selectedLink.vlans.push({ vlanId: '', name: '', mode: 'Tagged', notes: '' });
+        renderVlanFields(selectedLink);
+        renderLinks();
+        markDirty();
+    }
+
+    function renderVlanFields(link) {
+        if (!linkVlanList) {
+            return;
+        }
+
+        linkVlanList.replaceChildren();
+        if (!link) {
+            return;
+        }
+
+        link.vlans = normalizeVlans(link.vlans);
+        if (link.vlans.length === 0) {
+            const empty = document.createElement('p');
+            empty.className = 'toolbox-help';
+            empty.textContent = 'No VLAN metadata has been added to this visual link.';
+            linkVlanList.appendChild(empty);
+            return;
+        }
+
+        link.vlans.forEach((vlan, index) => {
+            const card = document.createElement('div');
+            card.className = 'link-vlan-card';
+            card.innerHTML = `<div class="link-vlan-card-header"><strong>VLAN ${index + 1}</strong><button type="button" aria-label="Remove VLAN ${index + 1}">Remove</button></div><label>ID<input type="number" min="1" max="4094" step="1" value="${escapeHtml(vlan.vlanId)}" placeholder="10"></label><label>Name<input type="text" maxlength="128" value="${escapeHtml(vlan.name)}" placeholder="LAN"></label><label>Mode<select>${vlanModes.map(mode => `<option value="${mode}"${mode === vlan.mode ? ' selected' : ''}>${mode}</option>`).join('')}</select></label><label>Notes<textarea rows="2" maxlength="512">${escapeHtml(vlan.notes)}</textarea></label>`;
+            const remove = card.querySelector('button');
+            const inputs = card.querySelectorAll('input, select, textarea');
+            remove.addEventListener('click', () => {
+                link.vlans.splice(index, 1);
+                renderVlanFields(link);
+                renderLinks();
+                markDirty();
+            });
+            inputs[0].addEventListener('input', event => { vlan.vlanId = event.currentTarget.value; renderLinks(); markDirty(); });
+            inputs[1].addEventListener('input', event => { vlan.name = event.currentTarget.value; renderLinks(); markDirty(); });
+            inputs[2].addEventListener('change', event => { vlan.mode = normalizeVlanMode(event.currentTarget.value); renderLinks(); markDirty(); });
+            inputs[3].addEventListener('input', event => { vlan.notes = event.currentTarget.value; markDirty(); });
+            linkVlanList.appendChild(card);
+        });
     }
 
     function updateSelectedNodeField(event) {
@@ -1453,7 +1545,8 @@
             linkSpeedUnit: normalizeSpeedUnit(link.linkSpeedUnit),
             linkSpeedPreset: getSpeedPreset(link.linkSpeedValue == null ? '' : String(link.linkSpeedValue), link.linkSpeedUnit),
             lacpMemberCount: normalizeLacpMemberCount(link.lacpMemberCount, link.linkType),
-            lacpMemberPorts: parseLacpMemberPorts(link.lacpMemberPortsJson)
+            lacpMemberPorts: parseLacpMemberPorts(link.lacpMemberPortsJson),
+            vlans: normalizeVlans(link.vlans)
         }));
         state.loading = false;
         state.dirty = false;
@@ -1513,7 +1606,14 @@
                 linkSpeedUnit: link.linkSpeedValue === '' || link.linkSpeedValue == null ? null : normalizeSpeedUnit(link.linkSpeedUnit) || null,
                 lacpMemberCount: normalizeLinkType(link.linkType) === 'LACP' ? Number(normalizeLacpMemberCount(link.lacpMemberCount, link.linkType)) : null,
                 lacpMemberPortsJson: normalizeLinkType(link.linkType) === 'LACP' ? JSON.stringify(link.lacpMemberPorts || []) : null,
-                metadataJson: null
+                metadataJson: null,
+                vlans: normalizeVlans(link.vlans).filter(vlan => vlan.vlanId || vlan.name || vlan.notes).map((vlan, index) => ({
+                    vlanId: vlan.vlanId === '' ? null : Number(vlan.vlanId),
+                    name: vlan.name || null,
+                    mode: normalizeVlanMode(vlan.mode),
+                    notes: vlan.notes || null,
+                    sortOrder: index
+                }))
             }))
         };
     }
