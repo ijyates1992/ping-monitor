@@ -541,9 +541,9 @@ body {
 
 .diagram-link-hit {
     fill: none;
-    pointer-events: stroke;
-    stroke: transparent;
-    stroke-width: 22;
+    pointer-events: all;
+    stroke: rgba(0, 0, 0, .001);
+    stroke-width: 28;
     cursor: pointer;
 }
 
@@ -607,7 +607,7 @@ body {
 
 .diagram-link-label,
 .diagram-link-port-label {
-    pointer-events: none;
+    pointer-events: auto;
     fill: var(--diagram-text);
     paint-order: stroke;
     stroke: var(--diagram-panel);

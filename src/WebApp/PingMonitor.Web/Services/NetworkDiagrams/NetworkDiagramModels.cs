@@ -78,6 +78,53 @@ public static class NetworkDiagramLinkTypes
     public static bool IsAllowed(string? value) => Allowed.Contains(Normalize(value));
 }
 
+public static class NetworkDiagramMediaSubtypes
+{
+    public const string None = "None";
+    public const string Other = "Other";
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> AllowedByMediaType = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+    {
+        [NetworkDiagramLinkMediaTypes.Copper] = new HashSet<string>(StringComparer.Ordinal) { "Cat5e", "Cat6", "Cat6a", "Cat7", "Cat8", "Coax", Other },
+        [NetworkDiagramLinkMediaTypes.Fibre] = new HashSet<string>(StringComparer.Ordinal) { "OM1", "OM2", "OM3", "OM4", "OM5", "OS1", "OS2", Other },
+        [NetworkDiagramLinkMediaTypes.Wireless] = new HashSet<string>(StringComparer.Ordinal) { "802.11a", "802.11b", "802.11g", "802.11n / Wi-Fi 4", "802.11ac / Wi-Fi 5", "802.11ax / Wi-Fi 6", "802.11be / Wi-Fi 7", "60GHz", Other },
+        [NetworkDiagramLinkMediaTypes.Dac] = new HashSet<string>(StringComparer.Ordinal) { "Passive DAC", "Active DAC", "AOC", Other },
+        [NetworkDiagramLinkMediaTypes.Vpn] = new HashSet<string>(StringComparer.Ordinal) { "IPsec", "WireGuard", "OpenVPN", "GRE", Other },
+        [NetworkDiagramLinkMediaTypes.Virtual] = new HashSet<string>(StringComparer.Ordinal) { "Hyper-V vSwitch", "VMware vSwitch", "VLAN interface", "Loopback", Other },
+        [NetworkDiagramLinkMediaTypes.Other] = new HashSet<string>(StringComparer.Ordinal) { None, Other }
+    };
+
+    public static string? Normalize(string? value, string? mediaType)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalizedMediaType = NetworkDiagramLinkMediaTypes.Normalize(mediaType);
+        var trimmed = value.Trim();
+        if (string.Equals(trimmed, None, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedMediaType == NetworkDiagramLinkMediaTypes.Other ? None : null;
+        }
+
+        return GetAllowed(normalizedMediaType).FirstOrDefault(allowed => string.Equals(allowed, trimmed, StringComparison.OrdinalIgnoreCase)) ?? trimmed;
+    }
+
+    public static bool IsAllowed(string? value, string? mediaType)
+    {
+        var normalized = Normalize(value, mediaType);
+        return normalized is null || GetAllowed(NetworkDiagramLinkMediaTypes.Normalize(mediaType)).Contains(normalized);
+    }
+
+    public static IReadOnlySet<string> GetAllowed(string? mediaType)
+    {
+        var normalizedMediaType = NetworkDiagramLinkMediaTypes.Normalize(mediaType);
+        return AllowedByMediaType.TryGetValue(normalizedMediaType, out var allowed) ? allowed : AllowedByMediaType[NetworkDiagramLinkMediaTypes.Other];
+    }
+}
+
+[Obsolete("Use NetworkDiagramMediaSubtypes for generic media subtype validation.")]
 public static class NetworkDiagramFibreSubtypes
 {
     public const string OM1 = "OM1";
@@ -89,35 +136,13 @@ public static class NetworkDiagramFibreSubtypes
     public const string OS2 = "OS2";
     public const string Other = "Other";
 
-    public static readonly IReadOnlySet<string> Allowed = new HashSet<string>(StringComparer.Ordinal)
-    {
-        OM1,
-        OM2,
-        OM3,
-        OM4,
-        OM5,
-        OS1,
-        OS2,
-        Other
-    };
+    public static readonly IReadOnlySet<string> Allowed = NetworkDiagramMediaSubtypes.GetAllowed(NetworkDiagramLinkMediaTypes.Fibre);
 
-    public static string? Normalize(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
+    public static string? Normalize(string? value) => NetworkDiagramMediaSubtypes.Normalize(value, NetworkDiagramLinkMediaTypes.Fibre);
 
-        var trimmed = value.Trim();
-        return Allowed.FirstOrDefault(allowed => string.Equals(allowed, trimmed, StringComparison.OrdinalIgnoreCase)) ?? trimmed;
-    }
-
-    public static bool IsAllowed(string? value)
-    {
-        var normalized = Normalize(value);
-        return normalized is null || Allowed.Contains(normalized);
-    }
+    public static bool IsAllowed(string? value) => NetworkDiagramMediaSubtypes.IsAllowed(value, NetworkDiagramLinkMediaTypes.Fibre);
 }
+
 
 public static class NetworkDiagramLinkSpeedUnits
 {
@@ -188,6 +213,7 @@ public sealed class NetworkDiagramLinkSaveRequest
     public string? TargetPortLabel { get; init; }
     public string? Notes { get; init; }
     public string? MediaType { get; init; }
+    public string? MediaSubtype { get; init; }
     public string? FibreSubtype { get; init; }
     public string? LinkType { get; init; }
     public decimal? LinkSpeedValue { get; init; }
@@ -237,6 +263,7 @@ public sealed class NetworkDiagramLinkDto
     public string? TargetPortLabel { get; init; }
     public string? Notes { get; init; }
     public string MediaType { get; init; } = NetworkDiagramLinkMediaTypes.Copper;
+    public string? MediaSubtype { get; init; }
     public string? FibreSubtype { get; init; }
     public string LinkType { get; init; } = NetworkDiagramLinkTypes.Standard;
     public decimal? LinkSpeedValue { get; init; }

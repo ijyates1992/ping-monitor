@@ -211,18 +211,10 @@
                             <option value="Other">Other</option>
                         </select>
                     </label>
-                    <label data-fibre-subtype-field hidden>
-                        Fibre subtype
-                        <select data-link-field="fibreSubtype">
+                    <label data-media-subtype-field hidden>
+                        Media subtype
+                        <select data-link-field="mediaSubtype">
                             <option value="">None</option>
-                            <option value="OM1">OM1</option>
-                            <option value="OM2">OM2</option>
-                            <option value="OM3">OM3</option>
-                            <option value="OM4">OM4</option>
-                            <option value="OM5">OM5</option>
-                            <option value="OS1">OS1</option>
-                            <option value="OS2">OS2</option>
-                            <option value="Other">Other</option>
                         </select>
                     </label>
                     <label>
@@ -240,15 +232,30 @@
                             <option value="Other">Other</option>
                         </select>
                     </label>
-                    <div class="link-speed-fields">
+                    <label>
+                        Speed preset
+                        <select data-link-field="linkSpeedPreset">
+                            <option value="">None</option>
+                            <option value="10 Mbps">10 Mbps</option>
+                            <option value="100 Mbps">100 Mbps</option>
+                            <option value="1 Gbps">1 Gbps</option>
+                            <option value="2.5 Gbps">2.5 Gbps</option>
+                            <option value="5 Gbps">5 Gbps</option>
+                            <option value="10 Gbps">10 Gbps</option>
+                            <option value="25 Gbps">25 Gbps</option>
+                            <option value="40 Gbps">40 Gbps</option>
+                            <option value="100 Gbps">100 Gbps</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
+                    <div class="link-speed-fields" data-custom-speed-fields hidden>
                         <label>
-                            Speed
-                            <input type="number" data-link-field="linkSpeedValue" min="0" max="1000000" step="0.001" />
+                            Custom speed
+                            <input type="number" data-link-field="linkSpeedValue" min="0.001" max="1000000" step="0.001" />
                         </label>
                         <label>
                             Unit
                             <select data-link-field="linkSpeedUnit">
-                                <option value="">None</option>
                                 <option value="Mbps">Mbps</option>
                                 <option value="Gbps">Gbps</option>
                                 <option value="Tbps">Tbps</option>

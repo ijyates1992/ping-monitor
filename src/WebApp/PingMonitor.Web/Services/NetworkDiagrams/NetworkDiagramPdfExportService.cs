@@ -437,16 +437,18 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
     private static string BuildLinkLabel(NetworkDiagramLinkDto link)
     {
         var linkType = NetworkDiagramLinkTypes.Normalize(link.LinkType);
-        var mediaType = NetworkDiagramLinkMediaTypes.Normalize(link.MediaType).ToLowerInvariant();
-        var fibreSubtype = string.Equals(NetworkDiagramLinkMediaTypes.Normalize(link.MediaType), NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal)
-            ? NetworkDiagramFibreSubtypes.Normalize(link.FibreSubtype)
-            : null;
+        var normalizedMediaType = NetworkDiagramLinkMediaTypes.Normalize(link.MediaType);
+        var mediaType = normalizedMediaType.ToLowerInvariant();
+        var mediaSubtype = NetworkDiagramMediaSubtypes.Normalize(link.MediaSubtype ?? link.FibreSubtype, normalizedMediaType);
+        var mediaLabel = !string.IsNullOrWhiteSpace(mediaSubtype) && normalizedMediaType == NetworkDiagramLinkMediaTypes.Copper
+            ? mediaSubtype
+            : string.Join(" ", new[] { mediaType, mediaSubtype }.Where(x => !string.IsNullOrWhiteSpace(x)));
         var speed = link.LinkSpeedValue is null || string.IsNullOrWhiteSpace(link.LinkSpeedUnit)
             ? null
             : $"{link.LinkSpeedValue:0.###} {NetworkDiagramLinkSpeedUnits.Normalize(link.LinkSpeedUnit)}";
         var summary = linkType == NetworkDiagramLinkTypes.Lacp
-            ? string.Join(" ", new[] { "LACP", $"{link.LacpMemberCount ?? 2} x", speed, mediaType, fibreSubtype }.Where(x => !string.IsNullOrWhiteSpace(x)))
-            : string.Join(" ", new[] { linkType == NetworkDiagramLinkTypes.Standard ? null : linkType, speed, mediaType, fibreSubtype }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            ? string.Join(" ", new[] { "LACP", $"{link.LacpMemberCount ?? 2} x", speed, mediaLabel }.Where(x => !string.IsNullOrWhiteSpace(x)))
+            : string.Join(" ", new[] { linkType == NetworkDiagramLinkTypes.Standard ? null : linkType, speed, mediaLabel }.Where(x => !string.IsNullOrWhiteSpace(x)));
         var ports = linkType != NetworkDiagramLinkTypes.Lacp && (!string.IsNullOrWhiteSpace(link.SourcePortLabel) || !string.IsNullOrWhiteSpace(link.TargetPortLabel))
             ? $"{link.SourcePortLabel ?? "?"} <-> {link.TargetPortLabel ?? "?"}"
             : null;
