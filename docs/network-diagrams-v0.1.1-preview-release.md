@@ -118,9 +118,8 @@ When enabled:
 
 ### Backup/restore checklist
 
-- Current status: not implemented for Network Diagrams.
-- Release-blocking follow-up: #528.
-- Required before final preview unless explicitly accepted as a known limitation: round-trip `NetworkDiagrams`, `NetworkDiagramNodes`, `NetworkDiagramLinks`, and `NetworkDiagramLinkVlans`, including endpoint ID remapping for monitored endpoint nodes where restored endpoints are remapped.
+- Current status: implemented and tested
+
 
 ### Security and performance checklist
 
