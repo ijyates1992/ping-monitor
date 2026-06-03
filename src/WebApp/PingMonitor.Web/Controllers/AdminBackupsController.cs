@@ -135,6 +135,7 @@ public sealed class AdminBackupsController : Controller
                 IncludeNotificationSettings = preview.IncludedSections.Contains(ConfigurationBackupSections.NotificationSettings, StringComparer.Ordinal),
                 IncludeUserNotificationSettings = preview.IncludedSections.Contains(ConfigurationBackupSections.UserNotificationSettings, StringComparer.Ordinal),
                 IncludeIdentity = false,
+                IncludeNetworkDiagrams = preview.IncludedSections.Contains(ConfigurationBackupSections.NetworkDiagrams, StringComparer.Ordinal),
                 RestoreMode = ConfigurationRestoreModes.Merge
             };
 
@@ -382,6 +383,11 @@ public sealed class AdminBackupsController : Controller
             sections.Add(ConfigurationBackupSections.Identity);
         }
 
+        if (form.IncludeNetworkDiagrams)
+        {
+            sections.Add(ConfigurationBackupSections.NetworkDiagrams);
+        }
+
         return sections;
     }
 
@@ -433,6 +439,11 @@ public sealed class AdminBackupsController : Controller
             sections.Add(ConfigurationBackupSections.Identity);
         }
 
+        if (form.IncludeNetworkDiagrams)
+        {
+            sections.Add(ConfigurationBackupSections.NetworkDiagrams);
+        }
+
         return sections;
     }
 
@@ -447,6 +458,7 @@ public sealed class AdminBackupsController : Controller
             AppVersion = preview.Metadata.AppVersion,
             FormatVersion = preview.Metadata.FormatVersion,
             IncludedSections = preview.IncludedSections,
+            Warnings = preview.Warnings,
             Counts = new ConfigurationBackupSectionCountViewModel
             {
                 Agents = preview.Counts.Agents,
@@ -460,7 +472,11 @@ public sealed class AdminBackupsController : Controller
                 UserNotificationSettings = preview.Counts.UserNotificationSettings,
                 IdentityUsers = preview.Counts.IdentityUsers,
                 IdentityRoles = preview.Counts.IdentityRoles,
-                IdentityUserRoles = preview.Counts.IdentityUserRoles
+                IdentityUserRoles = preview.Counts.IdentityUserRoles,
+                NetworkDiagrams = preview.Counts.NetworkDiagrams,
+                NetworkDiagramNodes = preview.Counts.NetworkDiagramNodes,
+                NetworkDiagramLinks = preview.Counts.NetworkDiagramLinks,
+                NetworkDiagramLinkVlans = preview.Counts.NetworkDiagramLinkVlans
             }
         };
     }
@@ -499,6 +515,7 @@ public sealed class AdminBackupsController : Controller
             ConfigurationBackupSections.NotificationSettings => "Notification infrastructure settings",
             ConfigurationBackupSections.UserNotificationSettings => "User notification settings",
             ConfigurationBackupSections.Identity => "Identity",
+            ConfigurationBackupSections.NetworkDiagrams => "Network diagrams",
             _ => section
         };
     }

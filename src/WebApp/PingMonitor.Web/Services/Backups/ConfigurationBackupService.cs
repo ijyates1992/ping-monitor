@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Options;
+using PingMonitor.Web.Services.NetworkDiagrams;
 
 namespace PingMonitor.Web.Services.Backups;
 
@@ -105,6 +106,9 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
                 : null,
             Identity = selectedSections.Contains(ConfigurationBackupSections.Identity, StringComparer.Ordinal)
                 ? await LoadIdentityAsync(cancellationToken)
+                : null,
+            NetworkDiagrams = selectedSections.Contains(ConfigurationBackupSections.NetworkDiagrams, StringComparer.Ordinal)
+                ? await LoadNetworkDiagramsAsync(cancellationToken)
                 : null
         };
 
@@ -262,6 +266,86 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
                 UpdatedAtUtc = x.UpdatedAtUtc
             })
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task<BackupNetworkDiagramSection> LoadNetworkDiagramsAsync(CancellationToken cancellationToken)
+    {
+        var diagrams = await _dbContext.NetworkDiagrams
+            .AsNoTracking()
+            .Include(x => x.Nodes)
+            .Include(x => x.Links)
+                .ThenInclude(x => x.Vlans)
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        return new BackupNetworkDiagramSection
+        {
+            Diagrams = diagrams.Select(diagram => new BackupNetworkDiagramRecord
+            {
+                DiagramId = diagram.DiagramId,
+                Name = diagram.Name,
+                Description = diagram.Description,
+                CanvasWidth = diagram.CanvasWidth,
+                CanvasHeight = diagram.CanvasHeight,
+                ViewportPanX = diagram.ViewportPanX,
+                ViewportPanY = diagram.ViewportPanY,
+                ViewportZoom = diagram.ViewportZoom,
+                CreatedAtUtc = diagram.CreatedAtUtc,
+                UpdatedAtUtc = diagram.UpdatedAtUtc,
+                CreatedByUserId = diagram.CreatedByUserId,
+                UpdatedByUserId = diagram.UpdatedByUserId,
+                Nodes = diagram.Nodes.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.NodeId).Select(node => new BackupNetworkDiagramNodeRecord
+                {
+                    NodeId = node.NodeId,
+                    NodeType = node.NodeType.ToString(),
+                    EndpointId = node.EndpointId,
+                    DisplayLabel = node.DisplayLabel,
+                    IconKey = node.IconKey,
+                    X = node.X,
+                    Y = node.Y,
+                    Width = node.Width,
+                    Height = node.Height,
+                    Notes = node.Notes,
+                    MetadataJson = node.MetadataJson,
+                    CreatedAtUtc = node.CreatedAtUtc,
+                    UpdatedAtUtc = node.UpdatedAtUtc
+                }).ToArray(),
+                Links = diagram.Links.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.LinkId).Select(link => new BackupNetworkDiagramLinkRecord
+                {
+                    LinkId = link.LinkId,
+                    SourceNodeId = link.SourceNodeId,
+                    TargetNodeId = link.TargetNodeId,
+                    Label = link.Label,
+                    SourcePortLabel = link.SourcePortLabel,
+                    TargetPortLabel = link.TargetPortLabel,
+                    Notes = link.Notes,
+                    MediaType = NetworkDiagramLinkMediaTypes.Normalize(link.MediaType),
+                    MediaSubtype = NetworkDiagramMediaSubtypes.Normalize(link.FibreSubtype, link.MediaType),
+                    FibreSubtype = string.Equals(NetworkDiagramLinkMediaTypes.Normalize(link.MediaType), NetworkDiagramLinkMediaTypes.Fibre, StringComparison.Ordinal)
+                        ? NetworkDiagramMediaSubtypes.Normalize(link.FibreSubtype, NetworkDiagramLinkMediaTypes.Fibre)
+                        : null,
+                    LinkType = NetworkDiagramLinkTypes.Normalize(link.LinkType),
+                    LinkSpeedValue = link.LinkSpeedValue,
+                    LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Normalize(link.LinkSpeedUnit),
+                    LacpMemberCount = link.LacpMemberCount,
+                    LacpMemberPortsJson = link.LacpMemberPortsJson,
+                    MetadataJson = link.MetadataJson,
+                    CreatedAtUtc = link.CreatedAtUtc,
+                    UpdatedAtUtc = link.UpdatedAtUtc,
+                    Vlans = link.Vlans.OrderBy(x => x.SortOrder).ThenBy(x => x.VlanId).Select(vlan => new BackupNetworkDiagramLinkVlanRecord
+                    {
+                        LinkVlanId = vlan.LinkVlanId,
+                        VlanId = vlan.VlanId,
+                        Name = vlan.Name,
+                        Mode = NetworkDiagramVlanModes.Normalize(vlan.Mode),
+                        Notes = vlan.Notes,
+                        SortOrder = vlan.SortOrder,
+                        CreatedAtUtc = vlan.CreatedAtUtc,
+                        UpdatedAtUtc = vlan.UpdatedAtUtc
+                    }).ToArray()
+                }).ToArray()
+            }).ToArray()
+        };
     }
 
     private async Task<BackupIdentitySection> LoadIdentityAsync(CancellationToken cancellationToken)

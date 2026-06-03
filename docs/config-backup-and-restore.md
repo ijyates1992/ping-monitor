@@ -29,6 +29,7 @@ The following entities are included in configuration backups:
 - Notification infrastructure settings (SMTP/Telegram/global notification config)
 - User notification settings
 - Endpoint metadata (tags, attributes if applicable)
+- Network diagrams, including diagram canvas/viewport settings, nodes, visual links, link media/speed/LACP metadata, and link VLAN metadata
 
 ---
 
@@ -75,7 +76,7 @@ Example:
 
 ```json
 {
-  "formatVersion": 2,
+  "formatVersion": 3,
   "appVersion": "1.0.3",
   "backupName": "prod-before-vlan-work",
   "notes": "Taken before changing core switch and endpoint dependency layout. Known-good production config.",
@@ -94,7 +95,10 @@ Example:
     "security_settings": {...},
     "notification_settings": {...},
     "user_notification_settings": [...],
-    "identity": [...]
+    "identity": [...],
+    "network_diagrams": {
+      "diagrams": [...]
+    }
   }
 }
 ```
@@ -118,7 +122,11 @@ Example:
   - `notification_settings`
   - `user_notification_settings`
   - `identity` (optional and explicit, sensitive)
-- Network Diagrams are not included in configuration backup/restore yet. This is a release-blocking known limitation for the Network Diagrams preview and is tracked in issue #528.
+  - `network_diagrams`
+- Network diagrams are restored as configuration/documentation data only. Diagram restore does not create endpoints, monitor assignments, endpoint dependencies, alerts, or any network-device configuration.
+- Monitored endpoint diagram nodes keep matching endpoint IDs when those endpoints exist. When endpoints are restored in the same operation and are remapped by existing endpoint merge logic, monitored diagram node endpoint references are remapped to the restored endpoint IDs.
+- If a monitored diagram node references an endpoint that cannot be resolved, restore keeps the diagram node with `EndpointId` cleared and reports a warning. The restore process never creates a monitored endpoint solely because a diagram references it and never attaches a diagram node to an endpoint by name alone.
+- Diagram visual links remain documentation only and do not create monitoring dependencies. Links whose source/target nodes cannot be restored are skipped with warnings; VLAN metadata for skipped links is also skipped.
 - Restore supports two modes:
   - `merge`
   - `replace`
@@ -132,6 +140,7 @@ Example:
 - Replace requests with missing/incorrect confirmation must be rejected.
 - Identity replace is not supported in this phase; identity restore remains merge-only and explicit.
 - Restore does **not** import operational data (results, state transitions, alerts, logs, metrics, runtime state).
+- Replace mode for `network_diagrams` deletes/replaces only diagram tables (`NetworkDiagramLinkVlans`, `NetworkDiagramLinks`, `NetworkDiagramNodes`, `NetworkDiagrams`) and must not delete endpoints, agents, monitor assignments, endpoint dependencies, check results, states, alerts, events, or logs.
 - Upload does **not** trigger restore automatically; restore remains an explicit separate operator action.
 - Upload supports **JSON only**. Invalid or unsupported files must be rejected and must not be stored.
 

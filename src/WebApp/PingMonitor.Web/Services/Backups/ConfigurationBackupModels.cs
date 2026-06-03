@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
+using PingMonitor.Web.Services.NetworkDiagrams;
 
 namespace PingMonitor.Web.Services.Backups;
 
@@ -15,6 +16,7 @@ public static class ConfigurationBackupSections
     public const string NotificationSettings = "notification_settings";
     public const string UserNotificationSettings = "user_notification_settings";
     public const string Identity = "identity";
+    public const string NetworkDiagrams = "network_diagrams";
 
     public static readonly string[] All =
     [
@@ -26,7 +28,8 @@ public static class ConfigurationBackupSections
         SecuritySettings,
         NotificationSettings,
         UserNotificationSettings,
-        Identity
+        Identity,
+        NetworkDiagrams
     ];
 }
 
@@ -65,7 +68,7 @@ public static class BackupDeleteModes
 
 public sealed class ConfigurationBackupMetadata
 {
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 3;
 
     public int FormatVersion { get; init; } = CurrentFormatVersion;
     public string AppVersion { get; init; } = string.Empty;
@@ -160,6 +163,9 @@ public sealed class ConfigurationBackupSectionData
 
     [JsonPropertyName("identity")]
     public BackupIdentitySection? Identity { get; init; }
+
+    [JsonPropertyName("network_diagrams")]
+    public BackupNetworkDiagramSection? NetworkDiagrams { get; init; }
 }
 
 public sealed class BackupAgentRecord
@@ -349,6 +355,81 @@ public sealed class BackupIdentityUserRoleRecord
     public string RoleId { get; init; } = string.Empty;
 }
 
+public sealed class BackupNetworkDiagramSection
+{
+    public IReadOnlyList<BackupNetworkDiagramRecord> Diagrams { get; init; } = [];
+}
+
+public sealed class BackupNetworkDiagramRecord
+{
+    public string DiagramId { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public double CanvasWidth { get; init; }
+    public double CanvasHeight { get; init; }
+    public double ViewportPanX { get; init; }
+    public double ViewportPanY { get; init; }
+    public double ViewportZoom { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+    public string? CreatedByUserId { get; init; }
+    public string? UpdatedByUserId { get; init; }
+    public IReadOnlyList<BackupNetworkDiagramNodeRecord> Nodes { get; init; } = [];
+    public IReadOnlyList<BackupNetworkDiagramLinkRecord> Links { get; init; } = [];
+}
+
+public sealed class BackupNetworkDiagramNodeRecord
+{
+    public string NodeId { get; init; } = string.Empty;
+    public string NodeType { get; init; } = string.Empty;
+    public string? EndpointId { get; init; }
+    public string DisplayLabel { get; init; } = string.Empty;
+    public string IconKey { get; init; } = "generic";
+    public double X { get; init; }
+    public double Y { get; init; }
+    public double Width { get; init; }
+    public double Height { get; init; }
+    public string? Notes { get; init; }
+    public string? MetadataJson { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+}
+
+public sealed class BackupNetworkDiagramLinkRecord
+{
+    public string LinkId { get; init; } = string.Empty;
+    public string SourceNodeId { get; init; } = string.Empty;
+    public string TargetNodeId { get; init; } = string.Empty;
+    public string? Label { get; init; }
+    public string? SourcePortLabel { get; init; }
+    public string? TargetPortLabel { get; init; }
+    public string? Notes { get; init; }
+    public string MediaType { get; init; } = NetworkDiagramLinkMediaTypes.Copper;
+    public string? MediaSubtype { get; init; }
+    public string? FibreSubtype { get; init; }
+    public string LinkType { get; init; } = NetworkDiagramLinkTypes.Standard;
+    public decimal? LinkSpeedValue { get; init; }
+    public string? LinkSpeedUnit { get; init; }
+    public int? LacpMemberCount { get; init; }
+    public string? LacpMemberPortsJson { get; init; }
+    public string? MetadataJson { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+    public IReadOnlyList<BackupNetworkDiagramLinkVlanRecord> Vlans { get; init; } = [];
+}
+
+public sealed class BackupNetworkDiagramLinkVlanRecord
+{
+    public string LinkVlanId { get; init; } = string.Empty;
+    public int VlanId { get; init; }
+    public string? Name { get; init; }
+    public string Mode { get; init; } = NetworkDiagramVlanModes.Tagged;
+    public string? Notes { get; init; }
+    public int SortOrder { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+}
+
 public sealed class BackupFileListItem
 {
     public string FileName { get; init; } = string.Empty;
@@ -456,6 +537,10 @@ public sealed class ConfigurationBackupSectionCounts
     public int IdentityUsers { get; init; }
     public int IdentityRoles { get; init; }
     public int IdentityUserRoles { get; init; }
+    public int NetworkDiagrams { get; init; }
+    public int NetworkDiagramNodes { get; init; }
+    public int NetworkDiagramLinks { get; init; }
+    public int NetworkDiagramLinkVlans { get; init; }
 }
 
 public sealed class ConfigurationBackupPreview
@@ -465,6 +550,7 @@ public sealed class ConfigurationBackupPreview
     public RestorePreviewMetadata Metadata { get; init; } = new();
     public IReadOnlyList<string> IncludedSections { get; init; } = [];
     public ConfigurationBackupSectionCounts Counts { get; init; } = new();
+    public IReadOnlyList<string> Warnings { get; init; } = [];
 }
 
 public sealed class RestoreConfigurationRequest

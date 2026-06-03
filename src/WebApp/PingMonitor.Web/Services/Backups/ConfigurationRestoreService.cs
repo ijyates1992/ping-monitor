@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Models.Identity;
+using PingMonitor.Web.Services.NetworkDiagrams;
 using PingMonitor.Web.Support;
 using EndpointModel = PingMonitor.Web.Models.Endpoint;
 
@@ -138,6 +139,13 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             sectionResults.Add(section);
         }
 
+        if (selectedSections.Contains(ConfigurationBackupSections.NetworkDiagrams, StringComparer.Ordinal))
+        {
+            var section = await RestoreNetworkDiagramsAsync(backup, endpointIdMapping, cancellationToken);
+            section.DeletedCount = GetDeletedCount(deletedCounts, section.Section);
+            sectionResults.Add(section);
+        }
+
         await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
@@ -267,6 +275,22 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             _logger.LogInformation("Replace delete completed for section {Section}. Deleted {DeletedCount} records.", ConfigurationBackupSections.UserNotificationSettings, deleted);
         }
 
+        if (selectedSections.Contains(ConfigurationBackupSections.NetworkDiagrams, StringComparer.Ordinal))
+        {
+            var deletedVlans = await _dbContext.NetworkDiagramLinkVlans.ExecuteDeleteAsync(cancellationToken);
+            var deletedLinks = await _dbContext.NetworkDiagramLinks.ExecuteDeleteAsync(cancellationToken);
+            var deletedNodes = await _dbContext.NetworkDiagramNodes.ExecuteDeleteAsync(cancellationToken);
+            var deletedDiagrams = await _dbContext.NetworkDiagrams.ExecuteDeleteAsync(cancellationToken);
+            deletedCounts[ConfigurationBackupSections.NetworkDiagrams] = deletedVlans + deletedLinks + deletedNodes + deletedDiagrams;
+            _logger.LogInformation(
+                "Replace delete completed for section {Section}. Deleted diagrams {DiagramCount}, nodes {NodeCount}, links {LinkCount}, VLAN metadata {VlanCount}.",
+                ConfigurationBackupSections.NetworkDiagrams,
+                deletedDiagrams,
+                deletedNodes,
+                deletedLinks,
+                deletedVlans);
+        }
+
         if (selectedSections.Contains(ConfigurationBackupSections.Agents, StringComparer.Ordinal))
         {
             var deletedAgents = await _dbContext.Agents.ExecuteDeleteAsync(cancellationToken);
@@ -296,6 +320,7 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
                 ConfigurationBackupSections.NotificationSettings => backup.Sections.NotificationSettings is not null,
                 ConfigurationBackupSections.UserNotificationSettings => backup.Sections.UserNotificationSettings is not null,
                 ConfigurationBackupSections.Identity => backup.Sections.Identity is not null,
+                ConfigurationBackupSections.NetworkDiagrams => backup.Sections.NetworkDiagrams is not null,
                 _ => false
             };
 
@@ -977,6 +1002,385 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
 
         return result;
     }
+
+
+    private async Task<RestoreSectionResult> RestoreNetworkDiagramsAsync(
+        ConfigurationBackupDocument backup,
+        IDictionary<string, string> endpointIdMapping,
+        CancellationToken cancellationToken)
+    {
+        var result = new RestoreSectionResult { Section = ConfigurationBackupSections.NetworkDiagrams };
+        var sourceSection = backup.Sections.NetworkDiagrams;
+        if (sourceSection is null)
+        {
+            throw new InvalidOperationException("Network diagrams section is missing in selected backup.");
+        }
+
+        var existingEndpointIds = await _dbContext.Endpoints.AsNoTracking().Select(x => x.EndpointId).ToListAsync(cancellationToken);
+        var existingEndpointIdSet = existingEndpointIds.ToHashSet(StringComparer.Ordinal);
+        var existingDiagrams = await _dbContext.NetworkDiagrams
+            .Include(x => x.Nodes)
+            .Include(x => x.Links)
+                .ThenInclude(x => x.Vlans)
+            .ToListAsync(cancellationToken);
+
+        foreach (var sourceDiagram in sourceSection.Diagrams)
+        {
+            if (!ValidateBackupDiagramShell(sourceDiagram, result))
+            {
+                result.SkippedCount++;
+                continue;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var target = existingDiagrams.FirstOrDefault(x => string.Equals(x.DiagramId, sourceDiagram.DiagramId, StringComparison.Ordinal))
+                ?? existingDiagrams.FirstOrDefault(x => string.Equals(x.Name, sourceDiagram.Name, StringComparison.OrdinalIgnoreCase));
+            var isInsert = target is null;
+            if (target is null)
+            {
+                target = new NetworkDiagram
+                {
+                    DiagramId = string.IsNullOrWhiteSpace(sourceDiagram.DiagramId) ? Guid.NewGuid().ToString("N") : sourceDiagram.DiagramId,
+                    CreatedAtUtc = sourceDiagram.CreatedAtUtc == default ? now : sourceDiagram.CreatedAtUtc
+                };
+                _dbContext.NetworkDiagrams.Add(target);
+                existingDiagrams.Add(target);
+                result.InsertedCount++;
+            }
+            else
+            {
+                result.UpdatedCount++;
+            }
+
+            target.Name = TrimOrDefault(sourceDiagram.Name, 255, "Restored diagram");
+            target.Description = TrimOptional(sourceDiagram.Description, 2048);
+            target.CanvasWidth = ClampFinite(sourceDiagram.CanvasWidth <= 0 ? 4000 : sourceDiagram.CanvasWidth, 1000, 20000);
+            target.CanvasHeight = ClampFinite(sourceDiagram.CanvasHeight <= 0 ? 2828 : sourceDiagram.CanvasHeight, 1000, 20000);
+            target.ViewportPanX = ClampFinite(sourceDiagram.ViewportPanX, -100000, 100000);
+            target.ViewportPanY = ClampFinite(sourceDiagram.ViewportPanY, -100000, 100000);
+            target.ViewportZoom = ClampFinite(sourceDiagram.ViewportZoom <= 0 ? 1 : sourceDiagram.ViewportZoom, 0.1, 5);
+            target.UpdatedAtUtc = sourceDiagram.UpdatedAtUtc == default ? now : sourceDiagram.UpdatedAtUtc;
+            target.CreatedByUserId = TrimOptional(sourceDiagram.CreatedByUserId, 255);
+            target.UpdatedByUserId = TrimOptional(sourceDiagram.UpdatedByUserId, 255);
+
+            _dbContext.NetworkDiagramLinkVlans.RemoveRange(target.Links.SelectMany(x => x.Vlans));
+            _dbContext.NetworkDiagramLinks.RemoveRange(target.Links);
+            _dbContext.NetworkDiagramNodes.RemoveRange(target.Nodes);
+            target.Links.Clear();
+            target.Nodes.Clear();
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var restoredNodeIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var sourceNode in sourceDiagram.Nodes)
+            {
+                if (!TryBuildNetworkDiagramNode(sourceDiagram, sourceNode, target.DiagramId, endpointIdMapping, existingEndpointIdSet, result, out var node))
+                {
+                    result.SkippedCount++;
+                    continue;
+                }
+
+                target.Nodes.Add(node);
+                restoredNodeIds.Add(node.NodeId);
+                if (!isInsert)
+                {
+                    result.UpdatedCount++;
+                }
+                else
+                {
+                    result.InsertedCount++;
+                }
+            }
+
+            var restoredLinkIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var sourceLink in sourceDiagram.Links)
+            {
+                if (!TryBuildNetworkDiagramLink(sourceDiagram, sourceLink, target.DiagramId, restoredNodeIds, result, out var link))
+                {
+                    result.SkippedCount++;
+                    continue;
+                }
+
+                foreach (var sourceVlan in sourceLink.Vlans.OrderBy(x => x.SortOrder).ThenBy(x => x.VlanId))
+                {
+                    if (!TryBuildNetworkDiagramLinkVlan(sourceDiagram, sourceLink, sourceVlan, target.DiagramId, link.LinkId, result, out var vlan))
+                    {
+                        result.SkippedCount++;
+                        continue;
+                    }
+
+                    link.Vlans.Add(vlan);
+                    if (!isInsert)
+                    {
+                        result.UpdatedCount++;
+                    }
+                    else
+                    {
+                        result.InsertedCount++;
+                    }
+                }
+
+                target.Links.Add(link);
+                restoredLinkIds.Add(link.LinkId);
+                if (!isInsert)
+                {
+                    result.UpdatedCount++;
+                }
+                else
+                {
+                    result.InsertedCount++;
+                }
+            }
+
+            _ = restoredLinkIds;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Restored section {Section}. Inserted {InsertedCount}, updated {UpdatedCount}, skipped {SkippedCount}, errors {ErrorCount}.",
+            result.Section,
+            result.InsertedCount,
+            result.UpdatedCount,
+            result.SkippedCount,
+            result.ErrorCount);
+
+        return result;
+    }
+
+    private static bool ValidateBackupDiagramShell(BackupNetworkDiagramRecord diagram, RestoreSectionResult result)
+    {
+        if (string.IsNullOrWhiteSpace(diagram.Name))
+        {
+            result.Warnings.Add($"Skipped network diagram '{diagram.DiagramId}' because the diagram name is missing.");
+            return false;
+        }
+
+        if (!IsFinite(diagram.CanvasWidth) || !IsFinite(diagram.CanvasHeight) || !IsFinite(diagram.ViewportPanX) || !IsFinite(diagram.ViewportPanY) || !IsFinite(diagram.ViewportZoom))
+        {
+            result.Warnings.Add($"Skipped network diagram '{diagram.Name}' because canvas or viewport values are invalid.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryBuildNetworkDiagramNode(
+        BackupNetworkDiagramRecord sourceDiagram,
+        BackupNetworkDiagramNodeRecord sourceNode,
+        string targetDiagramId,
+        IDictionary<string, string> endpointIdMapping,
+        IReadOnlySet<string> existingEndpointIds,
+        RestoreSectionResult result,
+        out NetworkDiagramNode node)
+    {
+        node = new NetworkDiagramNode();
+        if (string.IsNullOrWhiteSpace(sourceNode.NodeId)
+            || string.IsNullOrWhiteSpace(sourceNode.DisplayLabel)
+            || string.IsNullOrWhiteSpace(sourceNode.IconKey)
+            || !IsFinite(sourceNode.X)
+            || !IsFinite(sourceNode.Y)
+            || !IsFinite(sourceNode.Width)
+            || !IsFinite(sourceNode.Height))
+        {
+            result.Warnings.Add($"Skipped node '{sourceNode.NodeId}' in network diagram '{sourceDiagram.Name}' because required node data is invalid.");
+            return false;
+        }
+
+        if (!Enum.TryParse<NetworkDiagramNodeType>(sourceNode.NodeType, ignoreCase: true, out var nodeType) || !Enum.IsDefined(nodeType))
+        {
+            result.Warnings.Add($"Skipped node '{sourceNode.NodeId}' in network diagram '{sourceDiagram.Name}' because node type '{sourceNode.NodeType}' is unsupported.");
+            return false;
+        }
+
+        string? endpointId = null;
+        if (nodeType == NetworkDiagramNodeType.MonitoredEndpoint)
+        {
+            if (string.IsNullOrWhiteSpace(sourceNode.EndpointId))
+            {
+                result.Warnings.Add($"Restored monitored endpoint node '{sourceNode.NodeId}' in network diagram '{sourceDiagram.Name}' without an endpoint reference because the backup endpoint id is empty.");
+            }
+            else
+            {
+                endpointId = ResolveMappedOrExistingId(sourceNode.EndpointId, endpointIdMapping, existingEndpointIds);
+                if (endpointId is null)
+                {
+                    result.Warnings.Add($"Restored monitored endpoint node '{sourceNode.NodeId}' in network diagram '{sourceDiagram.Name}' with EndpointId cleared because endpoint '{sourceNode.EndpointId}' could not be resolved. Restore did not create an endpoint for this diagram reference.");
+                }
+                else if (!string.Equals(endpointId, sourceNode.EndpointId, StringComparison.Ordinal))
+                {
+                    result.Warnings.Add($"Remapped monitored endpoint node '{sourceNode.NodeId}' in network diagram '{sourceDiagram.Name}' from endpoint '{sourceNode.EndpointId}' to '{endpointId}'.");
+                }
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(sourceNode.EndpointId))
+        {
+            result.Warnings.Add($"Cleared endpoint reference on non-monitored node '{sourceNode.NodeId}' in network diagram '{sourceDiagram.Name}'.");
+        }
+
+        node = new NetworkDiagramNode
+        {
+            NodeId = TrimOrDefault(sourceNode.NodeId, 64, Guid.NewGuid().ToString("N")),
+            DiagramId = targetDiagramId,
+            NodeType = nodeType,
+            EndpointId = endpointId,
+            DisplayLabel = TrimOrDefault(sourceNode.DisplayLabel, 255, "Restored node"),
+            IconKey = TrimOrDefault(sourceNode.IconKey, 64, "generic"),
+            X = ClampFinite(sourceNode.X, -1000, 21000),
+            Y = ClampFinite(sourceNode.Y, -1000, 21000),
+            Width = ClampFinite(sourceNode.Width <= 0 ? 178 : sourceNode.Width, 40, 2000),
+            Height = ClampFinite(sourceNode.Height <= 0 ? 78 : sourceNode.Height, 30, 2000),
+            Notes = TrimOptional(sourceNode.Notes, 4096),
+            MetadataJson = TrimOptional(sourceNode.MetadataJson, 65535),
+            CreatedAtUtc = sourceNode.CreatedAtUtc == default ? DateTimeOffset.UtcNow : sourceNode.CreatedAtUtc,
+            UpdatedAtUtc = sourceNode.UpdatedAtUtc == default ? DateTimeOffset.UtcNow : sourceNode.UpdatedAtUtc
+        };
+        return true;
+    }
+
+    private static bool TryBuildNetworkDiagramLink(
+        BackupNetworkDiagramRecord sourceDiagram,
+        BackupNetworkDiagramLinkRecord sourceLink,
+        string targetDiagramId,
+        IReadOnlySet<string> restoredNodeIds,
+        RestoreSectionResult result,
+        out NetworkDiagramLink link)
+    {
+        link = new NetworkDiagramLink();
+        if (string.IsNullOrWhiteSpace(sourceLink.LinkId)
+            || string.IsNullOrWhiteSpace(sourceLink.SourceNodeId)
+            || string.IsNullOrWhiteSpace(sourceLink.TargetNodeId))
+        {
+            result.Warnings.Add($"Skipped link '{sourceLink.LinkId}' in network diagram '{sourceDiagram.Name}' because required link references are missing.");
+            return false;
+        }
+
+        if (string.Equals(sourceLink.SourceNodeId, sourceLink.TargetNodeId, StringComparison.Ordinal))
+        {
+            result.Warnings.Add($"Skipped self-link '{sourceLink.LinkId}' in network diagram '{sourceDiagram.Name}'.");
+            return false;
+        }
+
+        if (!restoredNodeIds.Contains(sourceLink.SourceNodeId) || !restoredNodeIds.Contains(sourceLink.TargetNodeId))
+        {
+            result.Warnings.Add($"Skipped link '{sourceLink.LinkId}' in network diagram '{sourceDiagram.Name}' because one or both endpoint nodes were not restored.");
+            return false;
+        }
+
+        var mediaType = NetworkDiagramLinkMediaTypes.Normalize(sourceLink.MediaType);
+        var mediaSubtype = NetworkDiagramMediaSubtypes.Normalize(sourceLink.MediaSubtype ?? sourceLink.FibreSubtype, mediaType);
+        var linkType = NetworkDiagramLinkTypes.Normalize(sourceLink.LinkType);
+        var speedUnit = NetworkDiagramLinkSpeedUnits.Normalize(sourceLink.LinkSpeedUnit);
+        if (!NetworkDiagramLinkMediaTypes.IsAllowed(mediaType)
+            || !NetworkDiagramMediaSubtypes.IsAllowed(mediaSubtype, mediaType)
+            || !NetworkDiagramLinkTypes.IsAllowed(linkType)
+            || !NetworkDiagramLinkSpeedUnits.IsAllowed(speedUnit)
+            || sourceLink.LinkSpeedValue is <= 0 or > 1000000
+            || (sourceLink.LinkSpeedValue is null && speedUnit is not null)
+            || (sourceLink.LinkSpeedValue is not null && speedUnit is null))
+        {
+            result.Warnings.Add($"Skipped link '{sourceLink.LinkId}' in network diagram '{sourceDiagram.Name}' because media, type, or speed metadata is invalid.");
+            return false;
+        }
+
+        var lacpMemberCount = string.Equals(linkType, NetworkDiagramLinkTypes.Lacp, StringComparison.Ordinal)
+            ? sourceLink.LacpMemberCount
+            : null;
+        if (lacpMemberCount is < 1 or > 16)
+        {
+            result.Warnings.Add($"Skipped link '{sourceLink.LinkId}' in network diagram '{sourceDiagram.Name}' because LACP member count is invalid.");
+            return false;
+        }
+
+        link = new NetworkDiagramLink
+        {
+            LinkId = TrimOrDefault(sourceLink.LinkId, 64, Guid.NewGuid().ToString("N")),
+            DiagramId = targetDiagramId,
+            SourceNodeId = sourceLink.SourceNodeId,
+            TargetNodeId = sourceLink.TargetNodeId,
+            Label = TrimOptional(sourceLink.Label, 255),
+            SourcePortLabel = TrimOptional(sourceLink.SourcePortLabel, 128),
+            TargetPortLabel = TrimOptional(sourceLink.TargetPortLabel, 128),
+            Notes = TrimOptional(sourceLink.Notes, 4096),
+            MediaType = mediaType,
+            FibreSubtype = mediaSubtype,
+            LinkType = linkType,
+            LinkSpeedValue = sourceLink.LinkSpeedValue is null ? null : Math.Round(sourceLink.LinkSpeedValue.Value, 3),
+            LinkSpeedUnit = speedUnit,
+            LacpMemberCount = lacpMemberCount,
+            LacpMemberPortsJson = string.Equals(linkType, NetworkDiagramLinkTypes.Lacp, StringComparison.Ordinal) ? TrimOptional(sourceLink.LacpMemberPortsJson, 65535) : null,
+            MetadataJson = TrimOptional(sourceLink.MetadataJson, 65535),
+            CreatedAtUtc = sourceLink.CreatedAtUtc == default ? DateTimeOffset.UtcNow : sourceLink.CreatedAtUtc,
+            UpdatedAtUtc = sourceLink.UpdatedAtUtc == default ? DateTimeOffset.UtcNow : sourceLink.UpdatedAtUtc
+        };
+        return true;
+    }
+
+    private static bool TryBuildNetworkDiagramLinkVlan(
+        BackupNetworkDiagramRecord sourceDiagram,
+        BackupNetworkDiagramLinkRecord sourceLink,
+        BackupNetworkDiagramLinkVlanRecord sourceVlan,
+        string targetDiagramId,
+        string targetLinkId,
+        RestoreSectionResult result,
+        out NetworkDiagramLinkVlan vlan)
+    {
+        vlan = new NetworkDiagramLinkVlan();
+        var mode = NetworkDiagramVlanModes.Normalize(sourceVlan.Mode);
+        if (sourceVlan.VlanId is < 1 or > 4094 || !NetworkDiagramVlanModes.IsAllowed(mode))
+        {
+            result.Warnings.Add($"Skipped VLAN metadata '{sourceVlan.VlanId}' on link '{sourceLink.LinkId}' in network diagram '{sourceDiagram.Name}' because VLAN data is invalid.");
+            return false;
+        }
+
+        vlan = new NetworkDiagramLinkVlan
+        {
+            LinkVlanId = string.IsNullOrWhiteSpace(sourceVlan.LinkVlanId) ? Guid.NewGuid().ToString("N") : TrimOrDefault(sourceVlan.LinkVlanId, 64, Guid.NewGuid().ToString("N")),
+            LinkId = targetLinkId,
+            DiagramId = targetDiagramId,
+            VlanId = sourceVlan.VlanId,
+            Name = TrimOptional(sourceVlan.Name, 128),
+            Mode = mode,
+            Notes = TrimOptional(sourceVlan.Notes, 512),
+            SortOrder = sourceVlan.SortOrder,
+            CreatedAtUtc = sourceVlan.CreatedAtUtc == default ? DateTimeOffset.UtcNow : sourceVlan.CreatedAtUtc,
+            UpdatedAtUtc = sourceVlan.UpdatedAtUtc == default ? DateTimeOffset.UtcNow : sourceVlan.UpdatedAtUtc
+        };
+        return true;
+    }
+
+    private static string TrimOrDefault(string? value, int maxLength, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
+    private static string? TrimOptional(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
+    private static double ClampFinite(double value, double min, double max)
+    {
+        if (!IsFinite(value))
+        {
+            return min;
+        }
+
+        return Math.Min(Math.Max(value, min), max);
+    }
+
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static string? ResolveMappedOrExistingId(
         string sourceId,

@@ -103,6 +103,7 @@
                             <label class="check-item"><input asp-for="Form.IncludeNotificationSettings" /> Notification infrastructure settings</label>
                             <label class="check-item"><input asp-for="Form.IncludeUserNotificationSettings" /> User notification settings</label>
                             <label class="check-item"><input asp-for="Form.IncludeIdentity" /> Identity (optional; disabled by default)</label>
+                            <label class="check-item"><input asp-for="Form.IncludeNetworkDiagrams" /> Network diagrams</label>
                         </div>
                     </div>
                 </div>
@@ -168,6 +169,18 @@
                             <strong>Notes</strong>
                             <div class="notes">@(string.IsNullOrWhiteSpace(Model.Preview.Notes) ? "(none)" : Model.Preview.Notes)</div>
                         </div>
+                        @if (Model.Preview.Warnings.Count > 0)
+                        {
+                            <div class="warning" style="margin-top:.75rem;">
+                                <strong>Restore preview warnings</strong>
+                                <ul>
+                                    @foreach (var warning in Model.Preview.Warnings)
+                                    {
+                                        <li>@warning</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
                         <div style="overflow-x:auto; margin-top:.75rem;">
                             <table>
                                 <thead>
@@ -189,6 +202,10 @@
                                     <tr><td>Identity users</td><td>@Model.Preview.Counts.IdentityUsers</td></tr>
                                     <tr><td>Identity roles</td><td>@Model.Preview.Counts.IdentityRoles</td></tr>
                                     <tr><td>Identity user-role links</td><td>@Model.Preview.Counts.IdentityUserRoles</td></tr>
+                                    <tr><td>Network diagrams</td><td>@Model.Preview.Counts.NetworkDiagrams</td></tr>
+                                    <tr><td>Network diagram nodes</td><td>@Model.Preview.Counts.NetworkDiagramNodes</td></tr>
+                                    <tr><td>Network diagram links</td><td>@Model.Preview.Counts.NetworkDiagramLinks</td></tr>
+                                    <tr><td>Network diagram VLAN metadata</td><td>@Model.Preview.Counts.NetworkDiagramLinkVlans</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -209,6 +226,7 @@
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeNotificationSettings" /> Notification infrastructure settings</label>
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeUserNotificationSettings" /> User notification settings</label>
                             <label class="check-item"><input asp-for="RestoreApplyForm.IncludeIdentity" /> Identity (sensitive and optional)</label>
+                            <label class="check-item"><input asp-for="RestoreApplyForm.IncludeNetworkDiagrams" /> Network diagrams</label>
                         </div>
                         <div>
                             <label asp-for="RestoreApplyForm.RestoreMode"></label>
