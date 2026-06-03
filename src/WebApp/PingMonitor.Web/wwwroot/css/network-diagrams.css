@@ -1139,3 +1139,128 @@ html[data-theme="dark"] .diagram-link-port-label {
         grid-template-rows: minmax(60vh, 1fr) auto;
     }
 }
+
+.diagram-summary-panel {
+    display: grid;
+    gap: .75rem;
+    min-height: 0;
+}
+
+.diagram-summary-header {
+    display: grid;
+    gap: .2rem;
+}
+
+.diagram-summary-header h3 {
+    margin: 0;
+    font-size: .95rem;
+}
+
+.diagram-summary-header span,
+.diagram-summary-message,
+.diagram-summary-none {
+    color: var(--diagram-muted);
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.diagram-summary-count-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .45rem;
+}
+
+.diagram-summary-count {
+    display: grid;
+    gap: .15rem;
+    padding: .55rem;
+    border: 1px solid var(--diagram-border);
+    border-radius: 10px;
+    background: var(--diagram-panel);
+}
+
+.diagram-summary-count span {
+    color: var(--diagram-muted);
+    font-size: .72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.diagram-summary-count strong {
+    color: var(--diagram-text);
+    font-size: 1.05rem;
+}
+
+.diagram-summary-sections {
+    display: grid;
+    gap: .65rem;
+    max-height: min(48vh, 520px);
+    overflow: auto;
+    padding-right: .15rem;
+}
+
+.diagram-summary-section {
+    display: grid;
+    gap: .35rem;
+}
+
+.diagram-summary-section h3 {
+    margin: 0;
+    font-size: .85rem;
+}
+
+.diagram-summary-endpoint-list {
+    display: grid;
+    gap: .35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.diagram-summary-endpoint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--diagram-border);
+    border-radius: 10px;
+    background: var(--diagram-panel);
+    color: var(--diagram-text);
+    cursor: pointer;
+    font: inherit;
+    padding: .5rem .6rem;
+    text-align: left;
+}
+
+.diagram-summary-endpoint:hover,
+.diagram-summary-endpoint:focus-visible {
+    border-color: var(--diagram-accent);
+    box-shadow: 0 0 0 3px var(--diagram-accent-soft);
+    outline: none;
+}
+
+.diagram-summary-endpoint-main {
+    display: grid;
+    gap: .15rem;
+    min-width: 0;
+}
+
+.diagram-summary-endpoint-main strong,
+.diagram-summary-endpoint-main span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.diagram-summary-endpoint-main span,
+.diagram-summary-endpoint-meta {
+    color: var(--diagram-muted);
+    font-size: .76rem;
+    font-weight: 700;
+}
+
+.diagram-summary-endpoint-meta {
+    flex: 0 0 auto;
+}
