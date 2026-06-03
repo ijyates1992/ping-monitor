@@ -18,6 +18,7 @@ public sealed class NetworkDiagramsController : Controller
     private readonly IEndpointManagementQueryService _endpointManagementQueryService;
     private readonly INetworkDiagramService _networkDiagramService;
     private readonly INetworkDiagramPdfExportService _pdfExportService;
+    private readonly INetworkDiagramImageExportService _imageExportService;
     private readonly INetworkDiagramLiveOverlayService _liveOverlayService;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
@@ -26,6 +27,7 @@ public sealed class NetworkDiagramsController : Controller
         IEndpointManagementQueryService endpointManagementQueryService,
         INetworkDiagramService networkDiagramService,
         INetworkDiagramPdfExportService pdfExportService,
+        INetworkDiagramImageExportService imageExportService,
         INetworkDiagramLiveOverlayService liveOverlayService,
         IUserAccessScopeService userAccessScopeService)
     {
@@ -33,6 +35,7 @@ public sealed class NetworkDiagramsController : Controller
         _endpointManagementQueryService = endpointManagementQueryService;
         _networkDiagramService = networkDiagramService;
         _pdfExportService = pdfExportService;
+        _imageExportService = imageExportService;
         _liveOverlayService = liveOverlayService;
         _userAccessScopeService = userAccessScopeService;
     }
@@ -119,6 +122,8 @@ public sealed class NetworkDiagramsController : Controller
             LiveDataUrl = Url?.Action(nameof(LiveData), new { diagramId = diagram.DiagramId }) ?? string.Empty,
             EditUrl = isAdmin ? Url?.Action(nameof(Edit), new { diagramId = diagram.DiagramId }) : null,
             ExportPdfUrl = isAdmin ? Url?.Action(nameof(ExportPdf), new { diagramId = diagram.DiagramId }) : null,
+            ExportPngUrl = isAdmin ? Url?.Action(nameof(ExportImage), new { diagramId = diagram.DiagramId, format = "png" }) : null,
+            ExportSvgUrl = isAdmin ? Url?.Action(nameof(ExportImage), new { diagramId = diagram.DiagramId, format = "svg" }) : null,
             IsAdmin = isAdmin
         });
     }
@@ -149,6 +154,8 @@ public sealed class NetworkDiagramsController : Controller
             LoadUrl = Url?.Action(nameof(Load), new { diagramId = diagram.DiagramId }) ?? string.Empty,
             SaveUrl = Url?.Action(nameof(Save), new { diagramId = diagram.DiagramId }) ?? string.Empty,
             ExportPdfUrl = Url?.Action(nameof(ExportPdf), new { diagramId = diagram.DiagramId }) ?? string.Empty,
+            ExportPngUrl = Url?.Action(nameof(ExportImage), new { diagramId = diagram.DiagramId, format = "png" }) ?? string.Empty,
+            ExportSvgUrl = Url?.Action(nameof(ExportImage), new { diagramId = diagram.DiagramId, format = "svg" }) ?? string.Empty,
             ViewerUrl = Url?.Action(nameof(ViewDiagram), new { diagramId = diagram.DiagramId }) ?? string.Empty,
             MonitoredEndpoints = BuildEndpointToolbox(endpoints.Rows)
         });
@@ -232,6 +239,43 @@ public sealed class NetworkDiagramsController : Controller
 
         var export = _pdfExportService.Export(diagram, new NetworkDiagramPdfExportOptions(paper, DateTimeOffset.UtcNow));
         return File(export.Content, export.ContentType, export.FileName);
+    }
+
+
+    [Authorize(Roles = ApplicationRoles.Admin)]
+    [HttpGet("{diagramId}/export/{format}")]
+    public async Task<IActionResult> ExportImage(
+        string diagramId,
+        string format,
+        [FromQuery] double scale = 1d,
+        [FromQuery] string background = "light",
+        CancellationToken cancellationToken = default)
+    {
+        if (!await NetworkDiagramsEnabledAsync(cancellationToken))
+        {
+            return NotFound("Network diagrams are not enabled.");
+        }
+
+        var diagram = await _networkDiagramService.LoadAsync(diagramId, cancellationToken);
+        if (diagram is null)
+        {
+            return NotFound("Network diagram was not found.");
+        }
+
+        try
+        {
+            var export = _imageExportService.Export(diagram, new NetworkDiagramImageExportOptions(format, scale, background, DateTimeOffset.UtcNow));
+            Response.Headers.ContentLength = export.Content.Length;
+            Response.Headers["X-Network-Diagram-Canvas-Width"] = diagram.CanvasWidth.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+            Response.Headers["X-Network-Diagram-Canvas-Height"] = diagram.CanvasHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+            Response.Headers["X-Network-Diagram-Export-Pixel-Width"] = export.PixelWidth.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            Response.Headers["X-Network-Diagram-Export-Pixel-Height"] = export.PixelHeight.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return File(export.Content, export.ContentType, export.FileName);
+        }
+        catch (NetworkDiagramImageExportException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [Authorize(Roles = ApplicationRoles.Admin)]

@@ -39,7 +39,10 @@
     const selectedNodeCount = editor.querySelector('[data-selected-node-count]');
     const saveButton = editor.querySelector('[data-save-diagram]');
     const exportPdfButton = editor.querySelector('[data-export-pdf]');
+    const exportPngButton = editor.querySelector('[data-export-png]');
+    const exportSvgButton = editor.querySelector('[data-export-svg]');
     const exportPaperSelect = editor.querySelector('[data-export-paper]');
+    const exportScaleSelect = editor.querySelector('[data-export-scale]');
     const canvasSizePresetSelect = editor.querySelector('[data-canvas-size-preset]');
     const canvasRatioWarning = editor.querySelector('[data-canvas-ratio-warning]');
     const drawMediaTypeSelect = editor.querySelector('[data-draw-media-type]');
@@ -57,6 +60,8 @@
     const loadUrl = editor.dataset.loadUrl || '';
     const saveUrl = editor.dataset.saveUrl || '';
     const exportPdfUrl = editor.dataset.exportPdfUrl || '';
+    const exportPngUrl = editor.dataset.exportPngUrl || '';
+    const exportSvgUrl = editor.dataset.exportSvgUrl || '';
 
     if (!canvasHost || !canvas || !world || !nodeLayer || !linkLayer) {
         return;
@@ -1685,6 +1690,24 @@
         window.location.href = `${exportPdfUrl}${separator}paper=${encodeURIComponent(paper)}`;
     }
 
+
+    function exportImage(baseUrl, label) {
+        if (!baseUrl) {
+            return;
+        }
+
+        if (state.dirty) {
+            const confirmed = window.confirm(`Export uses the last saved diagram layout. Save your changes before exporting if you want them in the ${label}. Continue exporting the saved version?`);
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        const scale = exportScaleSelect ? exportScaleSelect.value : '1';
+        const separator = baseUrl.includes('?') ? '&' : '?';
+        window.location.href = `${baseUrl}${separator}scale=${encodeURIComponent(scale)}&background=light`;
+    }
+
     async function saveDiagram() {
         if (!saveUrl || !saveButton) {
             return;
@@ -1784,6 +1807,12 @@
 
     if (exportPdfButton) {
         exportPdfButton.addEventListener('click', exportPdf);
+    }
+    if (exportPngButton) {
+        exportPngButton.addEventListener('click', () => exportImage(exportPngUrl, 'PNG'));
+    }
+    if (exportSvgButton) {
+        exportSvgButton.addEventListener('click', () => exportImage(exportSvgUrl, 'SVG'));
     }
 
     if (addLinkVlanButton) {

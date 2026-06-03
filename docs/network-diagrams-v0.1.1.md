@@ -240,6 +240,32 @@ Manual regression checklist for this slice:
 9. Disable `NetworkDiagramsEnabled` and confirm the export route is blocked.
 10. Confirm no endpoint dependency, alerting, state-evaluation, or agent data is created or changed.
 
+## Native-scale image export slice
+
+This slice adds Network Diagram image export as documentation/output only. It does not change endpoint monitoring, dependency suppression, alerting, agents, topology discovery, SNMP, or monitoring dependencies.
+
+- PNG and SVG export are server-side, authenticated, admin-only through the Network Diagrams controller, and continue to respect `NetworkDiagramsEnabled`.
+- Image export renders the full last-saved diagram layout by default. Unsaved browser edits are not included until the diagram is saved.
+- PNG export uses the saved `CanvasWidth` and `CanvasHeight` as the native 1x pixel dimensions. For example, a saved `4000 × 2828` canvas exports as a `4000 × 2828` PNG at 1x and preserves the same canvas ratio at 2x or 0.5x.
+- SVG export uses `viewBox="0 0 {CanvasWidth} {CanvasHeight}"`, writes width/height from the saved canvas dimensions, and draws nodes and links in saved world coordinates.
+- Image export does not use the existing PDF page-fit scaling path and does not squash the diagram into A4/A3. Saved node positions, node sizes, link geometry, parallel-link offsets, media/link styling, link labels, VLAN summaries, and node labels are rendered from the native diagram layout.
+- Export options are intentionally small: PNG, SVG, and 0.5x/1x/2x scale. Light background is used from the current UI; dark/transparent backgrounds are validated server-side for later UI exposure.
+- Server-side validation rejects unsupported formats/backgrounds/scales and clamps excessive pixel dimensions before rendering.
+- SVG output is static markup only: user-provided labels/notes/VLAN text are escaped, scripts and external resources are not emitted, and safe font fallbacks are used.
+- PDF export is unchanged in this slice and still uses the older A4/A3 page-fit renderer. Follow-up work should refactor PDF export to embed or reuse the native export renderer so dense diagrams are not compressed by the PDF-specific layout.
+- Visual links remain documentation-only and do not create, update, or delete monitoring dependencies.
+
+Manual regression checklist for native image export:
+
+1. Open the saved Home diagram.
+2. Export PNG at 1x and confirm the image dimensions match the saved canvas, for example `4000 × 2828` when that is the saved canvas.
+3. Open the PNG at 100% and confirm relative scale matches the original diagram canvas rather than the compressed PDF layout.
+4. Confirm node positions, node sizes, link geometry, parallel links, VLAN/link/media labels, and node labels are present and readable.
+5. Export PNG at 2x and confirm the same layout is rendered at higher resolution.
+6. Export SVG and confirm a browser displays the same saved full-canvas layout.
+7. Disable `NetworkDiagramsEnabled` and confirm image export routes are blocked.
+8. Confirm no monitoring/dependency/agent behaviour changed.
+
 ## Link Styling, Labels, and Parallel Links Slice
 
 This slice enhances saved Network Diagram links while preserving the architectural boundary that links are documentation/status-overlay data only.

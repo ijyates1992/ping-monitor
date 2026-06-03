@@ -20,7 +20,10 @@
     const linkDetail = viewer.querySelector('[data-link-detail]');
     const noSelectionPanel = viewer.querySelector('[data-no-selection-panel]');
     const exportPdfButton = viewer.querySelector('[data-export-pdf]');
+    const exportPngButton = viewer.querySelector('[data-export-png]');
+    const exportSvgButton = viewer.querySelector('[data-export-svg]');
     const exportPaperSelect = viewer.querySelector('[data-export-paper]');
+    const exportScaleSelect = viewer.querySelector('[data-export-scale]');
 
     const zoomStep = 1.15;
     const minZoom = 0.15;
@@ -497,6 +500,9 @@
     viewer.querySelector('[data-reset-view]')?.addEventListener('click', resetView);
     viewer.querySelector('[data-fit-content]')?.addEventListener('click', fitContent);
     exportPdfButton?.addEventListener('click', () => { const base = exportPdfButton.dataset.exportPdfUrl; if (base) { window.location.href = `${base}?paper=${encodeURIComponent(exportPaperSelect?.value || 'A4')}`; } });
+    const exportImage = button => { const base = button?.dataset.exportImageUrl; if (base) { const separator = base.includes('?') ? '&' : '?'; window.location.href = `${base}${separator}scale=${encodeURIComponent(exportScaleSelect?.value || '1')}&background=light`; } };
+    exportPngButton?.addEventListener('click', () => exportImage(exportPngButton));
+    exportSvgButton?.addEventListener('click', () => exportImage(exportSvgButton));
     noSelectionPanel?.addEventListener('click', event => {
         const target = event.target instanceof Element ? event.target : event.target?.parentElement;
         const button = target?.closest('[data-summary-node-id]');

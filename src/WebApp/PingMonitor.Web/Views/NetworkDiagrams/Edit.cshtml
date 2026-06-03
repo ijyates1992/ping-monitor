@@ -10,7 +10,7 @@
 </head>
 <body>
 @await Html.PartialAsync("_AuthenticatedNav")
-<main class="network-diagrams-main" data-network-diagram-editor data-diagram-id="@Model.DiagramId" data-load-url="@Model.LoadUrl" data-save-url="@Model.SaveUrl" data-export-pdf-url="@Model.ExportPdfUrl">
+<main class="network-diagrams-main" data-network-diagram-editor data-diagram-id="@Model.DiagramId" data-load-url="@Model.LoadUrl" data-save-url="@Model.SaveUrl" data-export-pdf-url="@Model.ExportPdfUrl" data-export-png-url="@Model.ExportPngUrl" data-export-svg-url="@Model.ExportSvgUrl">
     @Html.AntiForgeryToken()
     <section class="diagram-editor-shell" aria-labelledby="network-diagrams-title">
         <header class="diagram-editor-toolbar">
@@ -136,6 +136,18 @@
                         </select>
                     </label>
                     <span class="diagram-canvas-ratio-warning" data-canvas-ratio-warning hidden>Legacy canvas ratio loaded. Choose a canvas size to normalise safely.</span>
+                    <span class="diagram-toolbar-divider" aria-hidden="true"></span>
+                    <label class="diagram-toolbar-select-label">
+                        Export scale
+                        <select data-export-scale aria-label="Image export scale">
+                            <option value="1">1x native</option>
+                            <option value="2">2x high resolution</option>
+                            <option value="0.5">0.5x smaller</option>
+                        </select>
+                    </label>
+                    <button type="button" class="diagram-tool-button" data-export-png>Export PNG</button>
+                    <button type="button" class="diagram-tool-button" data-export-svg>Export SVG</button>
+                    <span class="diagram-tool-hint">Exports saved diagram layout.</span>
                     <span class="diagram-toolbar-divider" aria-hidden="true"></span>
                     <label class="diagram-toolbar-select-label">
                         PDF paper
