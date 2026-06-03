@@ -4,6 +4,8 @@ namespace PingMonitor.Web.ViewModels.NetworkDiagrams;
 
 public sealed class NetworkDiagramListPageViewModel
 {
+    public bool IsAdmin { get; init; }
+
     public IReadOnlyList<NetworkDiagramListItemViewModel> Diagrams { get; init; } = [];
     public CreateNetworkDiagramViewModel CreateDiagram { get; init; } = new();
 }
@@ -51,6 +53,8 @@ public sealed class NetworkDiagramEditorPageViewModel
 
     public string ExportPdfUrl { get; init; } = string.Empty;
 
+    public string ViewerUrl { get; init; } = string.Empty;
+
     public IReadOnlyList<NetworkDiagramEndpointToolboxItemViewModel> MonitoredEndpoints { get; init; } = [];
 }
 
@@ -65,4 +69,31 @@ public sealed class NetworkDiagramEndpointToolboxItemViewModel
     public string IconKey { get; init; } = "generic";
 
     public Models.EndpointStateKind SummaryState { get; init; } = Models.EndpointStateKind.Unknown;
+}
+
+
+public sealed class NetworkDiagramViewerPageViewModel
+{
+    public const string DocumentationOnlyNotice =
+        "Viewer overlays existing monitoring status only. Visual links remain documentation-only.";
+
+    public string PageTitle { get; init; } = "Network diagram";
+
+    public string Notice { get; init; } = DocumentationOnlyNotice;
+
+    public string DiagramId { get; init; } = string.Empty;
+
+    public string DiagramName { get; init; } = string.Empty;
+
+    public string? DiagramDescription { get; init; }
+
+    public string LoadUrl { get; init; } = string.Empty;
+
+    public string LiveDataUrl { get; init; } = string.Empty;
+
+    public string? EditUrl { get; init; }
+
+    public string? ExportPdfUrl { get; init; }
+
+    public bool IsAdmin { get; init; }
 }

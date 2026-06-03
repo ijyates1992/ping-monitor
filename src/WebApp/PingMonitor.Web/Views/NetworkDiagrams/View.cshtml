@@ -1,0 +1,83 @@
+@model PingMonitor.Web.ViewModels.NetworkDiagrams.NetworkDiagramViewerPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.PageTitle - Network diagram</title>
+    <link rel="stylesheet" href="/css/network-diagrams.css" />
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main class="network-diagrams-main">
+    <section class="diagram-editor-shell diagram-viewer-shell" data-network-diagram-viewer data-load-url="@Model.LoadUrl" data-live-data-url="@Model.LiveDataUrl" aria-labelledby="network-diagram-viewer-title">
+        <header class="diagram-editor-toolbar">
+            <div class="diagram-editor-heading">
+                <h1 id="network-diagram-viewer-title">@Model.DiagramName</h1>
+                @if (!string.IsNullOrWhiteSpace(Model.DiagramDescription))
+                {
+                    <p>@Model.DiagramDescription</p>
+                }
+                <p class="diagram-viewer-note">@Model.Notice</p>
+            </div>
+            <div class="diagram-viewer-actions">
+                @if (Model.IsAdmin && !string.IsNullOrWhiteSpace(Model.EditUrl))
+                {
+                    <a class="diagram-tool-button" href="@Model.EditUrl">Edit diagram</a>
+                }
+            </div>
+        </header>
+
+        <div class="diagram-viewer-layout">
+            <section class="diagram-workspace" aria-label="Read-only network diagram viewer">
+                <div class="diagram-workspace-toolbar diagram-viewer-toolbar">
+                    <button type="button" class="diagram-tool-button" data-zoom-out>Zoom out</button>
+                    <span class="diagram-zoom-label" data-zoom-label>100%</span>
+                    <button type="button" class="diagram-tool-button" data-zoom-in>Zoom in</button>
+                    <button type="button" class="diagram-tool-button" data-reset-view>Reset view</button>
+                    <button type="button" class="diagram-tool-button" data-fit-content>Fit content</button>
+                    @if (Model.IsAdmin && !string.IsNullOrWhiteSpace(Model.ExportPdfUrl))
+                    {
+                        <label class="diagram-toolbar-select-label">
+                            PDF paper
+                            <select data-export-paper aria-label="PDF paper size">
+                                <option value="A4">A4 landscape</option>
+                                <option value="A3">A3 landscape</option>
+                            </select>
+                        </label>
+                        <button type="button" class="diagram-tool-button" data-export-pdf data-export-pdf-url="@Model.ExportPdfUrl">Export PDF</button>
+                    }
+                    <span class="diagram-tool-hint" data-refresh-status>Live overlay pending</span>
+                </div>
+                <div class="diagram-canvas-host" data-diagram-canvas-host>
+                    <div class="diagram-canvas" data-diagram-canvas role="application" aria-label="Read-only network diagram canvas" tabindex="0">
+                        <div class="diagram-empty-state" data-empty-state>Loading saved diagram…</div>
+                        <div class="diagram-world" data-diagram-world>
+                            <svg class="diagram-link-layer" data-link-layer></svg>
+                            <div class="diagram-node-layer" data-node-layer></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="diagram-properties diagram-viewer-details" aria-label="Read-only diagram details">
+                <h2>Details</h2>
+                <div data-no-selection-panel>
+                    <p>Select a monitored endpoint node or visual link to view read-only details.</p>
+                    <p class="toolbox-help">The viewer does not edit diagrams, endpoints, monitoring dependencies, alerts, or agents.</p>
+                </div>
+                <div class="diagram-viewer-detail-card" data-node-detail hidden></div>
+                <div class="diagram-viewer-detail-card" data-link-detail hidden></div>
+            </aside>
+        </div>
+
+        <footer class="diagram-status-bar">
+            <span>Read-only viewer. Visual links do not create monitoring dependencies.</span>
+            <span data-canvas-size>Canvas size pending</span>
+        </footer>
+    </section>
+</main>
+<script src="/js/network-diagrams-viewer.js" defer></script>
+</body>
+</html>

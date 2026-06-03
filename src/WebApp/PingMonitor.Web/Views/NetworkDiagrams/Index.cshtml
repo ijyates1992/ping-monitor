@@ -20,22 +20,25 @@
             </div>
         </header>
 
-        <section class="diagram-list-create" aria-labelledby="create-diagram-title">
-            <h2 id="create-diagram-title">Create diagram</h2>
-            <form asp-action="Create" method="post" class="diagram-create-form">
-                @Html.AntiForgeryToken()
-                <label>
-                    Name
-                    <input asp-for="CreateDiagram.Name" name="Name" maxlength="255" required />
-                </label>
-                <label>
-                    Description
-                    <textarea asp-for="CreateDiagram.Description" name="Description" maxlength="2048" rows="3"></textarea>
-                </label>
-                <button type="submit" class="diagram-tool-button">Create diagram</button>
-                <div asp-validation-summary="All"></div>
-            </form>
-        </section>
+        @if (Model.IsAdmin)
+        {
+            <section class="diagram-list-create" aria-labelledby="create-diagram-title">
+                <h2 id="create-diagram-title">Create diagram</h2>
+                <form asp-action="Create" method="post" class="diagram-create-form">
+                    @Html.AntiForgeryToken()
+                    <label>
+                        Name
+                        <input asp-for="CreateDiagram.Name" name="Name" maxlength="255" required />
+                    </label>
+                    <label>
+                        Description
+                        <textarea asp-for="CreateDiagram.Description" name="Description" maxlength="2048" rows="3"></textarea>
+                    </label>
+                    <button type="submit" class="diagram-tool-button">Create diagram</button>
+                    <div asp-validation-summary="All"></div>
+                </form>
+            </section>
+        }
 
         @if (Model.Diagrams.Count == 0)
         {
@@ -51,18 +54,24 @@
                 {
                     <article class="diagram-list-card">
                         <div>
-                            <h2><a asp-action="Edit" asp-route-diagramId="@diagram.DiagramId">@diagram.Name</a></h2>
+                            <h2><a asp-action="ViewDiagram" asp-route-diagramId="@diagram.DiagramId">@diagram.Name</a></h2>
                             @if (!string.IsNullOrWhiteSpace(diagram.Description))
                             {
                                 <p>@diagram.Description</p>
                             }
                             <p class="toolbox-help">@diagram.NodeCount nodes • @diagram.LinkCount visual links • Updated @diagram.UpdatedAtUtc.ToLocalTime().ToString("g")</p>
                         </div>
-                        <form asp-action="Delete" asp-route-diagramId="@diagram.DiagramId" method="post" onsubmit="return window.confirm('This deletes only the saved network diagram. Monitoring endpoints and monitoring data will not be deleted.');">
-                            @Html.AntiForgeryToken()
-                            <a class="diagram-tool-button" asp-action="Edit" asp-route-diagramId="@diagram.DiagramId">Open</a>
-                            <button type="submit" class="diagram-tool-button danger-button">Delete diagram</button>
-                        </form>
+                        <div class="diagram-list-actions">
+                            <a class="diagram-tool-button" asp-action="ViewDiagram" asp-route-diagramId="@diagram.DiagramId">View</a>
+                            @if (Model.IsAdmin)
+                            {
+                                <a class="diagram-tool-button" asp-action="Edit" asp-route-diagramId="@diagram.DiagramId">Edit</a>
+                                <form asp-action="Delete" asp-route-diagramId="@diagram.DiagramId" method="post" onsubmit="return window.confirm('This deletes only the saved network diagram. Monitoring endpoints and monitoring data will not be deleted.');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="diagram-tool-button danger-button">Delete diagram</button>
+                                </form>
+                            }
+                        </div>
                     </article>
                 }
             </section>

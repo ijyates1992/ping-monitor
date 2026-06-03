@@ -347,3 +347,36 @@ Schema note:
 Backup/restore follow-up:
 
 - Configuration backup/restore inclusion for network diagrams remains a required follow-up before publishing V0.1.1 if it is not completed in the release branch; that follow-up must include `NetworkDiagramLinkVlans` alongside `NetworkDiagrams`, `NetworkDiagramNodes`, and `NetworkDiagramLinks`.
+
+## Read-only viewer and live endpoint overlay slice
+
+This slice adds a read-only Network Diagram viewer for operational display while keeping the existing editor as the admin-only edit mode.
+
+- Saved diagrams open in read-only view by default from the diagram list.
+- Admin users can navigate from the viewer to the editor when `NetworkDiagramsEnabled` is enabled.
+- The viewer preserves saved virtual canvas dimensions, pan, zoom, fit content behaviour, saved nodes, visual links, parallel link rendering, link labels, notes, ports, and VLAN summaries.
+- The viewer does not show editor-only controls such as the toolbox, Properties edit forms, Save, Delete selected, Draw link, or add-node controls.
+- Viewer node and link details are read-only.
+- Visual links remain documentation-only and do not create, update, or delete monitoring dependencies.
+
+Live endpoint overlay behaviour:
+
+- Monitored endpoint nodes display existing server-calculated monitoring data: summary state, 24-hour uptime, and last RTT.
+- The viewer does not calculate endpoint state, dependency suppression, degraded state, uptime windows, or alerting decisions independently.
+- Endpoint state remains assignment-scoped. When a diagram node references an endpoint with multiple assignments, the viewer uses a UI-only urgency summary: Down, Unknown, Suppressed, Degraded, then Up.
+- The UI-only summary does not redefine the monitoring state machine and is not fed back into monitoring, alerting, suppression, agents, endpoint configuration, or dependency configuration.
+- The live overlay endpoint batches assignment/current-state lookup for all monitored nodes on the diagram and uses existing 24-hour assignment metrics snapshots for uptime and RTT fields instead of scanning raw check results on every refresh.
+- Live data refresh uses lightweight polling every 20 seconds. If refresh fails, the existing diagram stays visible and the viewer marks the live overlay as stale.
+
+Access and feature-gate behaviour:
+
+- `NetworkDiagramsEnabled` gates the viewer page, static diagram JSON, and live overlay JSON endpoints.
+- Authenticated users can view diagrams.
+- Admin users can create, edit, save, export PDF, and delete diagrams.
+- Non-admin diagram JSON and live overlay responses are filtered through existing endpoint visibility rules so hidden endpoint details are not exposed.
+
+Safety boundary:
+
+- The viewer does not create, update, or delete endpoints.
+- The viewer does not create, update, or delete monitoring dependencies.
+- The viewer does not change endpoint monitoring, state evaluation, dependency suppression, alerting, agents, startup-gate behaviour, topology inference, or SNMP behaviour.

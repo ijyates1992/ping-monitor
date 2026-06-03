@@ -10,7 +10,7 @@ using PingMonitor.Web.ViewModels.NetworkDiagrams;
 
 namespace PingMonitor.Web.Controllers;
 
-[Authorize(Roles = ApplicationRoles.Admin)]
+[Authorize]
 [Route("network-diagrams")]
 public sealed class NetworkDiagramsController : Controller
 {
@@ -18,17 +18,23 @@ public sealed class NetworkDiagramsController : Controller
     private readonly IEndpointManagementQueryService _endpointManagementQueryService;
     private readonly INetworkDiagramService _networkDiagramService;
     private readonly INetworkDiagramPdfExportService _pdfExportService;
+    private readonly INetworkDiagramLiveOverlayService _liveOverlayService;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
     public NetworkDiagramsController(
         IApplicationSettingsService applicationSettingsService,
         IEndpointManagementQueryService endpointManagementQueryService,
         INetworkDiagramService networkDiagramService,
-        INetworkDiagramPdfExportService pdfExportService)
+        INetworkDiagramPdfExportService pdfExportService,
+        INetworkDiagramLiveOverlayService liveOverlayService,
+        IUserAccessScopeService userAccessScopeService)
     {
         _applicationSettingsService = applicationSettingsService;
         _endpointManagementQueryService = endpointManagementQueryService;
         _networkDiagramService = networkDiagramService;
         _pdfExportService = pdfExportService;
+        _liveOverlayService = liveOverlayService;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     [HttpGet("")]
@@ -42,6 +48,7 @@ public sealed class NetworkDiagramsController : Controller
         var diagrams = await _networkDiagramService.ListAsync(cancellationToken);
         return View("Index", new NetworkDiagramListPageViewModel
         {
+            IsAdmin = await IsAdminAsync(),
             Diagrams = diagrams.Select(x => new NetworkDiagramListItemViewModel
             {
                 DiagramId = x.DiagramId,
@@ -54,6 +61,7 @@ public sealed class NetworkDiagramsController : Controller
         });
     }
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost("create")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(CreateNetworkDiagramViewModel model, CancellationToken cancellationToken)
@@ -68,6 +76,7 @@ public sealed class NetworkDiagramsController : Controller
             var diagrams = await _networkDiagramService.ListAsync(cancellationToken);
             return View("Index", new NetworkDiagramListPageViewModel
             {
+                IsAdmin = await IsAdminAsync(),
                 CreateDiagram = model,
                 Diagrams = diagrams.Select(x => new NetworkDiagramListItemViewModel
                 {
@@ -86,6 +95,36 @@ public sealed class NetworkDiagramsController : Controller
     }
 
     [HttpGet("{diagramId}")]
+    public async Task<IActionResult> ViewDiagram(string diagramId, CancellationToken cancellationToken)
+    {
+        if (!await NetworkDiagramsEnabledAsync(cancellationToken))
+        {
+            return NotFound("Network diagrams are not enabled.");
+        }
+
+        var diagram = await _networkDiagramService.GetDiagramAsync(diagramId, cancellationToken);
+        if (diagram is null)
+        {
+            return NotFound("Network diagram was not found.");
+        }
+
+        var isAdmin = await IsAdminAsync();
+        return View("View", new NetworkDiagramViewerPageViewModel
+        {
+            PageTitle = diagram.Name,
+            DiagramId = diagram.DiagramId,
+            DiagramName = diagram.Name,
+            DiagramDescription = diagram.Description,
+            LoadUrl = Url?.Action(nameof(Load), new { diagramId = diagram.DiagramId }) ?? string.Empty,
+            LiveDataUrl = Url?.Action(nameof(LiveData), new { diagramId = diagram.DiagramId }) ?? string.Empty,
+            EditUrl = isAdmin ? Url?.Action(nameof(Edit), new { diagramId = diagram.DiagramId }) : null,
+            ExportPdfUrl = isAdmin ? Url?.Action(nameof(ExportPdf), new { diagramId = diagram.DiagramId }) : null,
+            IsAdmin = isAdmin
+        });
+    }
+
+    [Authorize(Roles = ApplicationRoles.Admin)]
+    [HttpGet("{diagramId}/edit")]
     public async Task<IActionResult> Edit(string diagramId, CancellationToken cancellationToken)
     {
         if (!await NetworkDiagramsEnabledAsync(cancellationToken))
@@ -107,9 +146,10 @@ public sealed class NetworkDiagramsController : Controller
             DiagramId = diagram.DiagramId,
             DiagramName = diagram.Name,
             DiagramDescription = diagram.Description,
-            LoadUrl = Url.Action(nameof(Load), new { diagramId = diagram.DiagramId }) ?? string.Empty,
-            SaveUrl = Url.Action(nameof(Save), new { diagramId = diagram.DiagramId }) ?? string.Empty,
-            ExportPdfUrl = Url.Action(nameof(ExportPdf), new { diagramId = diagram.DiagramId }) ?? string.Empty,
+            LoadUrl = Url?.Action(nameof(Load), new { diagramId = diagram.DiagramId }) ?? string.Empty,
+            SaveUrl = Url?.Action(nameof(Save), new { diagramId = diagram.DiagramId }) ?? string.Empty,
+            ExportPdfUrl = Url?.Action(nameof(ExportPdf), new { diagramId = diagram.DiagramId }) ?? string.Empty,
+            ViewerUrl = Url?.Action(nameof(ViewDiagram), new { diagramId = diagram.DiagramId }) ?? string.Empty,
             MonitoredEndpoints = BuildEndpointToolbox(endpoints.Rows)
         });
     }
@@ -123,9 +163,37 @@ public sealed class NetworkDiagramsController : Controller
         }
 
         var diagram = await _networkDiagramService.LoadAsync(diagramId, cancellationToken);
-        return diagram is null ? NotFound(new { error = "Network diagram was not found." }) : Json(diagram);
+        if (diagram is null)
+        {
+            return NotFound(new { error = "Network diagram was not found." });
+        }
+
+        if (!await IsAdminAsync())
+        {
+            diagram = await FilterDiagramForViewerAsync(diagram, cancellationToken);
+        }
+
+        return Json(diagram);
     }
 
+    [HttpGet("{diagramId}/live-data")]
+    public async Task<IActionResult> LiveData(string diagramId, CancellationToken cancellationToken)
+    {
+        if (!await NetworkDiagramsEnabledAsync(cancellationToken))
+        {
+            return NotFound(new { error = "Network diagrams are not enabled." });
+        }
+
+        var diagram = await _networkDiagramService.GetDiagramAsync(diagramId, cancellationToken);
+        if (diagram is null)
+        {
+            return NotFound(new { error = "Network diagram was not found." });
+        }
+
+        return Json(await _liveOverlayService.GetOverlayAsync(diagramId, User, cancellationToken));
+    }
+
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost("{diagramId}/save")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Save(string diagramId, [FromBody] NetworkDiagramSaveRequest request, CancellationToken cancellationToken)
@@ -147,6 +215,7 @@ public sealed class NetworkDiagramsController : Controller
     }
 
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet("{diagramId}/export/pdf")]
     public async Task<IActionResult> ExportPdf(string diagramId, [FromQuery] string paper = "A4", CancellationToken cancellationToken = default)
     {
@@ -165,6 +234,7 @@ public sealed class NetworkDiagramsController : Controller
         return File(export.Content, export.ContentType, export.FileName);
     }
 
+    [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost("{diagramId}/delete")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(string diagramId, CancellationToken cancellationToken)
@@ -182,6 +252,34 @@ public sealed class NetworkDiagramsController : Controller
     {
         var settings = await _applicationSettingsService.GetCurrentAsync(cancellationToken);
         return settings.NetworkDiagramsEnabled;
+    }
+
+
+    private async Task<bool> IsAdminAsync() => await _userAccessScopeService.IsAdminAsync(User);
+
+    private async Task<NetworkDiagramDto> FilterDiagramForViewerAsync(NetworkDiagramDto diagram, CancellationToken cancellationToken)
+    {
+        var visibleEndpointIds = await _userAccessScopeService.GetVisibleEndpointIdsAsync(User, cancellationToken);
+        var visibleNodes = diagram.Nodes
+            .Where(node => !string.Equals(node.NodeType, nameof(NetworkDiagramNodeType.MonitoredEndpoint), StringComparison.Ordinal) ||
+                (!string.IsNullOrWhiteSpace(node.EndpointId) && visibleEndpointIds.Contains(node.EndpointId)))
+            .ToArray();
+        var visibleNodeIds = visibleNodes.Select(node => node.NodeId).ToHashSet(StringComparer.Ordinal);
+
+        return new NetworkDiagramDto
+        {
+            DiagramId = diagram.DiagramId,
+            Name = diagram.Name,
+            Description = diagram.Description,
+            CanvasWidth = diagram.CanvasWidth,
+            CanvasHeight = diagram.CanvasHeight,
+            ViewportPanX = diagram.ViewportPanX,
+            ViewportPanY = diagram.ViewportPanY,
+            ViewportZoom = diagram.ViewportZoom,
+            UpdatedAtUtc = diagram.UpdatedAtUtc,
+            Nodes = visibleNodes,
+            Links = diagram.Links.Where(link => visibleNodeIds.Contains(link.SourceNodeId) && visibleNodeIds.Contains(link.TargetNodeId)).ToArray()
+        };
     }
 
     private static IReadOnlyList<NetworkDiagramEndpointToolboxItemViewModel> BuildEndpointToolbox(
@@ -231,12 +329,12 @@ public sealed class NetworkDiagramsController : Controller
     {
         return state switch
         {
-            EndpointStateKind.Down => 4,
+            EndpointStateKind.Down => 5,
+            EndpointStateKind.Unknown => 4,
             EndpointStateKind.Suppressed => 3,
             EndpointStateKind.Degraded => 2,
-            EndpointStateKind.Unknown => 1,
-            EndpointStateKind.Up => 0,
-            _ => 1
+            EndpointStateKind.Up => 1,
+            _ => 4
         };
     }
 }
