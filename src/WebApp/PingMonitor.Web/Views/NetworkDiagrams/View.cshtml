@@ -37,8 +37,20 @@
                     <button type="button" class="diagram-tool-button" data-zoom-in>Zoom in</button>
                     <button type="button" class="diagram-tool-button" data-reset-view>Reset view</button>
                     <button type="button" class="diagram-tool-button" data-fit-content>Fit content</button>
-                    @if (Model.IsAdmin && !string.IsNullOrWhiteSpace(Model.ExportPdfUrl))
+                    @if (Model.IsAdmin && (!string.IsNullOrWhiteSpace(Model.ExportPdfUrl) || !string.IsNullOrWhiteSpace(Model.ExportPngUrl) || !string.IsNullOrWhiteSpace(Model.ExportSvgUrl)))
                     {
+                        <label class="diagram-toolbar-select-label">
+                            Export scale
+                            <select data-export-scale aria-label="Image export scale">
+                                <option value="1">1x native</option>
+                                <option value="2">2x high resolution</option>
+                                <option value="0.5">0.5x smaller</option>
+                            </select>
+                        </label>
+                        <button type="button" class="diagram-tool-button" data-export-png data-export-image-url="@Model.ExportPngUrl">Export PNG</button>
+                        <button type="button" class="diagram-tool-button" data-export-svg data-export-image-url="@Model.ExportSvgUrl">Export SVG</button>
+                        <span class="diagram-tool-hint">Exports saved diagram layout.</span>
+                        <span class="diagram-toolbar-divider" aria-hidden="true"></span>
                         <label class="diagram-toolbar-select-label">
                             PDF paper
                             <select data-export-paper aria-label="PDF paper size">

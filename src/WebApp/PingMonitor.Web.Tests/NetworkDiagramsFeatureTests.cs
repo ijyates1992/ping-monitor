@@ -68,6 +68,7 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeEndpointManagementQueryService(),
             new FakeNetworkDiagramService(),
             new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramImageExportService(),
             new FakeNetworkDiagramLiveOverlayService(),
             new FakeUserAccessScopeService());
 
@@ -93,6 +94,7 @@ public sealed class NetworkDiagramsFeatureTests
             }),
             new FakeNetworkDiagramService(new NetworkDiagram { DiagramId = "diagram-1", Name = "Core", UpdatedAtUtc = DateTimeOffset.UtcNow }),
             new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramImageExportService(),
             new FakeNetworkDiagramLiveOverlayService(),
             new FakeUserAccessScopeService());
 
@@ -183,6 +185,10 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("data-canvas-size-preset", viewMarkup);
         Assert.Contains("Small (4000 × 2828)", viewMarkup);
         Assert.Contains("data-export-pdf", viewMarkup);
+        Assert.Contains("data-export-png", viewMarkup);
+        Assert.Contains("data-export-svg", viewMarkup);
+        Assert.Contains("data-export-scale", viewMarkup);
+        Assert.Contains("Exports saved diagram layout", viewMarkup);
         Assert.Contains("A4 landscape", viewMarkup);
         Assert.Contains("A3 landscape", viewMarkup);
         Assert.Contains("Canvas cannot shrink", script);
@@ -461,10 +467,15 @@ public sealed class NetworkDiagramsFeatureTests
             .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
             .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
             .Single();
+        var imageExportAuthorize = typeof(NetworkDiagramsController).GetMethod(nameof(NetworkDiagramsController.ExportImage))!
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+            .Single();
 
         Assert.Null(controllerAuthorize.Roles);
         Assert.Equal(ApplicationRoles.Admin, editAuthorize.Roles);
         Assert.Equal(ApplicationRoles.Admin, exportAuthorize.Roles);
+        Assert.Equal(ApplicationRoles.Admin, imageExportAuthorize.Roles);
     }
 
     [Fact]
@@ -475,6 +486,7 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeEndpointManagementQueryService(),
             new FakeNetworkDiagramService(),
             new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramImageExportService(),
             new FakeNetworkDiagramLiveOverlayService(),
             new FakeUserAccessScopeService());
 
@@ -492,6 +504,7 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeEndpointManagementQueryService(),
             new FakeNetworkDiagramService(),
             new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramImageExportService(),
             new FakeNetworkDiagramLiveOverlayService(),
             new FakeUserAccessScopeService());
 
@@ -517,6 +530,7 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeEndpointManagementQueryService(),
             service,
             new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramImageExportService(),
             new FakeNetworkDiagramLiveOverlayService(),
             new FakeUserAccessScopeService());
 
@@ -526,6 +540,95 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Equal("application/pdf", file.ContentType);
         Assert.StartsWith("PingMonitor-NetworkDiagram-Core", file.FileDownloadName);
         Assert.StartsWith("%PDF", System.Text.Encoding.ASCII.GetString(file.FileContents));
+    }
+
+
+    [Fact]
+    public async Task NetworkDiagramsExportImage_ReturnsNotFound_WhenFeatureDisabled()
+    {
+        var controller = CreateNetworkDiagramController(
+            new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = false }),
+            new FakeNetworkDiagramService(),
+            new FakeNetworkDiagramImageExportService());
+
+        var result = await controller.ExportImage("diagram-1", "png", 1, "light", CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        Assert.Equal("Network diagrams are not enabled.", notFound.Value);
+    }
+
+    [Fact]
+    public async Task NetworkDiagramsExportImage_ReturnsPngForExistingDiagram()
+    {
+        var service = new FakeNetworkDiagramService();
+        service.LoadResult = BuildExportTestDiagram();
+        var controller = CreateNetworkDiagramController(
+            new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = true }),
+            service,
+            new FakeNetworkDiagramImageExportService());
+
+        var result = await controller.ExportImage("diagram-1", "png", 1, "light", CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/png", file.ContentType);
+        Assert.StartsWith("PingMonitor-NetworkDiagram-Core", file.FileDownloadName);
+        Assert.Equal("4000", controller.Response.Headers["X-Network-Diagram-Canvas-Width"]);
+        Assert.Equal("2828", controller.Response.Headers["X-Network-Diagram-Canvas-Height"]);
+    }
+
+    [Fact]
+    public void NetworkDiagramImageExport_ReturnsNativeSvgViewBoxAndNodeCoordinates()
+    {
+        var service = new NetworkDiagramImageExportService();
+        var diagram = BuildExportTestDiagram();
+
+        var export = service.Export(diagram, new NetworkDiagramImageExportOptions("svg", 1, "light", new DateTimeOffset(2026, 6, 1, 17, 0, 0, TimeSpan.Zero)));
+        var svg = System.Text.Encoding.UTF8.GetString(export.Content);
+
+        Assert.Equal("image/svg+xml; charset=utf-8", export.ContentType);
+        Assert.Contains(@"viewBox=""0 0 4000 2828""", svg);
+        Assert.Contains(@"width=""4000""", svg);
+        Assert.Contains(@"height=""2828""", svg);
+        Assert.Contains(@"transform=""translate(123 456)""", svg);
+        Assert.Contains("Users", svg, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(@"stroke-dasharray=""12 8""", svg);
+        Assert.DoesNotContain("841.89", svg);
+        Assert.DoesNotContain("595.28", svg);
+    }
+
+    [Fact]
+    public void NetworkDiagramImageExport_ReturnsNativePngDimensionsAndSignature()
+    {
+        var service = new NetworkDiagramImageExportService();
+        var diagram = BuildExportTestDiagram();
+
+        var export = service.Export(diagram, new NetworkDiagramImageExportOptions("png", 1, "light", new DateTimeOffset(2026, 6, 1, 17, 0, 0, TimeSpan.Zero)));
+
+        Assert.Equal("image/png", export.ContentType);
+        Assert.Equal(4000, export.PixelWidth);
+        Assert.Equal(2828, export.PixelHeight);
+        Assert.Equal([0x89, 0x50, 0x4e, 0x47], export.Content.Take(4).ToArray());
+    }
+
+    [Fact]
+    public void NetworkDiagramImageExport_ClampsExcessiveScaleDimensions()
+    {
+        var service = new NetworkDiagramImageExportService();
+        var source = BuildExportTestDiagram();
+        var diagram = new NetworkDiagramDto
+        {
+            DiagramId = source.DiagramId,
+            Name = source.Name,
+            CanvasWidth = 8000,
+            CanvasHeight = 5657,
+            Nodes = source.Nodes,
+            Links = source.Links
+        };
+
+        var ex = Assert.Throws<NetworkDiagramImageExportException>(() =>
+            service.Export(diagram, new NetworkDiagramImageExportOptions("png", 2, "light", DateTimeOffset.UtcNow)));
+
+        Assert.Contains("exceeds the safe limit", ex.Message);
     }
 
 
@@ -549,6 +652,10 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("RTT:", script);
         Assert.Contains("data-summary-panel", viewMarkup);
         Assert.Contains("renderSummaryPanel", script);
+        Assert.Contains("data-export-png", viewMarkup);
+        Assert.Contains("data-export-svg", viewMarkup);
+        Assert.Contains("data-export-scale", viewMarkup);
+        Assert.Contains("Exports saved diagram layout", viewMarkup);
         Assert.Contains("Diagram live summary", script);
         Assert.Contains("Total nodes", script);
         Assert.Contains("Monitored", script);
@@ -590,6 +697,7 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeEndpointManagementQueryService(),
             new FakeNetworkDiagramService(new NetworkDiagram { DiagramId = "diagram-1", Name = "Core", UpdatedAtUtc = DateTimeOffset.UtcNow }),
             new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramImageExportService(),
             new FakeNetworkDiagramLiveOverlayService(),
             new FakeUserAccessScopeService(isAdmin: true));
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity("test")) } };
@@ -611,6 +719,7 @@ public sealed class NetworkDiagramsFeatureTests
             new FakeEndpointManagementQueryService(),
             new FakeNetworkDiagramService(new NetworkDiagram { DiagramId = "diagram-1", Name = "Core", UpdatedAtUtc = DateTimeOffset.UtcNow }),
             new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramImageExportService(),
             new FakeNetworkDiagramLiveOverlayService(),
             new FakeUserAccessScopeService());
 
@@ -636,6 +745,93 @@ public sealed class NetworkDiagramsFeatureTests
         }
 
         throw new InvalidOperationException("Could not locate repository root.");
+    }
+
+
+    private static NetworkDiagramsController CreateNetworkDiagramController(
+        IApplicationSettingsService settingsService,
+        INetworkDiagramService diagramService,
+        INetworkDiagramImageExportService imageExportService)
+    {
+        var controller = new NetworkDiagramsController(
+            settingsService,
+            new FakeEndpointManagementQueryService(),
+            diagramService,
+            new FakeNetworkDiagramPdfExportService(),
+            imageExportService,
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService());
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+        return controller;
+    }
+
+    private static NetworkDiagramDto BuildExportTestDiagram()
+    {
+        return new NetworkDiagramDto
+        {
+            DiagramId = "diagram-1",
+            Name = "Core",
+            CanvasWidth = 4000,
+            CanvasHeight = 2828,
+            Nodes =
+            [
+                new NetworkDiagramNodeDto
+                {
+                    NodeId = "node-a",
+                    NodeType = "CustomDevice",
+                    DisplayLabel = "Core switch with very long label",
+                    IconKey = "SW",
+                    X = 123,
+                    Y = 456,
+                    Width = 190,
+                    Height = 86,
+                    Notes = "aggregation"
+                },
+                new NetworkDiagramNodeDto
+                {
+                    NodeId = "node-b",
+                    NodeType = "MonitoredEndpoint",
+                    DisplayLabel = "Wireless bridge",
+                    IconKey = "AP",
+                    X = 620,
+                    Y = 700,
+                    Width = 190,
+                    Height = 86
+                }
+            ],
+            Links =
+            [
+                new NetworkDiagramLinkDto
+                {
+                    LinkId = "link-a",
+                    SourceNodeId = "node-a",
+                    TargetNodeId = "node-b",
+                    Label = "uplink",
+                    MediaType = NetworkDiagramLinkMediaTypes.Wireless,
+                    LinkType = NetworkDiagramLinkTypes.Trunk,
+                    SourcePortLabel = "Gi1/0/1",
+                    TargetPortLabel = "eth0",
+                    LinkSpeedValue = 1,
+                    LinkSpeedUnit = NetworkDiagramLinkSpeedUnits.Gbps,
+                    Vlans =
+                    [
+                        new NetworkDiagramLinkVlanDto { VlanId = 10, Name = "Users", Mode = NetworkDiagramVlanModes.Tagged, SortOrder = 0 }
+                    ]
+                },
+                new NetworkDiagramLinkDto
+                {
+                    LinkId = "link-b",
+                    SourceNodeId = "node-a",
+                    TargetNodeId = "node-b",
+                    Label = "parallel",
+                    MediaType = NetworkDiagramLinkMediaTypes.Fibre,
+                    LinkType = NetworkDiagramLinkTypes.Lacp
+                }
+            ]
+        };
     }
 
     private sealed class FakeEndpointManagementQueryService : IEndpointManagementQueryService
@@ -723,6 +919,13 @@ public sealed class NetworkDiagramsFeatureTests
         }
     }
 
+    private sealed class FakeNetworkDiagramImageExportService : INetworkDiagramImageExportService
+    {
+        public NetworkDiagramImageExportResult Export(NetworkDiagramDto diagram, NetworkDiagramImageExportOptions options)
+        {
+            return new NetworkDiagramImageExportResult([0x89, 0x50, 0x4e, 0x47], "image/png", $"PingMonitor-NetworkDiagram-{diagram.Name}-{options.ExportedAtUtc:yyyyMMdd-HHmm}.png", (int)(diagram.CanvasWidth * options.Scale), (int)(diagram.CanvasHeight * options.Scale));
+        }
+    }
 
     private sealed class FakeNetworkDiagramLiveOverlayService : INetworkDiagramLiveOverlayService
     {

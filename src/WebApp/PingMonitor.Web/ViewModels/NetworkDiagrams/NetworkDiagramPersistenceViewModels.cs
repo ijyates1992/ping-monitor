@@ -53,6 +53,10 @@ public sealed class NetworkDiagramEditorPageViewModel
 
     public string ExportPdfUrl { get; init; } = string.Empty;
 
+    public string ExportPngUrl { get; init; } = string.Empty;
+
+    public string ExportSvgUrl { get; init; } = string.Empty;
+
     public string ViewerUrl { get; init; } = string.Empty;
 
     public IReadOnlyList<NetworkDiagramEndpointToolboxItemViewModel> MonitoredEndpoints { get; init; } = [];
@@ -94,6 +98,10 @@ public sealed class NetworkDiagramViewerPageViewModel
     public string? EditUrl { get; init; }
 
     public string? ExportPdfUrl { get; init; }
+
+    public string? ExportPngUrl { get; init; }
+
+    public string? ExportSvgUrl { get; init; }
 
     public bool IsAdmin { get; init; }
 }
