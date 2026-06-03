@@ -361,6 +361,9 @@ This slice adds a read-only Network Diagram viewer for operational display while
 
 Live endpoint overlay behaviour:
 
+- When no node or link is selected, the read-only viewer details pane shows a diagram-wide live summary instead of generic help text. The summary includes total diagram nodes, monitored endpoint nodes, diagram-only/custom nodes, visual links, the live overlay refresh time, and monitored-node counts for Up, Degraded, Down, Suppressed, and Unknown.
+- Diagram summary counts and affected endpoint lists are based on the existing live overlay response and its server-calculated monitoring state labels. The viewer does not derive endpoint state from raw check results.
+- Affected endpoint lists for Down, Degraded, Suppressed, and Unknown states are compact dashboard aids. Clicking an endpoint in those lists centres/zooms the read-only canvas to the corresponding diagram node and opens the normal read-only node details.
 - Monitored endpoint nodes display existing server-calculated monitoring data: summary state, 24-hour uptime, and last RTT.
 - The viewer does not calculate endpoint state, dependency suppression, degraded state, uptime windows, or alerting decisions independently.
 - Endpoint state remains assignment-scoped. When a diagram node references an endpoint with multiple assignments, the viewer uses a UI-only urgency summary: Down, Unknown, Suppressed, Degraded, then Up.
@@ -380,3 +383,21 @@ Safety boundary:
 - The viewer does not create, update, or delete endpoints.
 - The viewer does not create, update, or delete monitoring dependencies.
 - The viewer does not change endpoint monitoring, state evaluation, dependency suppression, alerting, agents, startup-gate behaviour, topology inference, or SNMP behaviour.
+
+### Manual Regression Checklist - Viewer Summary Pane
+
+1. Enable `NetworkDiagramsEnabled`.
+2. Open a saved diagram in the read-only viewer.
+3. Confirm no item is selected by default.
+4. Confirm the right pane shows the diagram live summary, not generic help text.
+5. Confirm total nodes, monitored nodes, diagram-only nodes, and visual links are shown.
+6. Confirm Up, Down, Degraded, Suppressed, and Unknown counts are shown.
+7. Confirm affected endpoint lists appear when endpoints are not healthy.
+8. Click an endpoint in an affected list.
+9. Confirm the viewer centres/zooms to that endpoint.
+10. Confirm the endpoint becomes selected and read-only node details are shown.
+11. Clear selection by panning/clicking empty canvas and confirm the summary returns.
+12. Click a visual link and confirm read-only link details still work.
+13. Wait for live overlay refresh and confirm summary counts update without resetting the selected node or link.
+14. Test in dark mode and light mode.
+15. Confirm no monitoring, dependency, alerting, agent, or Startup Gate behaviour changed.

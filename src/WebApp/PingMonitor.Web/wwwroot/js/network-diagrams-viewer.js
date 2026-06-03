@@ -32,6 +32,8 @@
         nodes: [],
         links: [],
         overlayByNodeId: new Map(),
+        lastOverlayRefreshUtc: null,
+        summaryMessage: '',
         selectedNodeId: null,
         selectedLinkId: null,
         zoom: 1,
@@ -252,6 +254,77 @@
     function formatRtt(value) { return value == null ? '—' : `${Number(value).toFixed(1)} ms`; }
     function formatDate(value) { return value ? new Date(value).toLocaleString() : '—'; }
     function stateLabel(value) { return value || 'Unknown'; }
+    function normalizeSummaryState(value) {
+        const text = String(value || 'Unknown').trim().toLowerCase();
+        if (text === 'up') { return 'Up'; }
+        if (text === 'degraded') { return 'Degraded'; }
+        if (text === 'down') { return 'Down'; }
+        if (text === 'suppressed') { return 'Suppressed'; }
+        return 'Unknown';
+    }
+
+    function getNodeSummaryState(node) {
+        if (node.nodeKind !== 'monitored-endpoint') { return null; }
+        return normalizeSummaryState(state.overlayByNodeId.get(node.id)?.summaryStateLabel);
+    }
+
+    function formatAssignmentSummary(overlay) {
+        const count = Array.isArray(overlay?.assignments) ? overlay.assignments.length : 0;
+        if (count === 0) { return ''; }
+        return `${count} assignment${count === 1 ? '' : 's'}`;
+    }
+
+    function buildEndpointSummaryItem(node, overlay, summaryState) {
+        const label = overlay?.endpointName || node.label;
+        const uptime = overlay?.uptimeDisplay || '—';
+        const assignmentSummary = formatAssignmentSummary(overlay);
+        return `<li><button type="button" class="diagram-summary-endpoint" data-summary-node-id="${escapeHtml(node.id)}"><span class="diagram-summary-endpoint-main"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(summaryState)} • RTT ${escapeHtml(formatRtt(overlay?.lastRttMs))} • 24h ${escapeHtml(uptime)}</span></span>${assignmentSummary ? `<span class="diagram-summary-endpoint-meta">${escapeHtml(assignmentSummary)}</span>` : ''}</button></li>`;
+    }
+
+    function renderAffectedSection(title, entries) {
+        const body = entries.length > 0
+            ? `<ul class="diagram-summary-endpoint-list">${entries.join('')}</ul>`
+            : '<p class="diagram-summary-none">None</p>';
+        return `<section class="diagram-summary-section"><h3>${escapeHtml(title)}</h3>${body}</section>`;
+    }
+
+    function renderSummaryPanel() {
+        if (!noSelectionPanel) { return; }
+        const monitoredNodes = state.nodes.filter(node => node.nodeKind === 'monitored-endpoint');
+        const customNodes = state.nodes.filter(node => node.nodeKind !== 'monitored-endpoint');
+        const stateCounts = { Up: 0, Degraded: 0, Down: 0, Suppressed: 0, Unknown: 0 };
+        const affected = { Down: [], Degraded: [], Suppressed: [], Unknown: [] };
+        const highestRtt = [];
+
+        monitoredNodes.forEach(node => {
+            const overlay = state.overlayByNodeId.get(node.id);
+            const summaryState = getNodeSummaryState(node);
+            stateCounts[summaryState] = (stateCounts[summaryState] || 0) + 1;
+            if (affected[summaryState]) {
+                affected[summaryState].push(buildEndpointSummaryItem(node, overlay, summaryState));
+            }
+            if (overlay?.lastRttMs != null && Number.isFinite(Number(overlay.lastRttMs))) {
+                highestRtt.push({ node, overlay, lastRttMs: Number(overlay.lastRttMs) });
+            }
+        });
+
+        highestRtt.sort((a, b) => b.lastRttMs - a.lastRttMs);
+        const highestRttItems = highestRtt.slice(0, 5).map(item => buildEndpointSummaryItem(item.node, item.overlay, getNodeSummaryState(item.node)));
+        const refreshedAt = state.lastOverlayRefreshUtc ? formatDate(state.lastOverlayRefreshUtc) : 'Pending';
+        const countCards = [
+            ['Total nodes', state.nodes.length],
+            ['Monitored', monitoredNodes.length],
+            ['Diagram-only', customNodes.length],
+            ['Visual links', state.links.length],
+            ['Up', stateCounts.Up],
+            ['Degraded', stateCounts.Degraded],
+            ['Down', stateCounts.Down],
+            ['Suppressed', stateCounts.Suppressed],
+            ['Unknown', stateCounts.Unknown]
+        ].map(([label, value]) => `<div class="diagram-summary-count"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+
+        noSelectionPanel.innerHTML = `<div class="diagram-summary-header"><h3>Diagram live summary</h3><span>Live overlay refresh: ${escapeHtml(refreshedAt)}</span></div><div class="diagram-summary-count-grid">${countCards}</div>${state.summaryMessage ? `<p class="diagram-summary-message" role="status">${escapeHtml(state.summaryMessage)}</p>` : '<p class="diagram-summary-message" data-summary-action-status></p>'}<div class="diagram-summary-sections">${renderAffectedSection('Down endpoints', affected.Down)}${renderAffectedSection('Degraded endpoints', affected.Degraded)}${renderAffectedSection('Suppressed endpoints', affected.Suppressed)}${renderAffectedSection('Unknown endpoints', affected.Unknown)}${highestRttItems.length > 0 ? renderAffectedSection('Highest RTT', highestRttItems) : ''}</div><p class="toolbox-help">Viewer overlays existing monitoring status only. Visual links remain documentation-only.</p>`;
+    }
 
     function applyOverlay() {
         state.nodes.forEach(node => {
@@ -267,6 +340,43 @@
         updateDetails();
     }
 
+    function clampPanForView() {
+        const rect = canvas.getBoundingClientRect();
+        const margin = 120;
+        const scaledWidth = state.virtualCanvasWidth * state.zoom;
+        const scaledHeight = state.virtualCanvasHeight * state.zoom;
+        if (scaledWidth <= rect.width) {
+            state.panX = (rect.width - scaledWidth) / 2;
+        } else {
+            state.panX = Math.min(margin, Math.max(rect.width - scaledWidth - margin, state.panX));
+        }
+        if (scaledHeight <= rect.height) {
+            state.panY = (rect.height - scaledHeight) / 2;
+        } else {
+            state.panY = Math.min(margin, Math.max(rect.height - scaledHeight - margin, state.panY));
+        }
+    }
+
+    function centreOnNode(nodeId, preferredZoom = 1) {
+        const node = findNodeById(nodeId);
+        if (!node) {
+            state.summaryMessage = 'That endpoint is no longer available on this diagram.';
+            renderSummaryPanel();
+            return false;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const center = getNodeCenter(node);
+        state.zoom = Math.min(Math.max(Math.max(preferredZoom, 0.75), minZoom), maxZoom);
+        state.panX = rect.width / 2 - center.x * state.zoom;
+        state.panY = rect.height / 2 - center.y * state.zoom;
+        clampPanForView();
+        updateCanvasSize();
+        selectNode(node.id);
+        node.element.focus({ preventScroll: true });
+        state.summaryMessage = '';
+        return true;
+    }
+
     async function refreshLiveData() {
         if (!liveDataUrl) { return; }
         try {
@@ -274,6 +384,7 @@
             if (!response.ok) { throw new Error(`HTTP ${response.status}`); }
             const data = await response.json();
             state.overlayByNodeId = new Map((data.nodes || []).map(node => [node.nodeId, node]));
+            state.lastOverlayRefreshUtc = data.refreshedAtUtc || new Date().toISOString();
             applyOverlay();
             if (refreshStatus) {
                 refreshStatus.dataset.error = 'false';
@@ -300,6 +411,7 @@
         const selectedNode = state.selectedNodeId ? findNodeById(state.selectedNodeId) : null;
         const selectedLink = state.selectedLinkId ? findLinkById(state.selectedLinkId) : null;
         noSelectionPanel.hidden = Boolean(selectedNode || selectedLink);
+        if (!selectedNode && !selectedLink) { renderSummaryPanel(); }
         nodeDetail.hidden = !selectedNode;
         linkDetail.hidden = !selectedLink;
         if (selectedNode) {
@@ -375,6 +487,7 @@
         state.links = (diagram.links || []).map(link => ({ id: link.linkId, sourceNodeId: link.sourceNodeId, targetNodeId: link.targetNodeId, label: link.label || '', sourcePort: link.sourcePortLabel || '', targetPort: link.targetPortLabel || '', notes: link.notes || '', mediaType: normalizeMediaType(link.mediaType, link.linkType), linkType: normalizeLinkType(link.linkType), linkSpeedValue: link.linkSpeedValue, linkSpeedUnit: link.linkSpeedUnit, vlans: normalizeVlans(link.vlans) }));
         setEmptyState();
         updateCanvasSize();
+        updateDetails();
         await refreshLiveData();
         refreshTimer = window.setInterval(refreshLiveData, refreshIntervalMs);
     }
@@ -384,6 +497,12 @@
     viewer.querySelector('[data-reset-view]')?.addEventListener('click', resetView);
     viewer.querySelector('[data-fit-content]')?.addEventListener('click', fitContent);
     exportPdfButton?.addEventListener('click', () => { const base = exportPdfButton.dataset.exportPdfUrl; if (base) { window.location.href = `${base}?paper=${encodeURIComponent(exportPaperSelect?.value || 'A4')}`; } });
+    noSelectionPanel?.addEventListener('click', event => {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const button = target?.closest('[data-summary-node-id]');
+        if (!button) { return; }
+        centreOnNode(button.dataset.summaryNodeId, 1);
+    });
     canvas.addEventListener('pointerdown', beginPan);
     canvas.addEventListener('pointermove', movePan);
     canvas.addEventListener('pointerup', endPan);

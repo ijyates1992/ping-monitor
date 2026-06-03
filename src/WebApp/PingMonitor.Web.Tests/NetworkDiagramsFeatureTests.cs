@@ -547,6 +547,39 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("State: ${stateLabel(stateValue)}", script);
         Assert.Contains("24h:", script);
         Assert.Contains("RTT:", script);
+        Assert.Contains("data-summary-panel", viewMarkup);
+        Assert.Contains("renderSummaryPanel", script);
+        Assert.Contains("Diagram live summary", script);
+        Assert.Contains("Total nodes", script);
+        Assert.Contains("Monitored", script);
+        Assert.Contains("Diagram-only", script);
+        Assert.Contains("Visual links", script);
+        Assert.Contains("['Up', stateCounts.Up]", script);
+        Assert.Contains("['Degraded', stateCounts.Degraded]", script);
+        Assert.Contains("['Down', stateCounts.Down]", script);
+        Assert.Contains("['Suppressed', stateCounts.Suppressed]", script);
+        Assert.Contains("['Unknown', stateCounts.Unknown]", script);
+        Assert.Contains("Down endpoints", script);
+        Assert.Contains("Degraded endpoints", script);
+        Assert.Contains("Suppressed endpoints", script);
+        Assert.Contains("Unknown endpoints", script);
+        Assert.Contains("Highest RTT", script);
+        Assert.Contains("centreOnNode", script);
+        Assert.Contains("data-summary-node-id", script);
+        Assert.Contains("selectNode(node.id)", script);
+        Assert.Contains("Viewer overlays existing monitoring status only. Visual links remain documentation-only.", script);
+    }
+
+    [Fact]
+    public void NetworkDiagramViewer_DocumentsSummaryPaneRegressionChecklist()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var documentation = File.ReadAllText(Path.Combine(repoRoot, "docs", "network-diagrams-v0.1.1.md"));
+
+        Assert.Contains("diagram-wide live summary", documentation);
+        Assert.Contains("server-calculated monitoring state labels", documentation);
+        Assert.Contains("centres/zooms", documentation);
+        Assert.Contains("Manual Regression Checklist - Viewer Summary Pane", documentation);
     }
 
     [Fact]
