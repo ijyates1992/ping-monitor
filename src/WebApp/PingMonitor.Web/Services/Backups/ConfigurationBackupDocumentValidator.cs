@@ -1,3 +1,6 @@
+using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.NetworkDiagrams;
+
 namespace PingMonitor.Web.Services.Backups;
 
 public interface IConfigurationBackupDocumentValidator
@@ -43,7 +46,8 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
             || document.Sections.SecuritySettings is not null
             || document.Sections.NotificationSettings is not null
             || document.Sections.UserNotificationSettings is not null
-            || document.Sections.Identity is not null;
+            || document.Sections.Identity is not null
+            || document.Sections.NetworkDiagrams is not null;
 
         if (!hasAtLeastOneSection)
         {
@@ -129,5 +133,109 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
                 }
             }
         }
+
+        if (document.Sections.NetworkDiagrams is not null)
+        {
+            ValidateNetworkDiagrams(document.Sections.NetworkDiagrams);
+        }
+
     }
+
+
+    private static void ValidateNetworkDiagrams(BackupNetworkDiagramSection section)
+    {
+        foreach (var diagram in section.Diagrams)
+        {
+            if (string.IsNullOrWhiteSpace(diagram.DiagramId) || string.IsNullOrWhiteSpace(diagram.Name))
+            {
+                throw new InvalidOperationException("Network diagrams section contains an invalid diagram record (id/name missing).");
+            }
+
+            ValidateFinite(diagram.CanvasWidth, "diagram canvas width");
+            ValidateFinite(diagram.CanvasHeight, "diagram canvas height");
+            ValidateFinite(diagram.ViewportPanX, "diagram viewport pan X");
+            ValidateFinite(diagram.ViewportPanY, "diagram viewport pan Y");
+            ValidateFinite(diagram.ViewportZoom, "diagram viewport zoom");
+
+            var nodeIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var node in diagram.Nodes)
+            {
+                if (string.IsNullOrWhiteSpace(node.NodeId) || string.IsNullOrWhiteSpace(node.DisplayLabel) || string.IsNullOrWhiteSpace(node.IconKey))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains an invalid node record.");
+                }
+
+                if (!nodeIds.Add(node.NodeId))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains duplicate node id '{node.NodeId}'.");
+                }
+
+                if (!Enum.TryParse<NetworkDiagramNodeType>(node.NodeType, ignoreCase: true, out var nodeType) || !Enum.IsDefined(nodeType))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains unsupported node type '{node.NodeType}'.");
+                }
+
+                ValidateFinite(node.X, "node X");
+                ValidateFinite(node.Y, "node Y");
+                ValidateFinite(node.Width, "node width");
+                ValidateFinite(node.Height, "node height");
+            }
+
+            var linkIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var link in diagram.Links)
+            {
+                if (string.IsNullOrWhiteSpace(link.LinkId) || string.IsNullOrWhiteSpace(link.SourceNodeId) || string.IsNullOrWhiteSpace(link.TargetNodeId))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains an invalid link record.");
+                }
+
+                if (!linkIds.Add(link.LinkId))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains duplicate link id '{link.LinkId}'.");
+                }
+
+                if (string.Equals(link.SourceNodeId, link.TargetNodeId, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains an invalid self-link '{link.LinkId}'.");
+                }
+
+                if (!NetworkDiagramLinkMediaTypes.IsAllowed(link.MediaType))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains unsupported media type '{link.MediaType}'.");
+                }
+
+                if (!NetworkDiagramMediaSubtypes.IsAllowed(link.MediaSubtype ?? link.FibreSubtype, link.MediaType))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains unsupported media subtype on link '{link.LinkId}'.");
+                }
+
+                if (!NetworkDiagramLinkTypes.IsAllowed(link.LinkType))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains unsupported link type '{link.LinkType}'.");
+                }
+
+                if (link.LinkSpeedValue is <= 0 or > 1000000 || !NetworkDiagramLinkSpeedUnits.IsAllowed(link.LinkSpeedUnit))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains invalid link speed metadata on link '{link.LinkId}'.");
+                }
+
+                foreach (var vlan in link.Vlans)
+                {
+                    if (vlan.VlanId is < 1 or > 4094 || !NetworkDiagramVlanModes.IsAllowed(vlan.Mode))
+                    {
+                        throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains invalid VLAN metadata on link '{link.LinkId}'.");
+                    }
+                }
+            }
+        }
+    }
+
+    private static void ValidateFinite(double value, string fieldName)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+        {
+            throw new InvalidOperationException($"Network diagrams section contains invalid {fieldName}.");
+        }
+    }
+
 }

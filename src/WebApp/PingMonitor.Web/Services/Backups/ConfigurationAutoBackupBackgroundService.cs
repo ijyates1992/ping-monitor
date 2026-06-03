@@ -146,7 +146,8 @@ public sealed class ConfigurationAutoBackupBackgroundService : BackgroundService
             ConfigurationBackupSections.Assignments,
             ConfigurationBackupSections.SecuritySettings,
             ConfigurationBackupSections.NotificationSettings,
-            ConfigurationBackupSections.UserNotificationSettings
+            ConfigurationBackupSections.UserNotificationSettings,
+            ConfigurationBackupSections.NetworkDiagrams
         };
 
         if (_options.AutoBackup.IncludeIdentityByDefault)

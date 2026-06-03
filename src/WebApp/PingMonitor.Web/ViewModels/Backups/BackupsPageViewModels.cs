@@ -39,6 +39,9 @@ public sealed class CreateBackupPageForm
 
     [Display(Name = "Include identity")]
     public bool IncludeIdentity { get; set; }
+
+    [Display(Name = "Include network diagrams")]
+    public bool IncludeNetworkDiagrams { get; set; } = true;
 }
 
 public sealed class BackupRowViewModel
@@ -132,6 +135,9 @@ public sealed class RestoreApplyForm
     [Display(Name = "Restore identity")]
     public bool IncludeIdentity { get; set; }
 
+    [Display(Name = "Restore network diagrams")]
+    public bool IncludeNetworkDiagrams { get; set; } = true;
+
     [Display(Name = "Restore mode")]
     public string RestoreMode { get; set; } = ConfigurationRestoreModes.Merge;
 
@@ -149,6 +155,7 @@ public sealed class BackupRestorePreviewViewModel
     public int FormatVersion { get; init; }
     public IReadOnlyList<string> IncludedSections { get; init; } = [];
     public ConfigurationBackupSectionCountViewModel Counts { get; init; } = new();
+    public IReadOnlyList<string> Warnings { get; init; } = [];
 }
 
 public sealed class ConfigurationBackupSectionCountViewModel
@@ -165,6 +172,10 @@ public sealed class ConfigurationBackupSectionCountViewModel
     public int IdentityUsers { get; init; }
     public int IdentityRoles { get; init; }
     public int IdentityUserRoles { get; init; }
+    public int NetworkDiagrams { get; init; }
+    public int NetworkDiagramNodes { get; init; }
+    public int NetworkDiagramLinks { get; init; }
+    public int NetworkDiagramLinkVlans { get; init; }
 }
 
 public sealed class BackupRestoreSectionResultViewModel
