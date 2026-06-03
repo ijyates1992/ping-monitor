@@ -118,6 +118,7 @@ Example:
   - `notification_settings`
   - `user_notification_settings`
   - `identity` (optional and explicit, sensitive)
+- Network Diagrams are not included in configuration backup/restore yet. This is a release-blocking known limitation for the Network Diagrams preview and is tracked in issue #528.
 - Restore supports two modes:
   - `merge`
   - `replace`

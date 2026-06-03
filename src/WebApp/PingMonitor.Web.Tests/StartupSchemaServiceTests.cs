@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Reflection;
+using System.Text.Json.Nodes;
 using PingMonitor.Web.Services.StartupGate;
 using Xunit;
 
@@ -35,6 +36,38 @@ public sealed class StartupSchemaServiceTests
         var source = File.ReadAllText(sourcePath);
 
         Assert.DoesNotContain("GetMissingColumnsAsync((MySqlConnection)connection", source);
+    }
+
+
+    [Fact]
+    public void NetworkDiagramVlanSchema_IsDeclaredInStartupGateMetadata()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var sourcePath = Path.Combine(
+            repoRoot,
+            "src",
+            "WebApp",
+            "PingMonitor.Web",
+            "Services",
+            "StartupGate",
+            "StartupSchemaService.cs");
+        var appSettingsPath = Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "appsettings.json");
+        var developmentSettingsPath = Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "appsettings.Development.json");
+
+        var source = File.ReadAllText(sourcePath);
+        var appRequiredSchemaVersion = ReadRequiredSchemaVersion(appSettingsPath);
+        var developmentRequiredSchemaVersion = ReadRequiredSchemaVersion(developmentSettingsPath);
+
+        Assert.Contains("\"NetworkDiagramLinkVlans\"", source);
+        Assert.Equal(18, appRequiredSchemaVersion);
+        Assert.Equal(appRequiredSchemaVersion, developmentRequiredSchemaVersion);
+    }
+
+    private static int ReadRequiredSchemaVersion(string path)
+    {
+        var json = JsonNode.Parse(File.ReadAllText(path)) ?? throw new InvalidOperationException($"Could not parse {path}.");
+        return json["StartupGate"]?["RequiredSchemaVersion"]?.GetValue<int>()
+            ?? throw new InvalidOperationException($"StartupGate.RequiredSchemaVersion missing from {path}.");
     }
 
     private static string FindRepositoryRoot()

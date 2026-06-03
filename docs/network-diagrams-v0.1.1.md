@@ -209,7 +209,7 @@ Schema/release notes:
 Backup/restore follow-up:
 
 - Network diagrams are configuration, not operational monitoring history.
-- Configuration backup/restore inclusion for `NetworkDiagrams`, `NetworkDiagramNodes`, and `NetworkDiagramLinks` remains a required follow-up before publishing V0.1.1 if it is not completed in the release branch.
+- Configuration backup/restore inclusion for `NetworkDiagrams`, `NetworkDiagramNodes`, `NetworkDiagramLinks`, and `NetworkDiagramLinkVlans` remains a release-blocking follow-up before publishing the Network Diagrams preview if it is not completed in the release branch. This is tracked in issue #528.
 
 ## A-series canvas sizing and PDF export slice
 
@@ -372,7 +372,7 @@ Schema note:
 
 Backup/restore follow-up:
 
-- Configuration backup/restore inclusion for network diagrams remains a required follow-up before publishing V0.1.1 if it is not completed in the release branch; that follow-up must include `NetworkDiagramLinkVlans` alongside `NetworkDiagrams`, `NetworkDiagramNodes`, and `NetworkDiagramLinks`.
+- Configuration backup/restore inclusion for network diagrams remains a release-blocking follow-up before publishing the Network Diagrams preview if it is not completed in the release branch; that follow-up must include `NetworkDiagramLinkVlans` alongside `NetworkDiagrams`, `NetworkDiagramNodes`, and `NetworkDiagramLinks`. This is tracked in issue #528.
 
 ## Read-only viewer and live endpoint overlay slice
 
