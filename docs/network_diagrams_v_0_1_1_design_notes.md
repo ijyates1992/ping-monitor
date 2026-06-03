@@ -489,8 +489,9 @@ Implementation boundaries:
 - Editing tools, mutable inputs, save actions, delete actions, draw-link mode, and add-node controls are not rendered in viewer mode.
 - Live data is provided by a lightweight JSON endpoint that reuses current assignment state and 24-hour assignment metrics.
 - The live endpoint overlay shows server-calculated state, uptime, and RTT data only; it does not evaluate monitoring state itself.
-- When no node or link is selected, the right-hand details pane shows a diagram-wide live summary with total nodes, monitored nodes, diagram-only nodes, visual links, overlay refresh time, and Up/Degraded/Down/Suppressed/Unknown counts based on the same server-provided overlay state used by monitored endpoint nodes.
+- When no node or link is selected, the right-hand details pane shows a diagram-wide live summary with total nodes, monitored nodes, diagram-only nodes, visual links, overlay refresh time, and Up/Degraded/Down/Suppressed/Unknown counts based on the same server-provided overlay state used by monitored endpoint nodes. The saved-diagram counts render as soon as the static diagram loads; live counts update after the first overlay response and on each later polling refresh.
 - The no-selection summary includes compact affected endpoint lists for Down, Degraded, Suppressed, and Unknown states, plus a highest-RTT list when fetched RTT values are available. Selecting an endpoint from these lists centres and zooms the read-only viewer to the existing diagram node and opens that node's read-only details.
+- Summary rendering must not leave the right-hand panel in an indefinite loading state. If live overlay data is missing, filtered, stale, or temporarily unavailable, the viewer keeps the saved diagram visible and shows an empty, unknown, or stale summary message instead of calculating monitoring state locally.
 - Multi-assignment endpoint nodes use the UI-only diagram urgency order Down, Unknown, Suppressed, Degraded, Up for the node badge, diagram summary counts, and affected lists while preserving per-assignment state details in the read-only details panel.
 - Non-admin access is filtered using existing endpoint visibility rules; hidden monitored endpoint nodes and connected links are omitted from non-admin static diagram JSON and live overlay JSON.
 - Diagram links remain visual documentation and still do not create monitoring dependencies or alter suppression.
@@ -508,10 +509,11 @@ Manual regression checklist for this slice:
 9. Confirm monitored endpoint nodes show state, 24-hour uptime, and last RTT.
 10. Confirm custom diagram nodes show diagram-only presentation and do not show fake live endpoint data.
 11. Wait for the polling interval and confirm live data refresh timestamp and summary counts update without reloading the page.
-12. Click a monitored node and confirm the details panel is read-only and includes endpoint/assignment status data.
-13. Click a visual link and confirm the details panel is read-only and states that the link is visual documentation only.
-14. Test the viewer details pane in dark mode and light mode.
-15. Confirm admin users can navigate to Edit from the viewer.
-16. Confirm non-admin users cannot access the edit/save/delete/export routes and do not receive endpoint details they cannot access.
-17. Disable `NetworkDiagramsEnabled` and confirm viewer and live-data API access are blocked.
-18. Confirm no endpoint, dependency, state-evaluation, alert, agent, or startup-gate behaviour changed.
+12. Temporarily block or break the live overlay fetch if practical and confirm the summary shows a stale/error message rather than returning to `Loading diagram summary`.
+13. Click a monitored node and confirm the details panel is read-only and includes endpoint/assignment status data.
+14. Click a visual link and confirm the details panel is read-only and states that the link is visual documentation only.
+15. Test the viewer details pane in dark mode and light mode.
+16. Confirm admin users can navigate to Edit from the viewer.
+17. Confirm non-admin users cannot access the edit/save/delete/export routes and do not receive endpoint details they cannot access.
+18. Disable `NetworkDiagramsEnabled` and confirm viewer and live-data API access are blocked.
+19. Confirm no endpoint, dependency, state-evaluation, alert, agent, or startup-gate behaviour changed.

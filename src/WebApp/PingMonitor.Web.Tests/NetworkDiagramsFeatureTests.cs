@@ -567,6 +567,14 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Visual links", script);
         Assert.Contains("Live overlay refresh", script);
         Assert.Contains("Up: 0, Degraded: 0, Down: 0, Suppressed: 0, Unknown: 0", script);
+        Assert.Contains("Live overlay data is pending. Saved diagram summary is available.", script);
+        Assert.Contains("Live overlay data is currently unavailable. Showing saved diagram only.", script);
+        Assert.Contains("No visible live overlay data is available for monitored endpoint nodes.", script);
+        Assert.Contains("No affected endpoints.", script);
+        Assert.Contains("Array.isArray(data?.nodes) ? data.nodes : []", script);
+        Assert.Contains("assignments: Array.isArray(node.assignments) ? node.assignments : []", script);
+        Assert.Contains("state.liveOverlayAttempted = true", script);
+        Assert.Contains("state.liveOverlayStale = true", script);
         Assert.Contains("Down endpoints", script);
         Assert.Contains("Degraded endpoints", script);
         Assert.Contains("Suppressed endpoints", script);

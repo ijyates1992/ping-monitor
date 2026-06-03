@@ -366,7 +366,8 @@ Live endpoint overlay behaviour:
 - Endpoint state remains assignment-scoped. When a diagram node references an endpoint with multiple assignments, the viewer uses a UI-only urgency summary: Down, Unknown, Suppressed, Degraded, then Up.
 - The UI-only summary does not redefine the monitoring state machine and is not fed back into monitoring, alerting, suppression, agents, endpoint configuration, or dependency configuration.
 - The live overlay endpoint batches assignment/current-state lookup for all monitored nodes on the diagram and uses existing 24-hour assignment metrics snapshots for uptime and RTT fields instead of scanning raw check results on every refresh.
-- Live data refresh uses lightweight polling every 20 seconds. If refresh fails, the existing diagram stays visible and the viewer marks the live overlay as stale.
+- Live data refresh uses lightweight polling every 20 seconds. If refresh fails, the existing diagram stays visible and the viewer marks the live overlay and summary as stale instead of leaving the details pane in a loading state.
+- With no node or link selected, the right-hand details pane shows the saved diagram totals immediately after static diagram load, then refreshes diagram-wide counts, affected endpoint sections, and highest-RTT data from the server-provided live overlay. The viewer remains read-only and never derives endpoint state independently.
 
 Access and feature-gate behaviour:
 

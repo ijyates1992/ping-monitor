@@ -40,6 +40,8 @@
         virtualCanvasWidth: 4000,
         virtualCanvasHeight: 2828,
         liveOverlayRefreshedAtUtc: null,
+        liveOverlayAttempted: false,
+        liveOverlayStale: false,
         summaryMessage: ''
     };
     let panState = null;
@@ -251,14 +253,25 @@
     }
 
     function setEmptyState() { emptyState.hidden = state.nodes.length > 0; }
-    function formatRtt(value) { return value == null ? '—' : `${Number(value).toFixed(1)} ms`; }
-    function formatDate(value) { return value ? new Date(value).toLocaleString() : '—'; }
+    function formatRtt(value) {
+        if (value == null || value === '') { return '—'; }
+        const numericValue = Number(value);
+        return Number.isFinite(numericValue) ? `${numericValue.toFixed(1)} ms` : '—';
+    }
+    function formatDate(value) {
+        if (!value) { return '—'; }
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+    }
     function stateLabel(value) { return value || 'Unknown'; }
     function normalizeSummaryState(value) {
-        const label = stateLabel(value);
-        return Object.prototype.hasOwnProperty.call(statePriority, label) ? label : 'Unknown';
+        const requested = String(stateLabel(value)).trim().toLowerCase();
+        return Object.keys(statePriority).find(key => key.toLowerCase() === requested) || 'Unknown';
     }
-    function formatRefreshTime() { return state.liveOverlayRefreshedAtUtc ? formatDate(state.liveOverlayRefreshedAtUtc) : 'Pending'; }
+    function formatRefreshTime() {
+        if (state.liveOverlayRefreshedAtUtc) { return state.liveOverlayStale ? `${formatDate(state.liveOverlayRefreshedAtUtc)} (stale)` : formatDate(state.liveOverlayRefreshedAtUtc); }
+        return state.liveOverlayAttempted ? 'Unavailable' : 'Pending';
+    }
 
     function getMonitoredNodes() { return state.nodes.filter(node => node.nodeKind === 'monitored-endpoint'); }
     function getOverlayForNode(node) { return state.overlayByNodeId.get(node.id); }
@@ -273,29 +286,56 @@
     }
 
     function buildAffectedSection(title, nodes) {
-        if (nodes.length === 0) {
+        const safeNodes = Array.isArray(nodes) ? nodes : [];
+        if (safeNodes.length === 0) {
             return `<section class="diagram-summary-section"><h3>${escapeHtml(title)}</h3><p class="diagram-summary-none">None</p></section>`;
         }
 
-        return `<section class="diagram-summary-section"><h3>${escapeHtml(title)}</h3><ul class="diagram-summary-endpoint-list">${nodes.map(buildSummaryEndpointItem).join('')}</ul></section>`;
+        return `<section class="diagram-summary-section"><h3>${escapeHtml(title)}</h3><ul class="diagram-summary-endpoint-list">${safeNodes.map(buildSummaryEndpointItem).join('')}</ul></section>`;
+    }
+
+    function buildSummaryMessage(monitoredNodes, affectedNodes) {
+        if (state.summaryMessage) { return state.summaryMessage; }
+        if (state.liveOverlayStale) { return state.overlayByNodeId.size > 0 ? 'Live overlay data is currently unavailable. Showing last known live overlay.' : 'Live overlay data is currently unavailable. Showing saved diagram only.'; }
+        if (monitoredNodes.length === 0) { return 'This diagram has no monitored endpoint nodes. Showing saved diagram only.'; }
+        if (!state.liveOverlayAttempted) { return 'Live overlay data is pending. Saved diagram summary is available.'; }
+        if (state.overlayByNodeId.size === 0) { return 'No visible live overlay data is available for monitored endpoint nodes.'; }
+        if (affectedNodes.length === 0) { return 'No affected endpoints.'; }
+        return '';
     }
 
     function buildDiagramSummaryHtml() {
-        const monitoredNodes = getMonitoredNodes();
-        const customNodeCount = state.nodes.length - monitoredNodes.length;
-        const counts = { Up: 0, Degraded: 0, Down: 0, Suppressed: 0, Unknown: 0 };
-        monitoredNodes.forEach(node => { counts[getSummaryStateForNode(node)] += 1; });
+        try {
+            const monitoredNodes = getMonitoredNodes();
+            const customNodeCount = Math.max(state.nodes.length - monitoredNodes.length, 0);
+            const counts = { Up: 0, Degraded: 0, Down: 0, Suppressed: 0, Unknown: 0 };
+            monitoredNodes.forEach(node => {
+                const summaryState = getSummaryStateForNode(node);
+                counts[summaryState] = (counts[summaryState] || 0) + 1;
+            });
 
-        const nodesByState = stateName => monitoredNodes
-            .filter(node => getSummaryStateForNode(node) === stateName)
-            .sort((a, b) => String(getOverlayForNode(a)?.endpointName || a.label).localeCompare(String(getOverlayForNode(b)?.endpointName || b.label)));
+            const nodesByState = stateName => monitoredNodes
+                .filter(node => getSummaryStateForNode(node) === stateName)
+                .sort((a, b) => String(getOverlayForNode(a)?.endpointName || a.label).localeCompare(String(getOverlayForNode(b)?.endpointName || b.label)));
 
-        const highestRttNodes = monitoredNodes
-            .filter(node => getOverlayForNode(node)?.lastRttMs != null)
-            .sort((a, b) => Number(getOverlayForNode(b).lastRttMs) - Number(getOverlayForNode(a).lastRttMs))
-            .slice(0, 5);
+            const downNodes = nodesByState('Down');
+            const degradedNodes = nodesByState('Degraded');
+            const suppressedNodes = nodesByState('Suppressed');
+            const unknownNodes = nodesByState('Unknown');
+            const affectedNodes = [...downNodes, ...degradedNodes, ...suppressedNodes, ...unknownNodes];
+            const highestRttNodes = monitoredNodes
+                .filter(node => {
+                    const rtt = getOverlayForNode(node)?.lastRttMs;
+                    return rtt != null && rtt !== '' && Number.isFinite(Number(rtt));
+                })
+                .sort((a, b) => Number(getOverlayForNode(b).lastRttMs) - Number(getOverlayForNode(a).lastRttMs))
+                .slice(0, 5);
+            const message = buildSummaryMessage(monitoredNodes, affectedNodes);
 
-        return `<div class="diagram-summary-panel"><p class="toolbox-help">Viewer overlays existing monitoring status only. Visual links remain documentation-only.</p>${state.summaryMessage ? `<p class="diagram-summary-message" role="status">${escapeHtml(state.summaryMessage)}</p>` : ''}<div class="diagram-summary-stat-grid"><div><span>Total nodes</span><strong>${state.nodes.length}</strong></div><div><span>Monitored</span><strong>${monitoredNodes.length}</strong></div><div><span>Diagram-only</span><strong>${customNodeCount}</strong></div><div><span>Visual links</span><strong>${state.links.length}</strong></div></div><dl class="diagram-property-summary diagram-summary-refresh"><div><dt>Live overlay refresh</dt><dd>${escapeHtml(formatRefreshTime())}</dd></div></dl><div class="diagram-summary-state-grid">${Object.keys(counts).map(key => `<div data-summary-state="${key.toLowerCase()}"><span>${escapeHtml(key)}</span><strong>${counts[key]}</strong></div>`).join('')}</div>${buildAffectedSection('Down endpoints', nodesByState('Down'))}${buildAffectedSection('Degraded endpoints', nodesByState('Degraded'))}${buildAffectedSection('Suppressed endpoints', nodesByState('Suppressed'))}${buildAffectedSection('Unknown endpoints', nodesByState('Unknown'))}${highestRttNodes.length > 0 ? `<section class="diagram-summary-section"><h3>Highest RTT</h3><ul class="diagram-summary-endpoint-list">${highestRttNodes.map(buildSummaryEndpointItem).join('')}</ul></section>` : ''}</div>`;
+            return `<div class="diagram-summary-panel"><p class="toolbox-help">Viewer overlays existing monitoring status only. Visual links remain documentation-only.</p>${message ? `<p class="diagram-summary-message" role="status">${escapeHtml(message)}</p>` : ''}<div class="diagram-summary-stat-grid"><div><span>Total nodes</span><strong>${state.nodes.length}</strong></div><div><span>Monitored</span><strong>${monitoredNodes.length}</strong></div><div><span>Diagram-only</span><strong>${customNodeCount}</strong></div><div><span>Visual links</span><strong>${state.links.length}</strong></div></div><dl class="diagram-property-summary diagram-summary-refresh"><div><dt>Live overlay refresh</dt><dd>${escapeHtml(formatRefreshTime())}</dd></div></dl><div class="diagram-summary-state-grid">${Object.keys(counts).map(key => `<div data-summary-state="${key.toLowerCase()}"><span>${escapeHtml(key)}</span><strong>${counts[key]}</strong></div>`).join('')}</div>${buildAffectedSection('Down endpoints', downNodes)}${buildAffectedSection('Degraded endpoints', degradedNodes)}${buildAffectedSection('Suppressed endpoints', suppressedNodes)}${buildAffectedSection('Unknown endpoints', unknownNodes)}${highestRttNodes.length > 0 ? `<section class="diagram-summary-section"><h3>Highest RTT</h3><ul class="diagram-summary-endpoint-list">${highestRttNodes.map(buildSummaryEndpointItem).join('')}</ul></section>` : ''}</div>`;
+        } catch (error) {
+            return '<div class="diagram-summary-panel"><p class="diagram-summary-message" role="alert">Diagram summary is unavailable. Showing saved diagram only.</p><p class="toolbox-help">Viewer overlays existing monitoring status only. Visual links remain documentation-only.</p></div>';
+        }
     }
 
     function applyOverlay() {
@@ -303,7 +343,7 @@
             if (node.nodeKind !== 'monitored-endpoint') { return; }
             const overlay = state.overlayByNodeId.get(node.id);
             const stateValue = overlay?.summaryStateLabel || 'Unknown';
-            node.element.dataset.liveState = stateValue.toLowerCase();
+            node.element.dataset.liveState = String(stateValue).toLowerCase();
             const stateElement = node.element.querySelector('[data-live-state]');
             const metricsElement = node.element.querySelector('[data-live-metrics]');
             if (stateElement) { stateElement.textContent = `State: ${stateLabel(stateValue)}`; }
@@ -313,19 +353,31 @@
     }
 
     async function refreshLiveData() {
-        if (!liveDataUrl) { return; }
+        if (!liveDataUrl) {
+            state.liveOverlayAttempted = true;
+            state.liveOverlayStale = true;
+            applyOverlay();
+            return;
+        }
         try {
             const response = await fetch(liveDataUrl, { headers: { Accept: 'application/json' } });
             if (!response.ok) { throw new Error(`HTTP ${response.status}`); }
             const data = await response.json();
-            state.overlayByNodeId = new Map((data.nodes || []).map(node => [node.nodeId, node]));
-            state.liveOverlayRefreshedAtUtc = data.refreshedAtUtc || new Date().toISOString();
+            const overlayNodes = Array.isArray(data?.nodes) ? data.nodes : [];
+            state.overlayByNodeId = new Map(overlayNodes.filter(node => node?.nodeId).map(node => [node.nodeId, { ...node, assignments: Array.isArray(node.assignments) ? node.assignments : [] }]));
+            state.liveOverlayRefreshedAtUtc = data?.refreshedAtUtc || new Date().toISOString();
+            state.liveOverlayAttempted = true;
+            state.liveOverlayStale = false;
+            state.summaryMessage = '';
             applyOverlay();
             if (refreshStatus) {
                 refreshStatus.dataset.error = 'false';
-                refreshStatus.textContent = `Live overlay refreshed ${new Date(data.refreshedAtUtc || Date.now()).toLocaleTimeString()} • polling every 20s`;
+                refreshStatus.textContent = `Live overlay refreshed ${new Date(data?.refreshedAtUtc || Date.now()).toLocaleTimeString()} • polling every 20s`;
             }
         } catch (error) {
+            state.liveOverlayAttempted = true;
+            state.liveOverlayStale = true;
+            applyOverlay();
             if (refreshStatus) {
                 refreshStatus.dataset.error = 'true';
                 refreshStatus.textContent = 'Live overlay stale; refresh failed.';
