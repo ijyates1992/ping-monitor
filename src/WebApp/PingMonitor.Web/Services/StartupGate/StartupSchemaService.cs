@@ -47,7 +47,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "TelegramAccounts",
         "NetworkDiagrams",
         "NetworkDiagramNodes",
-        "NetworkDiagramLinks"
+        "NetworkDiagramLinks",
+        "NetworkDiagramLinkVlans"
     ];
 
     private static readonly string[] RequiredNetworkDiagramColumns =
