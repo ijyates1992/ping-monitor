@@ -550,6 +550,37 @@ public sealed class NetworkDiagramsFeatureTests
     }
 
     [Fact]
+    public void NetworkDiagramViewer_RendersNoSelectionSummaryAndClickToCentreHooks()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var viewMarkup = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Views", "NetworkDiagrams", "View.cshtml"));
+        var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-viewer.js"));
+        var styles = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "css", "network-diagrams.css"));
+
+        Assert.Contains("data-no-selection-panel", viewMarkup);
+        Assert.Contains("Loading diagram summary", viewMarkup);
+        Assert.Contains("Viewer overlays existing monitoring status only. Visual links remain documentation-only.", viewMarkup);
+        Assert.Contains("buildDiagramSummaryHtml", script);
+        Assert.Contains("Total nodes", script);
+        Assert.Contains("Monitored", script);
+        Assert.Contains("Diagram-only", script);
+        Assert.Contains("Visual links", script);
+        Assert.Contains("Live overlay refresh", script);
+        Assert.Contains("Up: 0, Degraded: 0, Down: 0, Suppressed: 0, Unknown: 0", script);
+        Assert.Contains("Down endpoints", script);
+        Assert.Contains("Degraded endpoints", script);
+        Assert.Contains("Suppressed endpoints", script);
+        Assert.Contains("Unknown endpoints", script);
+        Assert.Contains("Highest RTT", script);
+        Assert.Contains("data-summary-node-id", script);
+        Assert.Contains("function centreOnNode(nodeId, preferredZoom = 1)", script);
+        Assert.Contains("selectNode(node.id)", script);
+        Assert.Contains("clampPan();", script);
+        Assert.Contains("diagram-summary-stat-grid", styles);
+        Assert.Contains("diagram-summary-endpoint:focus-visible", styles);
+    }
+
+    [Fact]
     public async Task NetworkDiagramsViewer_ReturnsViewer_WhenFeatureEnabled()
     {
         var controller = new NetworkDiagramsController(

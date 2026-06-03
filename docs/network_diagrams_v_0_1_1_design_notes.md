@@ -489,7 +489,9 @@ Implementation boundaries:
 - Editing tools, mutable inputs, save actions, delete actions, draw-link mode, and add-node controls are not rendered in viewer mode.
 - Live data is provided by a lightweight JSON endpoint that reuses current assignment state and 24-hour assignment metrics.
 - The live endpoint overlay shows server-calculated state, uptime, and RTT data only; it does not evaluate monitoring state itself.
-- Multi-assignment endpoint nodes use the UI-only diagram urgency order Down, Unknown, Suppressed, Degraded, Up for the node badge while preserving per-assignment state details in the read-only details panel.
+- When no node or link is selected, the right-hand details pane shows a diagram-wide live summary with total nodes, monitored nodes, diagram-only nodes, visual links, overlay refresh time, and Up/Degraded/Down/Suppressed/Unknown counts based on the same server-provided overlay state used by monitored endpoint nodes.
+- The no-selection summary includes compact affected endpoint lists for Down, Degraded, Suppressed, and Unknown states, plus a highest-RTT list when fetched RTT values are available. Selecting an endpoint from these lists centres and zooms the read-only viewer to the existing diagram node and opens that node's read-only details.
+- Multi-assignment endpoint nodes use the UI-only diagram urgency order Down, Unknown, Suppressed, Degraded, Up for the node badge, diagram summary counts, and affected lists while preserving per-assignment state details in the read-only details panel.
 - Non-admin access is filtered using existing endpoint visibility rules; hidden monitored endpoint nodes and connected links are omitted from non-admin static diagram JSON and live overlay JSON.
 - Diagram links remain visual documentation and still do not create monitoring dependencies or alter suppression.
 
@@ -498,13 +500,18 @@ Manual regression checklist for this slice:
 1. Enable `NetworkDiagramsEnabled`.
 2. Open the diagram list and confirm saved diagrams offer View as the primary action.
 3. Open a saved diagram in View mode and confirm no toolbox, editable Properties form, Save, Delete selected, Draw link, or add-node controls are visible.
-4. Confirm pan, mouse-wheel zoom, toolbar zoom, reset view, and fit content work.
-5. Confirm monitored endpoint nodes show state, 24-hour uptime, and last RTT.
-6. Confirm custom diagram nodes show diagram-only presentation and do not show fake live endpoint data.
-7. Wait for the polling interval and confirm live data refresh timestamp changes without reloading the page.
-8. Click a monitored node and confirm the details panel is read-only and includes endpoint/assignment status data.
-9. Click a visual link and confirm the details panel is read-only and states that the link is visual documentation only.
-10. Confirm admin users can navigate to Edit from the viewer.
-11. Confirm non-admin users cannot access the edit/save/delete/export routes and do not receive endpoint details they cannot access.
-12. Disable `NetworkDiagramsEnabled` and confirm viewer and live-data API access are blocked.
-13. Confirm no endpoint, dependency, state-evaluation, alert, agent, or startup-gate behaviour changed.
+4. Confirm no item is selected by default and the right pane shows the diagram summary, not generic help text.
+5. Confirm total nodes, monitored nodes, diagram-only nodes, visual links, overlay refresh time, and Up/Down/Degraded/Suppressed/Unknown counts are shown.
+6. Confirm affected endpoint lists appear when endpoints are not healthy, and click an affected endpoint to confirm the viewer centres/zooms to that endpoint, selects it, and opens node details.
+7. Clear selection by panning/clicking the canvas background and confirm the summary returns.
+8. Confirm pan, mouse-wheel zoom, toolbar zoom, reset view, and fit content work.
+9. Confirm monitored endpoint nodes show state, 24-hour uptime, and last RTT.
+10. Confirm custom diagram nodes show diagram-only presentation and do not show fake live endpoint data.
+11. Wait for the polling interval and confirm live data refresh timestamp and summary counts update without reloading the page.
+12. Click a monitored node and confirm the details panel is read-only and includes endpoint/assignment status data.
+13. Click a visual link and confirm the details panel is read-only and states that the link is visual documentation only.
+14. Test the viewer details pane in dark mode and light mode.
+15. Confirm admin users can navigate to Edit from the viewer.
+16. Confirm non-admin users cannot access the edit/save/delete/export routes and do not receive endpoint details they cannot access.
+17. Disable `NetworkDiagramsEnabled` and confirm viewer and live-data API access are blocked.
+18. Confirm no endpoint, dependency, state-evaluation, alert, agent, or startup-gate behaviour changed.

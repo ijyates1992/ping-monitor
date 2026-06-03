@@ -38,7 +38,9 @@
         panX: 0,
         panY: 0,
         virtualCanvasWidth: 4000,
-        virtualCanvasHeight: 2828
+        virtualCanvasHeight: 2828,
+        liveOverlayRefreshedAtUtc: null,
+        summaryMessage: ''
     };
     let panState = null;
     let refreshTimer = null;
@@ -252,6 +254,49 @@
     function formatRtt(value) { return value == null ? '—' : `${Number(value).toFixed(1)} ms`; }
     function formatDate(value) { return value ? new Date(value).toLocaleString() : '—'; }
     function stateLabel(value) { return value || 'Unknown'; }
+    function normalizeSummaryState(value) {
+        const label = stateLabel(value);
+        return Object.prototype.hasOwnProperty.call(statePriority, label) ? label : 'Unknown';
+    }
+    function formatRefreshTime() { return state.liveOverlayRefreshedAtUtc ? formatDate(state.liveOverlayRefreshedAtUtc) : 'Pending'; }
+
+    function getMonitoredNodes() { return state.nodes.filter(node => node.nodeKind === 'monitored-endpoint'); }
+    function getOverlayForNode(node) { return state.overlayByNodeId.get(node.id); }
+    function getSummaryStateForNode(node) { return normalizeSummaryState(getOverlayForNode(node)?.summaryStateLabel); }
+
+    function buildSummaryEndpointItem(node) {
+        const overlay = getOverlayForNode(node);
+        const summaryState = getSummaryStateForNode(node);
+        const displayName = overlay?.endpointName || node.label;
+        const subline = [summaryState, `RTT ${formatRtt(overlay?.lastRttMs)}`, `24h ${overlay?.uptimeDisplay || '—'}`].join(' • ');
+        return `<li><button type="button" class="diagram-summary-endpoint" data-summary-node-id="${escapeHtml(node.id)}"><span><strong>${escapeHtml(displayName)}</strong><small>${escapeHtml(subline)}</small></span></button></li>`;
+    }
+
+    function buildAffectedSection(title, nodes) {
+        if (nodes.length === 0) {
+            return `<section class="diagram-summary-section"><h3>${escapeHtml(title)}</h3><p class="diagram-summary-none">None</p></section>`;
+        }
+
+        return `<section class="diagram-summary-section"><h3>${escapeHtml(title)}</h3><ul class="diagram-summary-endpoint-list">${nodes.map(buildSummaryEndpointItem).join('')}</ul></section>`;
+    }
+
+    function buildDiagramSummaryHtml() {
+        const monitoredNodes = getMonitoredNodes();
+        const customNodeCount = state.nodes.length - monitoredNodes.length;
+        const counts = { Up: 0, Degraded: 0, Down: 0, Suppressed: 0, Unknown: 0 };
+        monitoredNodes.forEach(node => { counts[getSummaryStateForNode(node)] += 1; });
+
+        const nodesByState = stateName => monitoredNodes
+            .filter(node => getSummaryStateForNode(node) === stateName)
+            .sort((a, b) => String(getOverlayForNode(a)?.endpointName || a.label).localeCompare(String(getOverlayForNode(b)?.endpointName || b.label)));
+
+        const highestRttNodes = monitoredNodes
+            .filter(node => getOverlayForNode(node)?.lastRttMs != null)
+            .sort((a, b) => Number(getOverlayForNode(b).lastRttMs) - Number(getOverlayForNode(a).lastRttMs))
+            .slice(0, 5);
+
+        return `<div class="diagram-summary-panel"><p class="toolbox-help">Viewer overlays existing monitoring status only. Visual links remain documentation-only.</p>${state.summaryMessage ? `<p class="diagram-summary-message" role="status">${escapeHtml(state.summaryMessage)}</p>` : ''}<div class="diagram-summary-stat-grid"><div><span>Total nodes</span><strong>${state.nodes.length}</strong></div><div><span>Monitored</span><strong>${monitoredNodes.length}</strong></div><div><span>Diagram-only</span><strong>${customNodeCount}</strong></div><div><span>Visual links</span><strong>${state.links.length}</strong></div></div><dl class="diagram-property-summary diagram-summary-refresh"><div><dt>Live overlay refresh</dt><dd>${escapeHtml(formatRefreshTime())}</dd></div></dl><div class="diagram-summary-state-grid">${Object.keys(counts).map(key => `<div data-summary-state="${key.toLowerCase()}"><span>${escapeHtml(key)}</span><strong>${counts[key]}</strong></div>`).join('')}</div>${buildAffectedSection('Down endpoints', nodesByState('Down'))}${buildAffectedSection('Degraded endpoints', nodesByState('Degraded'))}${buildAffectedSection('Suppressed endpoints', nodesByState('Suppressed'))}${buildAffectedSection('Unknown endpoints', nodesByState('Unknown'))}${highestRttNodes.length > 0 ? `<section class="diagram-summary-section"><h3>Highest RTT</h3><ul class="diagram-summary-endpoint-list">${highestRttNodes.map(buildSummaryEndpointItem).join('')}</ul></section>` : ''}</div>`;
+    }
 
     function applyOverlay() {
         state.nodes.forEach(node => {
@@ -274,6 +319,7 @@
             if (!response.ok) { throw new Error(`HTTP ${response.status}`); }
             const data = await response.json();
             state.overlayByNodeId = new Map((data.nodes || []).map(node => [node.nodeId, node]));
+            state.liveOverlayRefreshedAtUtc = data.refreshedAtUtc || new Date().toISOString();
             applyOverlay();
             if (refreshStatus) {
                 refreshStatus.dataset.error = 'false';
@@ -302,6 +348,9 @@
         noSelectionPanel.hidden = Boolean(selectedNode || selectedLink);
         nodeDetail.hidden = !selectedNode;
         linkDetail.hidden = !selectedLink;
+        if (!selectedNode && !selectedLink) {
+            noSelectionPanel.innerHTML = buildDiagramSummaryHtml();
+        }
         if (selectedNode) {
             const overlay = state.overlayByNodeId.get(selectedNode.id);
             const assignmentRows = (overlay?.assignments || []).map(a => `<li><strong>${escapeHtml(a.agentName)}</strong>: ${escapeHtml(a.stateLabel)} • 24h ${escapeHtml(a.uptimeDisplay)} • RTT ${escapeHtml(formatRtt(a.lastRttMs))}${a.suppressedByEndpointName ? ` • Suppressed by ${escapeHtml(a.suppressedByEndpointName)}` : ''}</li>`).join('');
@@ -309,6 +358,23 @@
         }
         if (selectedLink) {
             linkDetail.innerHTML = `<h3>Visual link</h3><p class="toolbox-help">Visual link only; does not create monitoring dependency.</p><dl class="diagram-property-summary"><div><dt>Media</dt><dd>${escapeHtml(normalizeMediaType(selectedLink.mediaType, selectedLink.linkType))}</dd></div><div><dt>Link type</dt><dd>${escapeHtml(normalizeLinkType(selectedLink.linkType))}</dd></div><div><dt>Speed</dt><dd>${escapeHtml(formatSpeed(selectedLink.linkSpeedValue, selectedLink.linkSpeedUnit) || '—')}</dd></div><div><dt>Ports</dt><dd>${escapeHtml([selectedLink.sourcePort || '?', selectedLink.targetPort || '?'].join(' ↔ '))}</dd></div><div><dt>VLANs</dt><dd>${escapeHtml(buildVlanSummary(selectedLink) || '—')}</dd></div><div><dt>Notes</dt><dd>${escapeHtml(selectedLink.notes || '—')}</dd></div></dl>`;
+        }
+    }
+
+    function clampPan() {
+        const rect = canvas.getBoundingClientRect();
+        const scaledWidth = state.virtualCanvasWidth * state.zoom;
+        const scaledHeight = state.virtualCanvasHeight * state.zoom;
+        const margin = 80;
+        if (scaledWidth <= rect.width) {
+            state.panX = (rect.width - scaledWidth) / 2;
+        } else {
+            state.panX = Math.min(margin, Math.max(rect.width - scaledWidth - margin, state.panX));
+        }
+        if (scaledHeight <= rect.height) {
+            state.panY = (rect.height - scaledHeight) / 2;
+        } else {
+            state.panY = Math.min(margin, Math.max(rect.height - scaledHeight - margin, state.panY));
         }
     }
 
@@ -320,7 +386,28 @@
         state.zoom = nextZoom;
         state.panX = clientX - rect.left - worldX * nextZoom;
         state.panY = clientY - rect.top - worldY * nextZoom;
+        clampPan();
         updateCanvasSize();
+    }
+
+    function centreOnNode(nodeId, preferredZoom = 1) {
+        const node = findNodeById(nodeId);
+        if (!node) {
+            state.summaryMessage = 'That endpoint node is no longer visible on this diagram.';
+            updateDetails();
+            return;
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const nextZoom = Math.min(Math.max(Math.max(preferredZoom, 0.75), minZoom), maxZoom);
+        const center = getNodeCenter(node);
+        state.zoom = nextZoom;
+        state.panX = rect.width / 2 - center.x * nextZoom;
+        state.panY = rect.height / 2 - center.y * nextZoom;
+        clampPan();
+        selectNode(node.id);
+        updateCanvasSize();
+        node.element.focus({ preventScroll: true });
     }
 
     function resetView() { state.zoom = 1; state.panX = 0; state.panY = 0; updateCanvasSize(); }
@@ -375,6 +462,7 @@
         state.links = (diagram.links || []).map(link => ({ id: link.linkId, sourceNodeId: link.sourceNodeId, targetNodeId: link.targetNodeId, label: link.label || '', sourcePort: link.sourcePortLabel || '', targetPort: link.targetPortLabel || '', notes: link.notes || '', mediaType: normalizeMediaType(link.mediaType, link.linkType), linkType: normalizeLinkType(link.linkType), linkSpeedValue: link.linkSpeedValue, linkSpeedUnit: link.linkSpeedUnit, vlans: normalizeVlans(link.vlans) }));
         setEmptyState();
         updateCanvasSize();
+        updateDetails();
         await refreshLiveData();
         refreshTimer = window.setInterval(refreshLiveData, refreshIntervalMs);
     }
@@ -384,6 +472,12 @@
     viewer.querySelector('[data-reset-view]')?.addEventListener('click', resetView);
     viewer.querySelector('[data-fit-content]')?.addEventListener('click', fitContent);
     exportPdfButton?.addEventListener('click', () => { const base = exportPdfButton.dataset.exportPdfUrl; if (base) { window.location.href = `${base}?paper=${encodeURIComponent(exportPaperSelect?.value || 'A4')}`; } });
+    noSelectionPanel?.addEventListener('click', event => {
+        const button = event.target.closest('[data-summary-node-id]');
+        if (!button) { return; }
+        state.summaryMessage = '';
+        centreOnNode(button.dataset.summaryNodeId, 1);
+    });
     canvas.addEventListener('pointerdown', beginPan);
     canvas.addEventListener('pointermove', movePan);
     canvas.addEventListener('pointerup', endPan);
