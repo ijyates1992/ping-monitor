@@ -35,10 +35,43 @@
                     else
                     {
                         <p class="toolbox-help">Use Add to place another visual instance of an endpoint on the diagram canvas.</p>
+                        <div class="endpoint-toolbox-filters" data-endpoint-toolbox-filters>
+                            <label class="endpoint-toolbox-search-label">
+                                <span class="sr-only">Search monitored endpoints</span>
+                                <input type="search"
+                                       data-endpoint-search
+                                       autocomplete="off"
+                                       placeholder="Search endpoints by name or host…" />
+                            </label>
+                            <button type="button" class="endpoint-toolbox-clear-search" data-clear-endpoint-search hidden>Clear</button>
+                            <label class="endpoint-toolbox-group-filter">
+                                <span>Group</span>
+                                <select data-endpoint-group-filter>
+                                    <option value="">All groups</option>
+                                    <option value="__ungrouped">Ungrouped</option>
+                                    @foreach (var group in Model.EndpointGroups)
+                                    {
+                                        <option value="@group.Name">@group.Name</option>
+                                    }
+                                </select>
+                            </label>
+                            <label class="endpoint-toolbox-hide-existing">
+                                <input type="checkbox" data-hide-existing-endpoints />
+                                <span>Hide endpoints already on this diagram</span>
+                            </label>
+                            <p class="endpoint-toolbox-count" data-endpoint-result-count aria-live="polite">@Model.MonitoredEndpoints.Count endpoints</p>
+                        </div>
+                        <div class="endpoint-toolbox-empty" data-endpoint-filter-empty hidden>
+                            <p>No endpoints match.</p>
+                            <button type="button" data-clear-endpoint-filters>Clear filters</button>
+                        </div>
                         <div class="endpoint-toolbox-list" data-endpoint-toolbox-list>
                             @foreach (var endpoint in Model.MonitoredEndpoints)
                             {
-                                <article class="endpoint-toolbox-item">
+                                <article class="endpoint-toolbox-item"
+                                         data-endpoint-toolbox-item
+                                         data-endpoint-search-text="@endpoint.Name @endpoint.Target"
+                                         data-endpoint-groups="@string.Join("|", endpoint.GroupNames)">
                                     <div class="endpoint-toolbox-main">
                                         <span class="endpoint-toolbox-icon" aria-hidden="true">@endpoint.IconKey</span>
                                         <span class="endpoint-toolbox-text">
@@ -46,6 +79,10 @@
                                             @if (!string.IsNullOrWhiteSpace(endpoint.Target))
                                             {
                                                 <span>@endpoint.Target</span>
+                                            }
+                                            @if (endpoint.GroupNames.Count > 0)
+                                            {
+                                                <span>Groups: @string.Join(", ", endpoint.GroupNames)</span>
                                             }
                                             <span class="endpoint-toolbox-state">State: @endpoint.SummaryState</span>
                                         </span>

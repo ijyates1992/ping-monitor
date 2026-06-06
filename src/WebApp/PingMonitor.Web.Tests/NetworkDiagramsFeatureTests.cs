@@ -165,6 +165,94 @@ public sealed class NetworkDiagramsFeatureTests
 
 
     [Fact]
+    public void NetworkDiagramEditor_ViewIncludesEndpointToolboxFilters()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var viewMarkup = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Views", "NetworkDiagrams", "Edit.cshtml"));
+        var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-editor.js"));
+
+        Assert.Contains("Search endpoints by name or host…", viewMarkup);
+        Assert.Contains("data-endpoint-search", viewMarkup);
+        Assert.Contains("data-endpoint-group-filter", viewMarkup);
+        Assert.Contains("Ungrouped", viewMarkup);
+        Assert.Contains("data-hide-existing-endpoints", viewMarkup);
+        Assert.Contains("data-endpoint-result-count", viewMarkup);
+        Assert.Contains("No endpoints match", viewMarkup);
+        Assert.Contains("data-clear-endpoint-filters", viewMarkup);
+        Assert.Contains("updateEndpointToolboxFilters", script);
+        Assert.Contains("dataset.endpointSearchText", script);
+        Assert.Contains("dataset.endpointGroups", script);
+        Assert.Contains("getExistingEndpointIdsOnDiagram", script);
+        Assert.Contains("event.key === 'Escape'", script);
+    }
+
+    [Fact]
+    public async Task NetworkDiagramsEdit_BuildsEndpointToolboxGroupFiltersFromVisibleEndpoints()
+    {
+        var controller = new NetworkDiagramsController(
+            new FakeApplicationSettingsService(new ApplicationSettingsDto { NetworkDiagramsEnabled = true }),
+            new FakeEndpointManagementQueryService(
+                new ManageEndpointRowViewModel
+                {
+                    AssignmentId = "assignment-1",
+                    EndpointId = "endpoint-1",
+                    EndpointName = "Core router",
+                    Target = "192.0.2.1",
+                    IconKey = "router",
+                    CurrentState = EndpointStateKind.Up,
+                    GroupNames = ["Core", "WAN"]
+                },
+                new ManageEndpointRowViewModel
+                {
+                    AssignmentId = "assignment-2",
+                    EndpointId = "endpoint-1",
+                    EndpointName = "Core router",
+                    Target = "192.0.2.1",
+                    IconKey = "router",
+                    CurrentState = EndpointStateKind.Down,
+                    GroupNames = ["Core"]
+                },
+                new ManageEndpointRowViewModel
+                {
+                    AssignmentId = "assignment-3",
+                    EndpointId = "endpoint-2",
+                    EndpointName = "Branch switch",
+                    Target = "branch-switch.example.test",
+                    IconKey = "switch",
+                    CurrentState = EndpointStateKind.Unknown,
+                    GroupNames = []
+                }),
+            new FakeNetworkDiagramService(new NetworkDiagram { DiagramId = "diagram-1", Name = "Core", UpdatedAtUtc = DateTimeOffset.UtcNow }),
+            new FakeNetworkDiagramPdfExportService(),
+            new FakeNetworkDiagramImageExportService(),
+            new FakeNetworkDiagramLiveOverlayService(),
+            new FakeUserAccessScopeService());
+
+        var result = await controller.Edit("diagram-1", CancellationToken.None);
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<NetworkDiagramEditorPageViewModel>(view.Model);
+        Assert.Equal(["Core", "WAN"], model.EndpointGroups.Select(group => group.Name).ToArray());
+        var endpoint = Assert.Single(model.MonitoredEndpoints, item => item.EndpointId == "endpoint-1");
+        Assert.Equal(["Core", "WAN"], endpoint.GroupNames);
+        Assert.Equal(EndpointStateKind.Down, endpoint.SummaryState);
+        Assert.Contains(model.MonitoredEndpoints, item => item.EndpointId == "endpoint-2" && item.GroupNames.Count == 0);
+    }
+
+    [Fact]
+    public void NetworkDiagramDocumentation_IncludesEndpointToolboxSearchChecklist()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var documentation = File.ReadAllText(Path.Combine(repoRoot, "docs", "network-diagrams-v0.1.1.md"));
+
+        Assert.Contains("Editor Endpoint Toolbox Search and Group Filter Slice", documentation);
+        Assert.Contains("Search by IP/host/target", documentation);
+        Assert.Contains("Endpoint visibility/access rules", documentation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("does not alter monitoring configuration", documentation);
+        Assert.Contains("Manual Regression Checklist - Endpoint Toolbox Search and Group Filter", documentation);
+    }
+
+    [Fact]
     public void NetworkDiagram_DefaultCanvasUsesASeriesLandscapeRatio()
     {
         var diagram = new NetworkDiagram();

@@ -22,6 +22,14 @@
     const deleteSelectionButtons = Array.from(editor.querySelectorAll('[data-delete-selection]'));
     const addButtons = Array.from(editor.querySelectorAll('[data-add-node]'));
     const addEndpointButtons = Array.from(editor.querySelectorAll('[data-add-endpoint-node]'));
+    const endpointSearchInput = editor.querySelector('[data-endpoint-search]');
+    const clearEndpointSearchButton = editor.querySelector('[data-clear-endpoint-search]');
+    const endpointGroupFilter = editor.querySelector('[data-endpoint-group-filter]');
+    const hideExistingEndpointsCheckbox = editor.querySelector('[data-hide-existing-endpoints]');
+    const endpointResultCount = editor.querySelector('[data-endpoint-result-count]');
+    const endpointFilterEmpty = editor.querySelector('[data-endpoint-filter-empty]');
+    const clearEndpointFiltersButton = editor.querySelector('[data-clear-endpoint-filters]');
+    const endpointToolboxItems = Array.from(editor.querySelectorAll('[data-endpoint-toolbox-item]'));
     const toolButtons = Array.from(editor.querySelectorAll('[data-tool-button]'));
     const toolHint = editor.querySelector('[data-tool-hint]');
     const nodeProperties = editor.querySelector('[data-node-properties]');
@@ -298,6 +306,85 @@
         };
     }
 
+
+    function getExistingEndpointIdsOnDiagram() {
+        return new Set(state.nodes
+            .filter(node => node.nodeKind === 'monitored-endpoint' && node.endpointId)
+            .map(node => node.endpointId));
+    }
+
+    function formatEndpointCount(visibleCount, totalCount, filtersActive) {
+        const endpointLabel = visibleCount === 1 ? 'endpoint' : 'endpoints';
+        if (visibleCount === 0) {
+            return 'No endpoints match';
+        }
+
+        if (filtersActive) {
+            const totalLabel = totalCount === 1 ? 'endpoint' : 'endpoints';
+            return `${visibleCount} of ${totalCount} ${totalLabel}`;
+        }
+
+        return `${visibleCount} ${endpointLabel}`;
+    }
+
+    function updateEndpointToolboxFilters() {
+        if (endpointToolboxItems.length === 0) {
+            return;
+        }
+
+        const searchTerm = (endpointSearchInput?.value || '').trim().toLocaleLowerCase();
+        const selectedGroup = endpointGroupFilter?.value || '';
+        const hideExisting = Boolean(hideExistingEndpointsCheckbox?.checked);
+        const existingEndpointIds = hideExisting ? getExistingEndpointIdsOnDiagram() : new Set();
+        let visibleCount = 0;
+
+        endpointToolboxItems.forEach(item => {
+            const searchText = (item.dataset.endpointSearchText || '').toLocaleLowerCase();
+            const groups = (item.dataset.endpointGroups || '')
+                .split('|')
+                .map(group => group.trim())
+                .filter(group => group.length > 0);
+            const endpointId = item.querySelector('[data-add-endpoint-node]')?.dataset.endpointId || '';
+
+            const matchesSearch = !searchTerm || searchText.includes(searchTerm);
+            const matchesGroup = !selectedGroup
+                || (selectedGroup === '__ungrouped' && groups.length === 0)
+                || groups.some(group => group.localeCompare(selectedGroup, undefined, { sensitivity: 'accent' }) === 0);
+            const matchesExisting = !hideExisting || !existingEndpointIds.has(endpointId);
+            const isVisible = matchesSearch && matchesGroup && matchesExisting;
+
+            item.hidden = !isVisible;
+            if (isVisible) {
+                visibleCount += 1;
+            }
+        });
+
+        const filtersActive = Boolean(searchTerm || selectedGroup || hideExisting);
+        if (endpointResultCount) {
+            endpointResultCount.textContent = formatEndpointCount(visibleCount, endpointToolboxItems.length, filtersActive);
+        }
+        if (endpointFilterEmpty) {
+            endpointFilterEmpty.hidden = visibleCount !== 0;
+        }
+        if (clearEndpointSearchButton) {
+            clearEndpointSearchButton.hidden = searchTerm.length === 0;
+        }
+    }
+
+    function clearEndpointFilters() {
+        if (endpointSearchInput) {
+            endpointSearchInput.value = '';
+        }
+        if (endpointGroupFilter) {
+            endpointGroupFilter.value = '';
+        }
+        if (hideExistingEndpointsCheckbox) {
+            hideExistingEndpointsCheckbox.checked = false;
+        }
+        updateEndpointToolboxFilters();
+        endpointSearchInput?.focus();
+    }
+
     function createNodeElement(options) {
         const node = document.createElement('div');
         node.className = 'diagram-node';
@@ -384,6 +471,7 @@
         setEmptyState();
         selectOnlyNode(node.id);
         node.element.focus({ preventScroll: true });
+        updateEndpointToolboxFilters();
     }
 
     function addCustomNode(button) {
@@ -1329,6 +1417,7 @@
             setPendingLinkSource(null);
             setEmptyState();
             syncSelectionDom();
+            updateEndpointToolboxFilters();
             return;
         }
 
@@ -1582,6 +1671,7 @@
         state.nodes = [];
         state.links = [];
         (diagram.nodes || []).forEach(addLoadedNode);
+        updateEndpointToolboxFilters();
         state.links = (diagram.links || []).map(link => ({
             id: link.linkId,
             sourceNodeId: link.sourceNodeId,
@@ -1746,6 +1836,28 @@
     addEndpointButtons.forEach(button => {
         button.addEventListener('click', () => addEndpointNode(button));
     });
+
+    endpointSearchInput?.addEventListener('input', updateEndpointToolboxFilters);
+    endpointSearchInput?.addEventListener('keydown', event => {
+        event.stopPropagation();
+        if (event.key === 'Escape' && endpointSearchInput.value) {
+            endpointSearchInput.value = '';
+            updateEndpointToolboxFilters();
+            event.preventDefault();
+        }
+    });
+    clearEndpointSearchButton?.addEventListener('click', () => {
+        if (endpointSearchInput) {
+            endpointSearchInput.value = '';
+        }
+        updateEndpointToolboxFilters();
+        endpointSearchInput?.focus();
+    });
+    endpointGroupFilter?.addEventListener('change', updateEndpointToolboxFilters);
+    endpointGroupFilter?.addEventListener('keydown', event => event.stopPropagation());
+    hideExistingEndpointsCheckbox?.addEventListener('change', updateEndpointToolboxFilters);
+    clearEndpointFiltersButton?.addEventListener('click', clearEndpointFilters);
+    updateEndpointToolboxFilters();
 
     toolButtons.forEach(button => {
         button.addEventListener('click', () => setTool(button.dataset.toolButton || 'select'));

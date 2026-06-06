@@ -427,3 +427,47 @@ Safety boundary:
 13. Wait for live overlay refresh and confirm summary counts update without resetting the selected node or link.
 14. Test in dark mode and light mode.
 15. Confirm no monitoring, dependency, alerting, agent, or Startup Gate behaviour changed.
+
+## Editor Endpoint Toolbox Search and Group Filter Slice
+
+Issue: #531
+
+This slice improves only the Network Diagram editor placement toolbox for monitored endpoints.
+
+Included:
+
+- The monitored endpoint toolbox includes a compact search box with placeholder text: “Search endpoints by name or host…”.
+- Search runs client-side against the already-loaded authorized endpoint toolbox data and matches endpoint name/display text plus the existing endpoint target/host/IP field.
+- The endpoint toolbox includes a group dropdown with “All groups”, “Ungrouped”, and the endpoint groups represented by the currently visible toolbox endpoints.
+- Search text and group selection combine, so operators can narrow a large endpoint list without additional server requests on every keystroke.
+- A compact result count reports all endpoints or filtered counts, and a no-match empty state includes a clear-filters action.
+- An optional “Hide endpoints already on this diagram” checkbox hides endpoints that already have at least one visual node in the current draft diagram; this remains only a filter and does not block duplicate visual instances when unchecked.
+- Existing Add behaviour is unchanged: adding a monitored endpoint still creates a visual diagram node in the current viewport/visible area and does not create endpoints or monitoring dependencies.
+
+Authorization and safety boundary:
+
+- The toolbox continues to use the existing endpoint management query path and therefore follows the same endpoint visibility/access rules already enforced by the application.
+- Group names shown in the filter are derived from endpoints already present in the authorized toolbox list, so the filter does not expose additional endpoints or groups outside that list.
+- This change affects diagram placement only. It does not alter monitoring configuration, endpoint checks, state evaluation, dependency suppression, alerting, agents, SNMP, topology inference, or Startup Gate behaviour.
+
+## Manual Regression Checklist - Endpoint Toolbox Search and Group Filter
+
+- Open the diagram editor.
+- Confirm the endpoint list loads.
+- Search by endpoint name.
+- Search by IP/host/target.
+- Clear search.
+- Filter by a group.
+- Filter by Ungrouped when ungrouped endpoints exist.
+- Combine group filter and search.
+- Confirm the result count updates.
+- Confirm the empty state appears for no matches.
+- Use Clear filters from the empty state.
+- Add an endpoint after filtering.
+- Save, refresh, and confirm the endpoint node persists.
+- Enable “Hide endpoints already on this diagram” and confirm existing visual endpoint nodes are hidden from the toolbox.
+- Disable “Hide endpoints already on this diagram” and confirm duplicate visual instances can still be added.
+- Test in dark mode and light mode.
+- Test at 1366x768.
+- Confirm custom device buttons still work.
+- Confirm no monitoring, dependency, alerting, Startup Gate, or agent behaviour changed.
