@@ -95,6 +95,19 @@ body {
     color: var(--diagram-warning);
 }
 
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .diagram-editor-layout {
     display: grid;
     grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -340,7 +353,20 @@ body {
         min-height: 0;
     }
 
-    .diagram-editor-layout {
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.diagram-editor-layout {
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: auto minmax(60vh, 1fr);
     }
@@ -370,6 +396,19 @@ body {
     font-weight: 700;
 }
 
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .diagram-editor-layout {
     grid-template-columns: minmax(230px, 300px) minmax(0, 1fr) minmax(220px, 280px);
 }
@@ -379,6 +418,126 @@ body {
     color: var(--diagram-muted);
     font-size: .84rem;
     line-height: 1.35;
+}
+
+
+.endpoint-toolbox-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .45rem;
+    align-items: center;
+}
+
+.endpoint-toolbox-search-label,
+.endpoint-toolbox-group-filter {
+    display: grid;
+    gap: .25rem;
+    min-width: 0;
+    color: var(--diagram-muted);
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.endpoint-toolbox-search-label {
+    grid-column: 1;
+}
+
+.endpoint-toolbox-search-label input,
+.endpoint-toolbox-group-filter select {
+    min-height: 40px;
+    width: 100%;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+    color: var(--diagram-text);
+    font: inherit;
+    padding: .5rem .6rem;
+}
+
+.endpoint-toolbox-search-label input:focus,
+.endpoint-toolbox-group-filter select:focus {
+    outline: none;
+    border-color: var(--diagram-accent);
+    box-shadow: 0 0 0 3px var(--diagram-accent-soft);
+}
+
+.endpoint-toolbox-clear-search,
+.endpoint-toolbox-empty button {
+    min-height: 40px;
+    border: 1px solid var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+    color: var(--diagram-text);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    padding: .45rem .65rem;
+}
+
+.endpoint-toolbox-clear-search {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+}
+
+.endpoint-toolbox-group-filter {
+    grid-column: 1 / -1;
+}
+
+.endpoint-toolbox-hide-existing {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: flex-start;
+    gap: .45rem;
+    color: var(--diagram-muted);
+    font-size: .8rem;
+    line-height: 1.3;
+}
+
+.endpoint-toolbox-hide-existing input {
+    width: 1rem;
+    height: 1rem;
+    margin-top: .1rem;
+    accent-color: var(--diagram-accent);
+}
+
+.endpoint-toolbox-count {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--diagram-muted);
+    font-size: .8rem;
+    font-weight: 700;
+}
+
+.endpoint-toolbox-empty {
+    display: grid;
+    gap: .45rem;
+    padding: .65rem;
+    border: 1px dashed var(--diagram-border);
+    border-radius: 8px;
+    background: var(--diagram-panel);
+}
+
+.endpoint-toolbox-empty p {
+    margin: 0;
+    color: var(--diagram-muted);
+    font-size: .84rem;
+    line-height: 1.35;
+}
+
+.endpoint-toolbox-clear-search:hover,
+.endpoint-toolbox-clear-search:focus-visible,
+.endpoint-toolbox-empty button:hover,
+.endpoint-toolbox-empty button:focus-visible {
+    outline: none;
+    border-color: var(--diagram-accent);
+    box-shadow: 0 0 0 3px var(--diagram-accent-soft);
+}
+
+.endpoint-toolbox-clear-search[hidden],
+.endpoint-toolbox-empty[hidden],
+.endpoint-toolbox-item[hidden] {
+    display: none;
 }
 
 .endpoint-toolbox-list {
@@ -802,7 +961,20 @@ html[data-theme="dark"] .diagram-link-port-label {
 }
 
 @media (max-width: 980px) {
-    .diagram-editor-layout {
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.diagram-editor-layout {
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: auto minmax(60vh, 1fr) auto;
     }

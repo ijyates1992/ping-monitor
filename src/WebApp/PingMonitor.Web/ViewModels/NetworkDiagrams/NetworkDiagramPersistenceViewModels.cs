@@ -60,6 +60,13 @@ public sealed class NetworkDiagramEditorPageViewModel
     public string ViewerUrl { get; init; } = string.Empty;
 
     public IReadOnlyList<NetworkDiagramEndpointToolboxItemViewModel> MonitoredEndpoints { get; init; } = [];
+
+    public IReadOnlyList<NetworkDiagramEndpointGroupFilterOptionViewModel> EndpointGroups { get; init; } = [];
+}
+
+public sealed class NetworkDiagramEndpointGroupFilterOptionViewModel
+{
+    public string Name { get; init; } = string.Empty;
 }
 
 public sealed class NetworkDiagramEndpointToolboxItemViewModel
@@ -73,6 +80,8 @@ public sealed class NetworkDiagramEndpointToolboxItemViewModel
     public string IconKey { get; init; } = "generic";
 
     public Models.EndpointStateKind SummaryState { get; init; } = Models.EndpointStateKind.Unknown;
+
+    public IReadOnlyList<string> GroupNames { get; init; } = [];
 }
 
 

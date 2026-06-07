@@ -144,6 +144,7 @@ public sealed class NetworkDiagramsController : Controller
         }
 
         var endpoints = await _endpointManagementQueryService.GetManagePageAsync(groupId: null, cancellationToken);
+        var endpointToolboxItems = BuildEndpointToolbox(endpoints.Rows);
 
         return View("Edit", new NetworkDiagramEditorPageViewModel
         {
@@ -157,7 +158,8 @@ public sealed class NetworkDiagramsController : Controller
             ExportPngUrl = Url?.Action(nameof(ExportImage), new { diagramId = diagram.DiagramId, format = "png" }) ?? string.Empty,
             ExportSvgUrl = Url?.Action(nameof(ExportImage), new { diagramId = diagram.DiagramId, format = "svg" }) ?? string.Empty,
             ViewerUrl = Url?.Action(nameof(ViewDiagram), new { diagramId = diagram.DiagramId }) ?? string.Empty,
-            MonitoredEndpoints = BuildEndpointToolbox(endpoints.Rows)
+            MonitoredEndpoints = endpointToolboxItems,
+            EndpointGroups = BuildEndpointGroupFilters(endpointToolboxItems)
         });
     }
 
@@ -343,11 +345,30 @@ public sealed class NetworkDiagramsController : Controller
                     Name = first.EndpointName,
                     Target = first.Target,
                     IconKey = first.IconKey,
-                    SummaryState = SelectSummaryState(group.Select(row => row.CurrentState))
+                    SummaryState = SelectSummaryState(group.Select(row => row.CurrentState)),
+                    GroupNames = group
+                        .SelectMany(row => row.GroupNames)
+                        .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                        .ToArray()
                 };
             })
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Target, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+
+    private static IReadOnlyList<NetworkDiagramEndpointGroupFilterOptionViewModel> BuildEndpointGroupFilters(
+        IReadOnlyList<NetworkDiagramEndpointToolboxItemViewModel> endpoints)
+    {
+        return endpoints
+            .SelectMany(endpoint => endpoint.GroupNames)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .Select(name => new NetworkDiagramEndpointGroupFilterOptionViewModel { Name = name })
             .ToArray();
     }
 
