@@ -272,6 +272,7 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
     {
         var diagrams = await _dbContext.NetworkDiagrams
             .AsNoTracking()
+            .Include(x => x.Areas)
             .Include(x => x.Nodes)
             .Include(x => x.Links)
                 .ThenInclude(x => x.Vlans)
@@ -294,6 +295,20 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
                 UpdatedAtUtc = diagram.UpdatedAtUtc,
                 CreatedByUserId = diagram.CreatedByUserId,
                 UpdatedByUserId = diagram.UpdatedByUserId,
+                Areas = diagram.Areas.OrderBy(x => x.SortOrder).ThenBy(x => x.AreaId).Select(area => new BackupNetworkDiagramAreaRecord
+                {
+                    AreaId = area.AreaId,
+                    Label = area.Label,
+                    Notes = area.Notes,
+                    X = area.X,
+                    Y = area.Y,
+                    Width = area.Width,
+                    Height = area.Height,
+                    StyleKey = area.StyleKey,
+                    SortOrder = area.SortOrder,
+                    CreatedAtUtc = area.CreatedAtUtc,
+                    UpdatedAtUtc = area.UpdatedAtUtc
+                }).ToArray(),
                 Nodes = diagram.Nodes.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.NodeId).Select(node => new BackupNetworkDiagramNodeRecord
                 {
                     NodeId = node.NodeId,

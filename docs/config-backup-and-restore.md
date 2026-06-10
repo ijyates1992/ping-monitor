@@ -197,3 +197,7 @@ Retention is safe and predictable by default:
 - Uploaded backups are not silently auto-pruned by default
 - Pruning may run after automatic backup creation and/or during maintenance passes
 - Max-count pruning for automatic backups is the baseline policy; optional age-based pruning may be added when needed
+
+## Network diagram area/location boxes
+
+Network diagram area/location boxes are included in the `network_diagrams` backup section with their diagram, nodes, visual links, and VLAN link metadata. Restore recreates area boxes as diagram-only visual annotations. Restoring or replacing network diagram data must not create monitoring groups, endpoint dependencies, alerts, endpoints, assignments, or agents, and deleting/replacing diagram data removes only diagram records such as areas, nodes, visual links, VLAN metadata, and diagrams.

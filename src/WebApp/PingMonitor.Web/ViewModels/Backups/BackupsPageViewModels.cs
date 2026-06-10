@@ -173,6 +173,7 @@ public sealed class ConfigurationBackupSectionCountViewModel
     public int IdentityRoles { get; init; }
     public int IdentityUserRoles { get; init; }
     public int NetworkDiagrams { get; init; }
+    public int NetworkDiagramAreas { get; init; }
     public int NetworkDiagramNodes { get; init; }
     public int NetworkDiagramLinks { get; init; }
     public int NetworkDiagramLinkVlans { get; init; }

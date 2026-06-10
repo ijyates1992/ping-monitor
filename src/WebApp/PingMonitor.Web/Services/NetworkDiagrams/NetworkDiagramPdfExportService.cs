@@ -268,6 +268,25 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
         double MapWidth(double worldWidth) => worldWidth * scale;
         double MapHeight(double worldHeight) => worldHeight * scale;
 
+
+        foreach (var area in diagram.Areas.OrderBy(x => x.SortOrder))
+        {
+            var x = MapX(area.X);
+            var y = MapY(area.Y + area.Height);
+            var width = Math.Max(1, MapWidth(area.Width));
+            var height = Math.Max(1, MapHeight(area.Height));
+            stream.AppendLine("q");
+            ApplyAreaStyle(stream, area.StyleKey);
+            stream.AppendFormat(CultureInfo.InvariantCulture, "{0:0.##} {1:0.##} {2:0.##} {3:0.##} re B\n", x, y, width, height);
+            stream.AppendLine("Q");
+            AddText(stream, x + 8, y + height - 18, 9, Truncate(area.Label, 60), bold: true);
+            if (!string.IsNullOrWhiteSpace(area.Notes) && height >= 45)
+            {
+                var fittedNotes = NetworkDiagramPdfTextFitter.Fit(area.Notes, maxWidth: Math.Max(20, width - 16), maxLines: 1, fontSize: 6.5, minimumFontSize: 5, useEllipsis: true);
+                AddFittedText(stream, x + 8, y + 8, fittedNotes, bold: false);
+            }
+        }
+
         var nodeLookup = diagram.Nodes.ToDictionary(x => x.NodeId, StringComparer.Ordinal);
         var offsetIndexes = GetParallelOffsetIndexes(diagram.Links);
         foreach (var link in diagram.Links)
@@ -375,6 +394,41 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
         return new LinkGeometry(startX, startY, endX, endY, (startX + endX) / 2, (startY + endY) / 2 + (offset == 0 ? 6 : Math.Sign(offset) * 6));
     }
 
+
+    private static void ApplyAreaStyle(StringBuilder stream, string? styleKey)
+    {
+        switch (string.IsNullOrWhiteSpace(styleKey) ? "neutral" : styleKey.Trim().ToLowerInvariant())
+        {
+            case "blue":
+                stream.AppendLine("0.88 0.94 1 rg");
+                stream.AppendLine("0.15 0.39 0.92 RG");
+                break;
+            case "green":
+                stream.AppendLine("0.88 0.98 0.94 rg");
+                stream.AppendLine("0.02 0.59 0.41 RG");
+                break;
+            case "amber":
+                stream.AppendLine("1 0.96 0.82 rg");
+                stream.AppendLine("0.85 0.47 0.02 RG");
+                break;
+            case "red":
+                stream.AppendLine("1 0.92 0.92 rg");
+                stream.AppendLine("0.86 0.15 0.15 RG");
+                break;
+            case "purple":
+                stream.AppendLine("0.95 0.91 1 rg");
+                stream.AppendLine("0.49 0.23 0.93 RG");
+                break;
+            default:
+                stream.AppendLine("0.94 0.96 0.98 rg");
+                stream.AppendLine("0.39 0.45 0.55 RG");
+                break;
+        }
+
+        stream.AppendLine("1.2 w");
+        stream.AppendLine("[7 4] 0 d");
+    }
+
     private static void ApplyLinkStyle(StringBuilder stream, NetworkDiagramLinkDto link)
     {
         var width = NetworkDiagramLinkTypes.Normalize(link.LinkType) == NetworkDiagramLinkTypes.Lacp ? 2.6d : 1.5d;
@@ -416,16 +470,24 @@ internal sealed class NetworkDiagramPdfExportService : INetworkDiagramPdfExportS
 
     private static DiagramBounds GetExportBounds(NetworkDiagramDto diagram)
     {
-        if (diagram.Nodes.Count == 0)
+        if (diagram.Nodes.Count == 0 && diagram.Areas.Count == 0)
         {
             return new DiagramBounds(0, 0, Math.Max(1, diagram.CanvasWidth), Math.Max(1, diagram.CanvasHeight));
         }
 
         var padding = 160d;
-        var minX = Math.Max(0, diagram.Nodes.Min(x => x.X) - padding);
-        var minY = Math.Max(0, diagram.Nodes.Min(x => x.Y) - padding);
-        var maxX = Math.Min(Math.Max(diagram.CanvasWidth, 1), diagram.Nodes.Max(x => x.X + x.Width) + padding);
-        var maxY = Math.Min(Math.Max(diagram.CanvasHeight, 1), diagram.Nodes.Max(x => x.Y + x.Height) + padding);
+        var minX = Math.Max(0, Math.Min(
+            diagram.Nodes.Count == 0 ? double.PositiveInfinity : diagram.Nodes.Min(x => x.X),
+            diagram.Areas.Count == 0 ? double.PositiveInfinity : diagram.Areas.Min(x => x.X)) - padding);
+        var minY = Math.Max(0, Math.Min(
+            diagram.Nodes.Count == 0 ? double.PositiveInfinity : diagram.Nodes.Min(x => x.Y),
+            diagram.Areas.Count == 0 ? double.PositiveInfinity : diagram.Areas.Min(x => x.Y)) - padding);
+        var maxX = Math.Min(Math.Max(diagram.CanvasWidth, 1), Math.Max(
+            diagram.Nodes.Count == 0 ? double.NegativeInfinity : diagram.Nodes.Max(x => x.X + x.Width),
+            diagram.Areas.Count == 0 ? double.NegativeInfinity : diagram.Areas.Max(x => x.X + x.Width)) + padding);
+        var maxY = Math.Min(Math.Max(diagram.CanvasHeight, 1), Math.Max(
+            diagram.Nodes.Count == 0 ? double.NegativeInfinity : diagram.Nodes.Max(x => x.Y + x.Height),
+            diagram.Areas.Count == 0 ? double.NegativeInfinity : diagram.Areas.Max(x => x.Y + x.Height)) + padding);
         if (maxX <= minX || maxY <= minY)
         {
             return new DiagramBounds(0, 0, Math.Max(1, diagram.CanvasWidth), Math.Max(1, diagram.CanvasHeight));

@@ -65,7 +65,7 @@ internal sealed class NetworkDiagramImageExportService : INetworkDiagramImageExp
         var svg = new StringBuilder();
         svg.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height}\" viewBox=\"0 0 {Format(layout.CanvasWidth)} {Format(layout.CanvasHeight)}\" role=\"img\" aria-label=\"{EscapeXml(layout.DiagramName)} network diagram\">");
         svg.AppendLine("<defs><style><![CDATA[");
-        svg.AppendLine(".pm-node-label{font:700 14px Arial,Helvetica,sans-serif;fill:#101828}.pm-node-type{font:600 11px Arial,Helvetica,sans-serif;fill:#475467}.pm-node-notes{font:500 10px Arial,Helvetica,sans-serif;fill:#667085}.pm-link-label{font:800 12px Arial,Helvetica,sans-serif;fill:#101828;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}.pm-link-label-dark{stroke:#111827;fill:#f9fafb}.pm-node-icon{font:800 13px Arial,Helvetica,sans-serif}.pm-footer{font:600 11px Arial,Helvetica,sans-serif;fill:#667085}");
+        svg.AppendLine(".pm-area-label{font:800 16px Arial,Helvetica,sans-serif;fill:#1f2937}.pm-area-notes{font:600 11px Arial,Helvetica,sans-serif;fill:#4b5563}.pm-node-label{font:700 14px Arial,Helvetica,sans-serif;fill:#101828}.pm-node-type{font:600 11px Arial,Helvetica,sans-serif;fill:#475467}.pm-node-notes{font:500 10px Arial,Helvetica,sans-serif;fill:#667085}.pm-link-label{font:800 12px Arial,Helvetica,sans-serif;fill:#101828;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}.pm-link-label-dark{stroke:#111827;fill:#f9fafb}.pm-node-icon{font:800 13px Arial,Helvetica,sans-serif}.pm-footer{font:600 11px Arial,Helvetica,sans-serif;fill:#667085}");
         svg.AppendLine("]]></style></defs>");
         if (backgroundStyle.IsTransparent)
         {
@@ -148,6 +148,25 @@ internal sealed class NetworkDiagramImageExportService : INetworkDiagramImageExp
 
         image.Mutate(ctx =>
         {
+            foreach (var area in layout.Areas)
+            {
+                var style = ResolveAreaStyle(area.StyleKey, bg.IsDark);
+                var rect = new RectangularPolygon(S(area.X), S(area.Y), S(area.Width), S(area.Height));
+                ctx.Fill(Color.ParseHex(style.Fill.TrimStart('#')).WithAlpha((float)style.FillOpacity), rect);
+                ctx.Draw(Color.ParseHex(style.Stroke.TrimStart('#')), S(3), rect);
+                var header = new RectangularPolygon(S(area.X), S(area.Y), S(area.Width), S(Math.Min(38d, area.Height)));
+                ctx.Fill(Color.ParseHex(style.HeaderFill.TrimStart('#')).WithAlpha((float)style.HeaderOpacity), header);
+                ctx.DrawText(area.Label, boldFont, bg.IsDark ? Color.White : Color.ParseHex("1f2937"), P(area.X + 16, area.Y + 9));
+                if (!string.IsNullOrWhiteSpace(area.Notes) && area.Height >= 90d)
+                {
+                    var notes = FitText(area.Notes, Math.Max(1d, area.Width - 32d), maxLines: 1, fontSize: 10d).FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(notes))
+                    {
+                        ctx.DrawText(notes, smallFont, bg.IsDark ? Color.ParseHex("d1d5db") : Color.ParseHex("4b5563"), P(area.X + 16, area.Y + area.Height - 28));
+                    }
+                }
+            }
+
             foreach (var link in layout.Links)
             {
                 var style = ResolveLinkStyle(link.MediaType, link.LinkType);
@@ -296,6 +315,21 @@ internal sealed class NetworkDiagramImageExportService : INetworkDiagramImageExp
         };
         var opacity = NetworkDiagramLinkTypes.Normalize(linkType) == NetworkDiagramLinkTypes.Logical ? 0.72d : 1d;
         return new NetworkDiagramExportLinkStyle(color, width, dash, opacity);
+    }
+
+
+    private static NetworkDiagramExportAreaStyle ResolveAreaStyle(string? styleKey, bool dark)
+    {
+        var key = string.IsNullOrWhiteSpace(styleKey) ? "neutral" : styleKey.Trim().ToLowerInvariant();
+        return key switch
+        {
+            "blue" => new NetworkDiagramExportAreaStyle("#60a5fa", "#2563eb", "#2563eb", dark ? 0.18 : 0.13, dark ? 0.30 : 0.18),
+            "green" => new NetworkDiagramExportAreaStyle("#34d399", "#059669", "#059669", dark ? 0.18 : 0.13, dark ? 0.30 : 0.18),
+            "amber" => new NetworkDiagramExportAreaStyle("#fbbf24", "#d97706", "#d97706", dark ? 0.20 : 0.14, dark ? 0.32 : 0.20),
+            "red" => new NetworkDiagramExportAreaStyle("#f87171", "#dc2626", "#dc2626", dark ? 0.17 : 0.12, dark ? 0.30 : 0.18),
+            "purple" => new NetworkDiagramExportAreaStyle("#a78bfa", "#7c3aed", "#7c3aed", dark ? 0.18 : 0.13, dark ? 0.30 : 0.18),
+            _ => new NetworkDiagramExportAreaStyle(dark ? "#64748b" : "#94a3b8", dark ? "#94a3b8" : "#64748b", dark ? "#475569" : "#cbd5e1", dark ? 0.18 : 0.16, dark ? 0.28 : 0.38)
+        };
     }
 
     private static NetworkDiagramExportNodeStyle ResolveNodeStyle(string nodeType, bool dark)
@@ -460,11 +494,13 @@ internal sealed class NetworkDiagramImageExportService : INetworkDiagramImageExp
     private sealed record NetworkDiagramExportBackground(string CanvasFill, bool IsDark, bool IsTransparent);
     private sealed record NetworkDiagramExportLinkStyle(string Color, double Width, string DashArray, double Opacity);
     private sealed record NetworkDiagramExportNodeStyle(string Fill, string Stroke, string IconFill, string IconText);
+    private sealed record NetworkDiagramExportAreaStyle(string Fill, string Stroke, string HeaderFill, double FillOpacity, double HeaderOpacity);
 
     internal sealed record NetworkDiagramNativeExportLayout(
         string DiagramName,
         double CanvasWidth,
         double CanvasHeight,
+        IReadOnlyList<NetworkDiagramNativeExportArea> Areas,
         IReadOnlyList<NetworkDiagramNativeExportNode> Nodes,
         IReadOnlyList<NetworkDiagramNativeExportLink> Links)
     {
@@ -472,6 +508,15 @@ internal sealed class NetworkDiagramImageExportService : INetworkDiagramImageExp
         {
             var canvasWidth = Math.Max(1d, diagram.CanvasWidth);
             var canvasHeight = Math.Max(1d, diagram.CanvasHeight);
+            var areas = diagram.Areas.OrderBy(area => area.SortOrder).Select(area => new NetworkDiagramNativeExportArea(
+                area.AreaId,
+                area.Label,
+                area.Notes,
+                area.X,
+                area.Y,
+                Math.Max(1d, area.Width),
+                Math.Max(1d, area.Height),
+                area.StyleKey)).ToArray();
             var nodes = diagram.Nodes.Select(node => new NetworkDiagramNativeExportNode(
                 node.NodeId,
                 node.NodeType,
@@ -508,9 +553,11 @@ internal sealed class NetworkDiagramImageExportService : INetworkDiagramImageExp
                     geometry.LabelY));
             }
 
-            return new NetworkDiagramNativeExportLayout(diagram.Name, canvasWidth, canvasHeight, nodes, links);
+            return new NetworkDiagramNativeExportLayout(diagram.Name, canvasWidth, canvasHeight, areas, nodes, links);
         }
     }
+
+    internal sealed record NetworkDiagramNativeExportArea(string AreaId, string Label, string? Notes, double X, double Y, double Width, double Height, string? StyleKey);
 
     internal sealed record NetworkDiagramNativeExportNode(string NodeId, string NodeType, string DisplayLabel, string IconKey, string? Notes, double X, double Y, double Width, double Height);
 

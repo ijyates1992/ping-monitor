@@ -61,6 +61,7 @@ public sealed class ConfigurationRestorePreviewService : IConfigurationRestorePr
                 IdentityRoles = document.Sections.Identity?.Roles.Count ?? 0,
                 IdentityUserRoles = document.Sections.Identity?.UserRoles.Count ?? 0,
                 NetworkDiagrams = document.Sections.NetworkDiagrams?.Diagrams.Count ?? 0,
+                NetworkDiagramAreas = document.Sections.NetworkDiagrams?.Diagrams.Sum(x => x.Areas.Count) ?? 0,
                 NetworkDiagramNodes = document.Sections.NetworkDiagrams?.Diagrams.Sum(x => x.Nodes.Count) ?? 0,
                 NetworkDiagramLinks = document.Sections.NetworkDiagrams?.Diagrams.Sum(x => x.Links.Count) ?? 0,
                 NetworkDiagramLinkVlans = document.Sections.NetworkDiagrams?.Diagrams.Sum(x => x.Links.Sum(link => link.Vlans.Count)) ?? 0

@@ -43,6 +43,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<PendingTelegramLink> PendingTelegramLinks => Set<PendingTelegramLink>();
     public DbSet<TelegramAccount> TelegramAccounts => Set<TelegramAccount>();
     public DbSet<NetworkDiagram> NetworkDiagrams => Set<NetworkDiagram>();
+    public DbSet<NetworkDiagramArea> NetworkDiagramAreas => Set<NetworkDiagramArea>();
     public DbSet<NetworkDiagramNode> NetworkDiagramNodes => Set<NetworkDiagramNode>();
     public DbSet<NetworkDiagramLink> NetworkDiagramLinks => Set<NetworkDiagramLink>();
     public DbSet<NetworkDiagramLinkVlan> NetworkDiagramLinkVlans => Set<NetworkDiagramLinkVlan>();
@@ -437,6 +438,23 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         networkDiagram.Property(x => x.CreatedByUserId).HasMaxLength(255);
         networkDiagram.Property(x => x.UpdatedByUserId).HasMaxLength(255);
         networkDiagram.HasIndex(x => x.Name);
+
+        var networkDiagramArea = modelBuilder.Entity<NetworkDiagramArea>();
+        networkDiagramArea.ToTable("NetworkDiagramAreas");
+        networkDiagramArea.HasKey(x => x.AreaId);
+        networkDiagramArea.Property(x => x.AreaId).HasMaxLength(64);
+        networkDiagramArea.Property(x => x.DiagramId).HasMaxLength(64).IsRequired();
+        networkDiagramArea.Property(x => x.Label).HasMaxLength(255).IsRequired();
+        networkDiagramArea.Property(x => x.Notes).HasMaxLength(2048);
+        networkDiagramArea.Property(x => x.StyleKey).HasMaxLength(64);
+        networkDiagramArea.Property(x => x.SortOrder).IsRequired();
+        networkDiagramArea.Property(x => x.CreatedAtUtc).IsRequired();
+        networkDiagramArea.Property(x => x.UpdatedAtUtc).IsRequired();
+        networkDiagramArea.HasIndex(x => x.DiagramId);
+        networkDiagramArea.HasOne(x => x.Diagram)
+            .WithMany(x => x.Areas)
+            .HasForeignKey(x => x.DiagramId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         var networkDiagramNode = modelBuilder.Entity<NetworkDiagramNode>();
         networkDiagramNode.ToTable("NetworkDiagramNodes");

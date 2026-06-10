@@ -9,6 +9,7 @@
     const canvas = editor.querySelector('[data-diagram-canvas]');
     const world = editor.querySelector('[data-diagram-world]');
     const nodeLayer = editor.querySelector('[data-node-layer]');
+    const areaLayer = editor.querySelector('[data-area-layer]');
     const linkLayer = editor.querySelector('[data-link-layer]');
     const emptyState = editor.querySelector('[data-empty-state]');
     const sizeLabel = editor.querySelector('[data-canvas-size]');
@@ -22,6 +23,7 @@
     const deleteSelectionButtons = Array.from(editor.querySelectorAll('[data-delete-selection]'));
     const addButtons = Array.from(editor.querySelectorAll('[data-add-node]'));
     const addEndpointButtons = Array.from(editor.querySelectorAll('[data-add-endpoint-node]'));
+    const addAreaButton = editor.querySelector('[data-add-area]');
     const endpointSearchInput = editor.querySelector('[data-endpoint-search]');
     const clearEndpointSearchButton = editor.querySelector('[data-clear-endpoint-search]');
     const endpointGroupFilter = editor.querySelector('[data-endpoint-group-filter]');
@@ -35,9 +37,11 @@
     const nodeProperties = editor.querySelector('[data-node-properties]');
     const multiNodeProperties = editor.querySelector('[data-multi-node-properties]');
     const linkProperties = editor.querySelector('[data-link-properties]');
+    const areaProperties = editor.querySelector('[data-area-properties]');
     const noSelectionPanel = editor.querySelector('[data-no-selection-panel]');
     const nodeFields = Array.from(editor.querySelectorAll('[data-node-field]'));
     const linkFields = Array.from(editor.querySelectorAll('[data-link-field]'));
+    const areaFields = Array.from(editor.querySelectorAll('[data-area-field]'));
     const selectedNodeKindLabel = editor.querySelector('[data-selected-node-kind]');
     const selectedNodeEndpointDetails = editor.querySelector('[data-selected-node-endpoint-details]');
     const selectedNodeEndpointName = editor.querySelector('[data-selected-node-endpoint-name]');
@@ -71,7 +75,7 @@
     const exportPngUrl = editor.dataset.exportPngUrl || '';
     const exportSvgUrl = editor.dataset.exportSvgUrl || '';
 
-    if (!canvasHost || !canvas || !world || !nodeLayer || !linkLayer) {
+    if (!canvasHost || !canvas || !world || !areaLayer || !nodeLayer || !linkLayer) {
         return;
     }
 
@@ -117,8 +121,10 @@
     const state = {
         nodes: [],
         links: [],
+        areas: [],
         selectedNodeIds: [],
         selectedLinkId: null,
+        selectedAreaId: null,
         activeSelectionType: 'none',
         currentTool: 'select',
         zoom: 1,
@@ -136,6 +142,7 @@
 
     let nodeSequence = 0;
     let linkSequence = 0;
+    let areaSequence = 0;
     let dragState = null;
     let panState = null;
     let pendingLinkSourceId = null;
@@ -270,7 +277,7 @@
 
     function setEmptyState() {
         if (emptyState) {
-            emptyState.hidden = state.nodes.length > 0;
+            emptyState.hidden = state.nodes.length > 0 || state.areas.length > 0;
         }
     }
 
@@ -292,6 +299,16 @@
 
     function makeClientId(prefix) {
         return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    function getNextAreaPosition()
+    {
+        areaSequence += 1;
+        const center = getVisibleWorldCenter();
+        const width = 600;
+        const height = 350;
+        const offset = ((areaSequence - 1) % 6) * 34;
+        return { id: makeClientId('diagram-area'), x: clamp(center.x - width / 2 + offset, -1000, state.virtualCanvasWidth - 80), y: clamp(center.y - height / 2 + offset, -1000, state.virtualCanvasHeight - 60), width, height };
     }
 
     function getNextNodePosition() {
@@ -496,6 +513,64 @@
         });
     }
 
+
+    function normalizeAreaStyleKey(value) {
+        const requested = String(value || 'neutral').trim().toLowerCase();
+        return ['neutral', 'blue', 'green', 'amber', 'red', 'purple'].includes(requested) ? requested : 'neutral';
+    }
+
+    function applyAreaPosition(area) {
+        area.element.style.transform = `translate(${Math.round(area.x)}px, ${Math.round(area.y)}px)`;
+        area.element.style.width = `${Math.round(area.width)}px`;
+        area.element.style.height = `${Math.round(area.height)}px`;
+    }
+
+    function updateAreaElement(area) {
+        area.element.dataset.styleKey = normalizeAreaStyleKey(area.styleKey);
+        const label = area.element.querySelector('[data-area-label]');
+        if (label) { label.textContent = area.label || 'Area'; }
+        const notes = area.element.querySelector('[data-area-notes]');
+        if (notes) {
+            notes.textContent = area.notes || '';
+            notes.hidden = !area.notes;
+        }
+        area.element.setAttribute('aria-label', `${area.label || 'Area'} visual area box`);
+        applyAreaPosition(area);
+    }
+
+    function createAreaElement(area) {
+        const element = document.createElement('div');
+        element.className = 'diagram-area';
+        element.tabIndex = 0;
+        element.setAttribute('role', 'button');
+        element.dataset.areaId = area.id;
+        element.dataset.selected = 'false';
+        const header = document.createElement('div');
+        header.className = 'diagram-area-header';
+        header.dataset.areaDragHandle = 'true';
+        header.innerHTML = '<span data-area-label></span>';
+        const notes = document.createElement('div');
+        notes.className = 'diagram-area-notes';
+        notes.dataset.areaNotes = 'true';
+        const resize = document.createElement('span');
+        resize.className = 'diagram-area-resize-handle';
+        resize.dataset.areaResizeHandle = 'true';
+        resize.setAttribute('aria-hidden', 'true');
+        element.append(header, notes, resize);
+        return element;
+    }
+
+    function addArea() {
+        const position = getNextAreaPosition();
+        const area = { id: position.id, label: 'New area', notes: '', x: position.x, y: position.y, width: position.width, height: position.height, styleKey: 'neutral', sortOrder: state.areas.length, element: null };
+        area.element = createAreaElement(area);
+        areaLayer.appendChild(area.element);
+        state.areas.push(area);
+        updateAreaElement(area);
+        selectArea(area.id);
+        markDirty();
+    }
+
     function findNodeByElement(element) {
         return state.nodes.find(node => node.element === element);
     }
@@ -508,17 +583,28 @@
         return state.links.find(link => link.id === linkId) || null;
     }
 
+    function findAreaById(areaId) {
+        return state.areas.find(area => area.id === areaId) || null;
+    }
+
+    function selectedArea() {
+        return state.selectedAreaId ? findAreaById(state.selectedAreaId) : null;
+    }
+
     function selectedNodes() {
         return state.selectedNodeIds.map(findNodeById).filter(Boolean);
     }
 
     function hasSelection() {
-        return state.selectedNodeIds.length > 0 || Boolean(state.selectedLinkId);
+        return state.selectedNodeIds.length > 0 || Boolean(state.selectedLinkId) || Boolean(state.selectedAreaId);
     }
 
     function syncSelectionDom() {
         state.nodes.forEach(node => {
             node.element.dataset.selected = state.selectedNodeIds.includes(node.id) ? 'true' : 'false';
+        });
+        state.areas.forEach(area => {
+            area.element.dataset.selected = state.selectedAreaId === area.id ? 'true' : 'false';
         });
         renderLinks();
         updatePropertiesPanel();
@@ -545,12 +631,14 @@
     function selectOnlyNode(nodeId) {
         state.selectedNodeIds = [nodeId];
         state.selectedLinkId = null;
+        state.selectedAreaId = null;
         state.activeSelectionType = 'nodes';
         syncSelectionDom();
     }
 
     function toggleNodeSelection(nodeId) {
         state.selectedLinkId = null;
+        state.selectedAreaId = null;
         if (state.selectedNodeIds.includes(nodeId)) {
             state.selectedNodeIds = state.selectedNodeIds.filter(id => id !== nodeId);
         } else {
@@ -564,6 +652,7 @@
     function selectAllNodes() {
         state.selectedNodeIds = state.nodes.map(node => node.id);
         state.selectedLinkId = null;
+        state.selectedAreaId = null;
         state.activeSelectionType = state.selectedNodeIds.length > 0 ? 'nodes' : 'none';
         syncSelectionDom();
     }
@@ -571,6 +660,7 @@
     function clearSelection() {
         state.selectedNodeIds = [];
         state.selectedLinkId = null;
+        state.selectedAreaId = null;
         state.activeSelectionType = 'none';
         syncSelectionDom();
     }
@@ -578,7 +668,16 @@
     function selectLink(linkId) {
         state.selectedLinkId = linkId;
         state.selectedNodeIds = [];
+        state.selectedAreaId = null;
         state.activeSelectionType = 'link';
+        syncSelectionDom();
+    }
+
+    function selectArea(areaId) {
+        state.selectedAreaId = areaId;
+        state.selectedLinkId = null;
+        state.selectedNodeIds = [];
+        state.activeSelectionType = 'area';
         syncSelectionDom();
     }
 
@@ -730,6 +829,37 @@
         };
     }
 
+
+    function handleAreaPointerDown(event) {
+        const target = event.target instanceof Element ? event.target : null;
+        const areaElement = target?.closest('.diagram-area');
+        if (!areaElement || event.button !== 0 || state.currentTool !== 'select') {
+            return;
+        }
+
+        const area = findAreaById(areaElement.dataset.areaId);
+        if (!area) {
+            return;
+        }
+
+        selectArea(area.id);
+        const pointer = screenToWorld(event.clientX, event.clientY);
+        const isResize = Boolean(target?.closest('[data-area-resize-handle]'));
+        dragState = {
+            pointerId: event.pointerId,
+            area,
+            mode: isResize ? 'resize-area' : 'move-area',
+            startPointer: pointer,
+            startArea: { x: area.x, y: area.y, width: area.width, height: area.height },
+            moved: false
+        };
+        area.element.dataset.dragging = 'true';
+        area.element.setPointerCapture(event.pointerId);
+        area.element.focus({ preventScroll: true });
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
     function handleNodePointerDown(event) {
         const target = event.target.closest('.diagram-node');
         if (!target || !nodeLayer.contains(target)) {
@@ -791,6 +921,25 @@
         const pointer = screenToWorld(event.clientX, event.clientY);
         const requestedDeltaX = pointer.x - dragState.startPointer.x;
         const requestedDeltaY = pointer.y - dragState.startPointer.y;
+
+        if (dragState.area) {
+            const area = dragState.area;
+            if (dragState.mode === 'resize-area') {
+                area.width = clamp(dragState.startArea.width + requestedDeltaX, 80, 20000);
+                area.height = clamp(dragState.startArea.height + requestedDeltaY, 60, 20000);
+            } else {
+                area.x = clamp(dragState.startArea.x + requestedDeltaX, -1000, state.virtualCanvasWidth - 80);
+                area.y = clamp(dragState.startArea.y + requestedDeltaY, -1000, state.virtualCanvasHeight - 60);
+            }
+
+            dragState.moved = dragState.moved || Math.abs(requestedDeltaX) > 1 || Math.abs(requestedDeltaY) > 1;
+            updateAreaElement(area);
+            markDirty();
+            updatePropertiesPanel();
+            event.preventDefault();
+            return;
+        }
+
         const { deltaX, deltaY } = clampGroupDelta(dragState.nodes, requestedDeltaX, requestedDeltaY, dragState.startPositions);
         dragState.moved = dragState.moved || Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1;
 
@@ -812,6 +961,19 @@
 
     function endDrag(event) {
         if (!dragState || dragState.pointerId !== event.pointerId) {
+            return;
+        }
+
+        if (dragState.area) {
+            const area = dragState.area;
+            area.element.dataset.dragging = 'false';
+            if (area.element.hasPointerCapture(event.pointerId)) {
+                area.element.releasePointerCapture(event.pointerId);
+            }
+            const moved = dragState.moved;
+            dragState = null;
+            if (moved) { markDirty(); }
+            updatePropertiesPanel();
             return;
         }
 
@@ -1102,12 +1264,17 @@
 
     function updatePropertiesPanel() {
         const selectedLink = state.selectedLinkId ? findLinkById(state.selectedLinkId) : null;
+        const area = selectedArea();
         const nodes = selectedNodes();
         const singleNode = nodes.length === 1 ? nodes[0] : null;
         const multipleNodes = nodes.length > 1;
 
         if (noSelectionPanel) {
-            noSelectionPanel.hidden = Boolean(selectedLink) || Boolean(singleNode) || multipleNodes;
+            noSelectionPanel.hidden = Boolean(selectedLink) || Boolean(area) || Boolean(singleNode) || multipleNodes;
+        }
+
+        if (areaProperties) {
+            areaProperties.hidden = !area;
         }
 
         if (nodeProperties) {
@@ -1157,6 +1324,15 @@
         if (selectedNodeCount) {
             selectedNodeCount.textContent = String(nodes.length);
         }
+
+        areaFields.forEach(field => {
+            const propertyName = field.dataset.areaField;
+            if (!area || !propertyName) {
+                field.value = '';
+            } else {
+                field.value = area[propertyName] ?? '';
+            }
+        });
 
         nodeFields.forEach(field => {
             const propertyName = field.dataset.nodeField;
@@ -1272,6 +1448,30 @@
             inputs[3].addEventListener('input', event => { vlan.notes = event.currentTarget.value; markDirty(); });
             linkVlanList.appendChild(card);
         });
+    }
+
+
+    function updateSelectedAreaField(event) {
+        const area = selectedArea();
+        const field = event.currentTarget;
+        const propertyName = field.dataset.areaField;
+        if (!area || !propertyName) {
+            return;
+        }
+
+        if (['x', 'y', 'width', 'height'].includes(propertyName)) {
+            const min = propertyName === 'width' ? 80 : propertyName === 'height' ? 60 : -1000;
+            const max = propertyName === 'x' || propertyName === 'y' ? 21000 : 20000;
+            area[propertyName] = clamp(Number(field.value) || 0, min, max);
+        } else if (propertyName === 'styleKey') {
+            area.styleKey = normalizeAreaStyleKey(field.value);
+        } else {
+            area[propertyName] = field.value;
+        }
+
+        updateAreaElement(area);
+        markDirty();
+        updatePropertiesPanel();
     }
 
     function updateSelectedNodeField(event) {
@@ -1394,6 +1594,21 @@
     }
 
     function deleteSelection() {
+        if (state.selectedAreaId) {
+            const confirmed = window.confirm('Remove selected area box from this draft diagram only? Nodes, links, endpoints, monitoring data, dependencies, alerts, and agents will not be changed.');
+            if (!confirmed) {
+                return;
+            }
+
+            const area = selectedArea();
+            area?.element.remove();
+            state.areas = state.areas.filter(existing => existing.id !== state.selectedAreaId);
+            state.selectedAreaId = null;
+            markDirty();
+            syncSelectionDom();
+            return;
+        }
+
         if (state.selectedNodeIds.length > 0) {
             const confirmed = window.confirm('Remove selected item(s) from this draft diagram only? Monitored endpoints and monitoring data will not be deleted.');
             if (!confirmed) {
@@ -1463,17 +1678,21 @@
     }
 
     function fitContent() {
-        if (state.nodes.length === 0) {
+        if (state.nodes.length === 0 && state.areas.length === 0) {
             resetView();
             return;
         }
 
         const padding = 96;
         const rect = getCanvasRect();
-        const minX = Math.min(...state.nodes.map(node => node.x));
-        const minY = Math.min(...state.nodes.map(node => node.y));
-        const maxX = Math.max(...state.nodes.map(node => node.x + getNodeWidth(node)));
-        const maxY = Math.max(...state.nodes.map(node => node.y + getNodeHeight(node)));
+        const items = [
+            ...state.areas.map(area => ({ x: area.x, y: area.y, width: area.width, height: area.height })),
+            ...state.nodes.map(node => ({ x: node.x, y: node.y, width: getNodeWidth(node), height: getNodeHeight(node) }))
+        ];
+        const minX = Math.min(...items.map(item => item.x));
+        const minY = Math.min(...items.map(item => item.y));
+        const maxX = Math.max(...items.map(item => item.x + item.width));
+        const maxY = Math.max(...items.map(item => item.y + item.height));
         const contentWidth = Math.max(1, maxX - minX);
         const contentHeight = Math.max(1, maxY - minY);
         const nextZoom = clamp(Math.min(
@@ -1489,7 +1708,7 @@
     }
 
     function beginPan(event) {
-        if (event.button !== 0 || event.target.closest('.diagram-node') || event.target.closest('.diagram-link-group')) {
+        if (event.button !== 0 || event.target.closest('.diagram-node') || event.target.closest('.diagram-area') || event.target.closest('.diagram-link-group')) {
             return;
         }
 
@@ -1607,6 +1826,26 @@
         return { nodeType: 'generic-device', nodeKind: 'custom-device' };
     }
 
+
+    function addLoadedArea(savedArea) {
+        const area = {
+            id: savedArea.areaId,
+            label: savedArea.label || 'Area',
+            notes: savedArea.notes || '',
+            x: Number(savedArea.x) || 0,
+            y: Number(savedArea.y) || 0,
+            width: Math.max(80, Number(savedArea.width) || 600),
+            height: Math.max(60, Number(savedArea.height) || 350),
+            styleKey: normalizeAreaStyleKey(savedArea.styleKey),
+            sortOrder: Number(savedArea.sortOrder) || state.areas.length,
+            element: null
+        };
+        area.element = createAreaElement(area);
+        areaLayer.appendChild(area.element);
+        state.areas.push(area);
+        updateAreaElement(area);
+    }
+
     function addLoadedNode(savedNode) {
         const normalized = normalizeNodeType(savedNode.nodeType);
         const node = {
@@ -1668,8 +1907,11 @@
         state.panY = diagram.viewportPanY || 0;
         state.zoom = diagram.viewportZoom || 1;
         nodeLayer.replaceChildren();
+        areaLayer.replaceChildren();
         state.nodes = [];
         state.links = [];
+        state.areas = [];
+        (diagram.areas || []).forEach(addLoadedArea);
         (diagram.nodes || []).forEach(addLoadedNode);
         updateEndpointToolboxFilters();
         state.links = (diagram.links || []).map(link => ({
@@ -1719,6 +1961,17 @@
             viewportPanX: state.panX,
             viewportPanY: state.panY,
             viewportZoom: state.zoom,
+            areas: state.areas.map((area, index) => ({
+                areaId: area.id,
+                label: area.label || 'Area',
+                notes: area.notes || null,
+                x: Number(area.x) || 0,
+                y: Number(area.y) || 0,
+                width: Math.max(80, Number(area.width) || 600),
+                height: Math.max(60, Number(area.height) || 350),
+                styleKey: normalizeAreaStyleKey(area.styleKey),
+                sortOrder: index
+            })),
             nodes: state.nodes.map(node => ({
                 nodeId: node.id,
                 nodeType: toServerNodeType(node),
@@ -1837,6 +2090,8 @@
         button.addEventListener('click', () => addEndpointNode(button));
     });
 
+    addAreaButton?.addEventListener('click', addArea);
+
     endpointSearchInput?.addEventListener('input', updateEndpointToolboxFilters);
     endpointSearchInput?.addEventListener('keydown', event => {
         event.stopPropagation();
@@ -1876,6 +2131,10 @@
             drawLinkTypeSelect.value = state.selectedDrawLinkType;
         });
     }
+
+    areaFields.forEach(field => {
+        field.addEventListener('input', updateSelectedAreaField);
+    });
 
     nodeFields.forEach(field => {
         field.addEventListener('input', updateSelectedNodeField);
@@ -1944,6 +2203,7 @@
         event.returnValue = '';
     });
 
+    areaLayer?.addEventListener('pointerdown', handleAreaPointerDown);
     nodeLayer.addEventListener('pointerdown', handleNodePointerDown);
     nodeLayer.addEventListener('pointermove', moveDrag);
     nodeLayer.addEventListener('pointerup', endDrag);

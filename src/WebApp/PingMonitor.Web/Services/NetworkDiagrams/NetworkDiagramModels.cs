@@ -216,8 +216,22 @@ public sealed class NetworkDiagramSaveRequest
     public double ViewportPanX { get; init; }
     public double ViewportPanY { get; init; }
     public double ViewportZoom { get; init; }
+    public IReadOnlyList<NetworkDiagramAreaSaveRequest> Areas { get; init; } = [];
     public IReadOnlyList<NetworkDiagramNodeSaveRequest> Nodes { get; init; } = [];
     public IReadOnlyList<NetworkDiagramLinkSaveRequest> Links { get; init; } = [];
+}
+
+public sealed class NetworkDiagramAreaSaveRequest
+{
+    public string AreaId { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public string? Notes { get; init; }
+    public double X { get; init; }
+    public double Y { get; init; }
+    public double Width { get; init; }
+    public double Height { get; init; }
+    public string? StyleKey { get; init; }
+    public int SortOrder { get; init; }
 }
 
 public sealed class NetworkDiagramNodeSaveRequest
@@ -275,8 +289,22 @@ public sealed class NetworkDiagramDto
     public double ViewportPanY { get; init; }
     public double ViewportZoom { get; init; }
     public DateTimeOffset UpdatedAtUtc { get; init; }
+    public IReadOnlyList<NetworkDiagramAreaDto> Areas { get; init; } = [];
     public IReadOnlyList<NetworkDiagramNodeDto> Nodes { get; init; } = [];
     public IReadOnlyList<NetworkDiagramLinkDto> Links { get; init; } = [];
+}
+
+public sealed class NetworkDiagramAreaDto
+{
+    public string AreaId { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public string? Notes { get; init; }
+    public double X { get; init; }
+    public double Y { get; init; }
+    public double Width { get; init; }
+    public double Height { get; init; }
+    public string? StyleKey { get; init; }
+    public int SortOrder { get; init; }
 }
 
 public sealed class NetworkDiagramNodeDto

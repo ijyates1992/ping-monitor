@@ -46,6 +46,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "PendingTelegramLinks",
         "TelegramAccounts",
         "NetworkDiagrams",
+        "NetworkDiagramAreas",
         "NetworkDiagramNodes",
         "NetworkDiagramLinks",
         "NetworkDiagramLinkVlans"
@@ -66,6 +67,22 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "CreatedByUserId",
         "UpdatedByUserId"
     ];
+    private static readonly string[] RequiredNetworkDiagramAreaColumns =
+    [
+        "AreaId",
+        "DiagramId",
+        "Label",
+        "Notes",
+        "X",
+        "Y",
+        "Width",
+        "Height",
+        "StyleKey",
+        "SortOrder",
+        "CreatedAtUtc",
+        "UpdatedAtUtc"
+    ];
+
     private static readonly string[] RequiredNetworkDiagramNodeColumns =
     [
         "NodeId",
@@ -419,6 +436,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"NetworkDiagrams table is missing required columns: {string.Join(", ", missingNetworkDiagramColumns)}.");
+            return status;
+        }
+        var missingNetworkDiagramAreaColumns = await GetMissingColumnsAsync(connection, "NetworkDiagramAreas", RequiredNetworkDiagramAreaColumns, cancellationToken);
+        if (missingNetworkDiagramAreaColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"NetworkDiagramAreas table is missing required columns: {string.Join(", ", missingNetworkDiagramAreaColumns)}.");
             return status;
         }
         var missingNetworkDiagramNodeColumns = await GetMissingColumnsAsync(connection, "NetworkDiagramNodes", RequiredNetworkDiagramNodeColumns, cancellationToken);
@@ -883,6 +907,27 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             );
             """;
 
+
+        const string createNetworkDiagramAreasSql = """
+            CREATE TABLE IF NOT EXISTS `NetworkDiagramAreas` (
+                `AreaId` varchar(64) NOT NULL,
+                `DiagramId` varchar(64) NOT NULL,
+                `Label` varchar(255) NOT NULL,
+                `Notes` varchar(2048) NULL,
+                `X` double NOT NULL,
+                `Y` double NOT NULL,
+                `Width` double NOT NULL DEFAULT 600,
+                `Height` double NOT NULL DEFAULT 350,
+                `StyleKey` varchar(64) NULL,
+                `SortOrder` int NOT NULL DEFAULT 0,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AreaId`),
+                KEY `IX_NetworkDiagramAreas_DiagramId` (`DiagramId`),
+                CONSTRAINT `FK_NetworkDiagramAreas_NetworkDiagrams_DiagramId` FOREIGN KEY (`DiagramId`) REFERENCES `NetworkDiagrams` (`DiagramId`) ON DELETE CASCADE
+            );
+            """;
+
         const string createNetworkDiagramNodesSql = """
             CREATE TABLE IF NOT EXISTS `NetworkDiagramNodes` (
                 `NodeId` varchar(64) NOT NULL,
@@ -974,6 +1019,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createUserGroupAccessesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserEndpointAccessesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramAreasSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramNodesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramLinksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNetworkDiagramLinkVlansSql, cancellationToken);
@@ -988,6 +1034,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureAspNetUsersColumnsAsync(dbContext, cancellationToken);
         await EnsureCheckResultsNormalizedSchemaAsync(dbContext, cancellationToken);
         await EnsureRttPrecisionSchemaAsync(dbContext, cancellationToken);
+        await EnsureNetworkDiagramAreaTableAsync(dbContext, cancellationToken);
         await EnsureNetworkDiagramLinkMetadataColumnsAsync(dbContext, cancellationToken);
         await EnsureNetworkDiagramLinkVlanTableAsync(dbContext, cancellationToken);
         await EnsureMetricsIndexesAsync(dbContext, cancellationToken);
@@ -995,6 +1042,30 @@ internal sealed class StartupSchemaService : IStartupSchemaService
     }
 
 
+
+
+    private static async Task EnsureNetworkDiagramAreaTableAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS `NetworkDiagramAreas` (
+                `AreaId` varchar(64) NOT NULL,
+                `DiagramId` varchar(64) NOT NULL,
+                `Label` varchar(255) NOT NULL,
+                `Notes` varchar(2048) NULL,
+                `X` double NOT NULL,
+                `Y` double NOT NULL,
+                `Width` double NOT NULL DEFAULT 600,
+                `Height` double NOT NULL DEFAULT 350,
+                `StyleKey` varchar(64) NULL,
+                `SortOrder` int NOT NULL DEFAULT 0,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AreaId`),
+                KEY `IX_NetworkDiagramAreas_DiagramId` (`DiagramId`),
+                CONSTRAINT `FK_NetworkDiagramAreas_NetworkDiagrams_DiagramId` FOREIGN KEY (`DiagramId`) REFERENCES `NetworkDiagrams` (`DiagramId`) ON DELETE CASCADE
+            );
+            """, cancellationToken);
+    }
 
     private static async Task EnsureNetworkDiagramLinkVlanTableAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {

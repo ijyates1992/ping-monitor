@@ -14,6 +14,7 @@ public sealed class NetworkDiagram
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public string? CreatedByUserId { get; set; }
     public string? UpdatedByUserId { get; set; }
+    public List<NetworkDiagramArea> Areas { get; set; } = [];
     public List<NetworkDiagramNode> Nodes { get; set; } = [];
     public List<NetworkDiagramLink> Links { get; set; } = [];
 }
