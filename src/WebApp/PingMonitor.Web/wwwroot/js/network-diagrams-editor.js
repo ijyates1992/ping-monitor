@@ -538,6 +538,15 @@
         applyAreaPosition(area);
     }
 
+    function createAreaBorderHit(target, label) {
+        const border = document.createElement('span');
+        border.className = `diagram-area-border-hit diagram-area-border-hit-${target}`;
+        border.dataset.areaDragHandle = 'true';
+        border.setAttribute('aria-hidden', 'true');
+        border.title = `${label} area border - drag to move`;
+        return border;
+    }
+
     function createAreaElement(area) {
         const element = document.createElement('div');
         element.className = 'diagram-area';
@@ -556,7 +565,15 @@
         resize.className = 'diagram-area-resize-handle';
         resize.dataset.areaResizeHandle = 'true';
         resize.setAttribute('aria-hidden', 'true');
-        element.append(header, notes, resize);
+        resize.title = 'Resize area box';
+        element.append(
+            createAreaBorderHit('top', 'Top'),
+            createAreaBorderHit('right', 'Right'),
+            createAreaBorderHit('bottom', 'Bottom'),
+            createAreaBorderHit('left', 'Left'),
+            header,
+            notes,
+            resize);
         return element;
     }
 
@@ -845,6 +862,10 @@
         selectArea(area.id);
         const pointer = screenToWorld(event.clientX, event.clientY);
         const isResize = Boolean(target?.closest('[data-area-resize-handle]'));
+        const canMove = Boolean(target?.closest('[data-area-drag-handle]')) || target === areaElement;
+        if (!isResize && !canMove) {
+            return;
+        }
         dragState = {
             pointerId: event.pointerId,
             area,
@@ -1329,6 +1350,8 @@
             const propertyName = field.dataset.areaField;
             if (!area || !propertyName) {
                 field.value = '';
+            } else if (['x', 'y', 'width', 'height'].includes(propertyName)) {
+                field.value = String(Math.round(Number(area[propertyName]) || 0));
             } else {
                 field.value = area[propertyName] ?? '';
             }
@@ -2133,7 +2156,8 @@
     }
 
     areaFields.forEach(field => {
-        field.addEventListener('input', updateSelectedAreaField);
+        const eventName = field.tagName === 'SELECT' ? 'change' : 'input';
+        field.addEventListener(eventName, updateSelectedAreaField);
     });
 
     nodeFields.forEach(field => {

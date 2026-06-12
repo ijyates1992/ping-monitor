@@ -165,6 +165,28 @@ public sealed class NetworkDiagramsFeatureTests
 
 
     [Fact]
+    public void NetworkDiagramEditor_AreaBoxesExposeMouseInteractionAndStyleHooks()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var viewMarkup = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Views", "NetworkDiagrams", "Edit.cshtml"));
+        var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-editor.js"));
+        var styles = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "css", "network-diagrams.css"));
+
+        Assert.Contains("data-area-properties", viewMarkup);
+        Assert.Contains("Advanced geometry", viewMarkup);
+        Assert.Contains("Move and resize area boxes directly on the canvas", viewMarkup);
+        Assert.Contains("createAreaBorderHit", script);
+        Assert.Contains("areaDragHandle", script);
+        Assert.Contains("areaResizeHandle", script);
+        Assert.Contains("selectArea(area.id)", script);
+        Assert.Contains("mode: isResize ? 'resize-area' : 'move-area'", script);
+        Assert.Contains("diagram-area-border-hit", styles);
+        Assert.Contains("html[data-theme=\"dark\"] .diagram-area[data-style-key=\"blue\"]", styles);
+        Assert.Contains("diagram-area[data-style-key=\"purple\"]", styles);
+    }
+
+
+    [Fact]
     public void NetworkDiagramEditor_ViewIncludesEndpointToolboxFilters()
     {
         var repoRoot = FindRepositoryRoot();

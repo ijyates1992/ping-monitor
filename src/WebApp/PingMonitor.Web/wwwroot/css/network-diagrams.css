@@ -1464,6 +1464,43 @@ html[data-theme="dark"] .diagram-link-port-label {
 .diagram-area[data-style-key="red"] { border-color: rgba(220, 38, 38, .76); background: rgba(248, 113, 113, .13); }
 .diagram-area[data-style-key="purple"] { border-color: rgba(124, 58, 237, .76); background: rgba(167, 139, 250, .14); }
 
+.diagram-area-border-hit {
+    position: absolute;
+    z-index: 1;
+    pointer-events: auto;
+    cursor: grab;
+}
+
+.diagram-area-border-hit-top,
+.diagram-area-border-hit-bottom {
+    left: -6px;
+    right: -6px;
+    height: 16px;
+}
+
+.diagram-area-border-hit-top {
+    top: -8px;
+}
+
+.diagram-area-border-hit-bottom {
+    bottom: -8px;
+}
+
+.diagram-area-border-hit-left,
+.diagram-area-border-hit-right {
+    top: -6px;
+    bottom: -6px;
+    width: 16px;
+}
+
+.diagram-area-border-hit-left {
+    left: -8px;
+}
+
+.diagram-area-border-hit-right {
+    right: -8px;
+}
+
 .diagram-area-header {
     display: inline-flex;
     align-items: center;
@@ -1483,6 +1520,8 @@ html[data-theme="dark"] .diagram-link-port-label {
     white-space: nowrap;
     pointer-events: auto;
     cursor: grab;
+    position: relative;
+    z-index: 2;
 }
 
 .diagram-area-notes {
@@ -1511,6 +1550,7 @@ html[data-theme="dark"] .diagram-link-port-label {
     box-shadow: 0 2px 8px rgba(16, 24, 40, .24);
     pointer-events: auto;
     cursor: nwse-resize;
+    z-index: 3;
 }
 
 .diagram-area[data-selected="true"] {
@@ -1521,6 +1561,21 @@ html[data-theme="dark"] .diagram-link-port-label {
 
 .diagram-area[data-selected="false"] .diagram-area-resize-handle {
     display: none;
+}
+
+.area-geometry-details {
+    border: 1px solid var(--diagram-border);
+    border-radius: 12px;
+    padding: .65rem .75rem;
+    background: var(--diagram-panel-subtle);
+}
+
+.area-geometry-details summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 900;
 }
 
 .area-geometry-fields {
@@ -1539,3 +1594,9 @@ html[data-theme="dark"] .diagram-area-header {
     background: rgba(15, 23, 42, .86);
     border-color: rgba(148, 163, 184, .32);
 }
+
+html[data-theme="dark"] .diagram-area[data-style-key="blue"] { border-color: rgba(96, 165, 250, .9); background: rgba(37, 99, 235, .22); }
+html[data-theme="dark"] .diagram-area[data-style-key="green"] { border-color: rgba(52, 211, 153, .9); background: rgba(5, 150, 105, .2); }
+html[data-theme="dark"] .diagram-area[data-style-key="amber"] { border-color: rgba(251, 191, 36, .92); background: rgba(217, 119, 6, .22); }
+html[data-theme="dark"] .diagram-area[data-style-key="red"] { border-color: rgba(248, 113, 113, .9); background: rgba(220, 38, 38, .2); }
+html[data-theme="dark"] .diagram-area[data-style-key="purple"] { border-color: rgba(196, 181, 253, .9); background: rgba(124, 58, 237, .22); }

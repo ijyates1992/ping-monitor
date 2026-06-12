@@ -242,12 +242,16 @@
                             <option value="purple">Purple</option>
                         </select>
                     </label>
-                    <div class="area-geometry-fields">
-                        <label>X<input type="number" data-area-field="x" step="1" /></label>
-                        <label>Y<input type="number" data-area-field="y" step="1" /></label>
-                        <label>Width<input type="number" data-area-field="width" min="80" step="1" /></label>
-                        <label>Height<input type="number" data-area-field="height" min="60" step="1" /></label>
-                    </div>
+                    <details class="area-geometry-details">
+                        <summary>Advanced geometry</summary>
+                        <p class="toolbox-help">Move and resize area boxes directly on the canvas. These rounded values are for precise adjustments only.</p>
+                        <div class="area-geometry-fields">
+                            <label>X<input type="number" data-area-field="x" step="1" /></label>
+                            <label>Y<input type="number" data-area-field="y" step="1" /></label>
+                            <label>Width<input type="number" data-area-field="width" min="80" step="1" /></label>
+                            <label>Height<input type="number" data-area-field="height" min="60" step="1" /></label>
+                        </div>
+                    </details>
                     <button type="button" class="danger-button" data-delete-selection>Delete selected area</button>
                 </form>
                 <form class="node-properties" data-node-properties hidden>
