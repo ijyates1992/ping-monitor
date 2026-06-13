@@ -186,6 +186,9 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains(".diagram-area {", styles);
         Assert.Contains("pointer-events: none;", styles);
         Assert.Contains(".diagram-area-hit", styles);
+        Assert.Contains("Allow area border/header hit targets below the SVG layer to receive clicks.", styles);
+        Assert.Contains(".diagram-link-layer", styles);
+        Assert.Contains("pointer-events: none;", styles);
         Assert.Contains("pointer-events: auto;", styles);
         Assert.Contains(".diagram-area-resize-handle-nw", styles);
         Assert.Contains(".diagram-area-resize-handle-se", styles);
