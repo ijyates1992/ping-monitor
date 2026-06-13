@@ -88,6 +88,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
     {
         var diagram = await _dbContext.NetworkDiagrams
             .AsNoTracking()
+            .Include(x => x.Areas)
             .Include(x => x.Nodes)
             .Include(x => x.Links)
                 .ThenInclude(x => x.Vlans)
@@ -99,6 +100,7 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
     public async Task<NetworkDiagramDto> SaveAsync(string diagramId, NetworkDiagramSaveRequest request, string? userId, CancellationToken cancellationToken)
     {
         var diagram = await _dbContext.NetworkDiagrams
+            .Include(x => x.Areas)
             .Include(x => x.Nodes)
             .Include(x => x.Links)
                 .ThenInclude(x => x.Vlans)
@@ -120,8 +122,29 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
 
         _dbContext.NetworkDiagramLinks.RemoveRange(diagram.Links);
         _dbContext.NetworkDiagramNodes.RemoveRange(diagram.Nodes);
+        _dbContext.NetworkDiagramAreas.RemoveRange(diagram.Areas);
+        diagram.Areas.Clear();
         diagram.Nodes.Clear();
         diagram.Links.Clear();
+
+        foreach (var areaRequest in request.Areas.OrderBy(x => x.SortOrder))
+        {
+            diagram.Areas.Add(new NetworkDiagramArea
+            {
+                AreaId = TrimRequired(areaRequest.AreaId, 64, "Area ID"),
+                DiagramId = diagram.DiagramId,
+                Label = TrimRequired(areaRequest.Label, 255, "Area label"),
+                Notes = TrimOptional(areaRequest.Notes, 2048),
+                X = ClampFinite(areaRequest.X, -1000, 21000, "Area X"),
+                Y = ClampFinite(areaRequest.Y, -1000, 21000, "Area Y"),
+                Width = ClampFinite(areaRequest.Width, 80, 20000, "Area width"),
+                Height = ClampFinite(areaRequest.Height, 60, 20000, "Area height"),
+                StyleKey = NormalizeAreaStyle(areaRequest.StyleKey),
+                SortOrder = areaRequest.SortOrder,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+        }
 
         foreach (var nodeRequest in request.Nodes)
         {
@@ -212,6 +235,24 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
         _ = ClampFinite(request.CanvasHeight, 1000, 20000, "Canvas height");
         _ = ClampFinite(request.ViewportZoom, 0.1, 5, "Viewport zoom");
 
+        var areaIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var area in request.Areas)
+        {
+            var areaId = TrimRequired(area.AreaId, 64, "Area ID");
+            if (!areaIds.Add(areaId))
+            {
+                throw new NetworkDiagramValidationException($"Duplicate area ID '{areaId}'.");
+            }
+
+            _ = TrimRequired(area.Label, 255, "Area label");
+            _ = TrimOptional(area.Notes, 2048);
+            _ = ClampFinite(area.X, -1000, 21000, "Area X");
+            _ = ClampFinite(area.Y, -1000, 21000, "Area Y");
+            _ = ClampFinite(area.Width, 80, 20000, "Area width");
+            _ = ClampFinite(area.Height, 60, 20000, "Area height");
+            _ = NormalizeAreaStyle(area.StyleKey);
+        }
+
         var nodeIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var node in request.Nodes)
         {
@@ -285,6 +326,18 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
             ViewportPanY = diagram.ViewportPanY,
             ViewportZoom = diagram.ViewportZoom,
             UpdatedAtUtc = diagram.UpdatedAtUtc,
+            Areas = diagram.Areas.OrderBy(x => x.SortOrder).ThenBy(x => x.CreatedAtUtc).Select(x => new NetworkDiagramAreaDto
+            {
+                AreaId = x.AreaId,
+                Label = x.Label,
+                Notes = x.Notes,
+                X = x.X,
+                Y = x.Y,
+                Width = x.Width,
+                Height = x.Height,
+                StyleKey = NormalizeAreaStyle(x.StyleKey),
+                SortOrder = x.SortOrder
+            }).ToArray(),
             Nodes = diagram.Nodes.OrderBy(x => x.CreatedAtUtc).Select(x => new NetworkDiagramNodeDto
             {
                 NodeId = x.NodeId,
@@ -329,6 +382,20 @@ internal sealed class NetworkDiagramService : INetworkDiagramService
                 }).ToArray()
             }).ToArray()
         };
+    }
+
+
+    private static string? NormalizeAreaStyle(string? styleKey)
+    {
+        if (string.IsNullOrWhiteSpace(styleKey))
+        {
+            return null;
+        }
+
+        var normalized = styleKey.Trim().ToLowerInvariant();
+        return normalized is "neutral" or "blue" or "green" or "amber" or "red" or "purple"
+            ? normalized
+            : throw new NetworkDiagramValidationException($"Unsupported area style '{styleKey}'.");
     }
 
     private static void ValidateLinkMetadata(NetworkDiagramLinkSaveRequest link)

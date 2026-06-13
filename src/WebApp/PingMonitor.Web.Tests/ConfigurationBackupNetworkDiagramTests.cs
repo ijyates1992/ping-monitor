@@ -25,6 +25,7 @@ public sealed class ConfigurationBackupNetworkDiagramTests
 
         Assert.Contains(ConfigurationBackupSections.NetworkDiagrams, preview.IncludedSections);
         Assert.Equal(1, preview.Counts.NetworkDiagrams);
+        Assert.Equal(1, preview.Counts.NetworkDiagramAreas);
         Assert.Equal(2, preview.Counts.NetworkDiagramNodes);
         Assert.Equal(1, preview.Counts.NetworkDiagramLinks);
         Assert.Equal(1, preview.Counts.NetworkDiagramLinkVlans);
@@ -87,6 +88,51 @@ public sealed class ConfigurationBackupNetworkDiagramTests
         Assert.Contains("invalid VLAN metadata", exception.Message);
     }
 
+    [Fact]
+    public void Validator_RejectsInvalidNetworkDiagramAreaDimensions()
+    {
+        var validator = new ConfigurationBackupDocumentValidator();
+        var section = BuildNetworkDiagramSection();
+        var diagram = section.Diagrams[0];
+        section = new BackupNetworkDiagramSection
+        {
+            Diagrams =
+            [
+                new BackupNetworkDiagramRecord
+                {
+                    DiagramId = diagram.DiagramId,
+                    Name = diagram.Name,
+                    CanvasWidth = diagram.CanvasWidth,
+                    CanvasHeight = diagram.CanvasHeight,
+                    ViewportZoom = diagram.ViewportZoom,
+                    Areas =
+                    [
+                        new BackupNetworkDiagramAreaRecord
+                        {
+                            AreaId = diagram.Areas[0].AreaId,
+                            Label = diagram.Areas[0].Label,
+                            Notes = diagram.Areas[0].Notes,
+                            X = diagram.Areas[0].X,
+                            Y = diagram.Areas[0].Y,
+                            Width = double.NaN,
+                            Height = diagram.Areas[0].Height,
+                            StyleKey = diagram.Areas[0].StyleKey,
+                            SortOrder = diagram.Areas[0].SortOrder,
+                            CreatedAtUtc = diagram.Areas[0].CreatedAtUtc,
+                            UpdatedAtUtc = diagram.Areas[0].UpdatedAtUtc
+                        }
+                    ],
+                    Nodes = diagram.Nodes,
+                    Links = diagram.Links
+                }
+            ]
+        };
+        var document = BuildDocument(section);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => validator.Validate(document, "backup.json"));
+        Assert.Contains("area width", exception.Message);
+    }
+
     private static ConfigurationBackupDocument BuildDocument(BackupNetworkDiagramSection? networkDiagrams)
     {
         return new ConfigurationBackupDocument
@@ -121,6 +167,23 @@ public sealed class ConfigurationBackupNetworkDiagramTests
                     ViewportZoom = 1.25,
                     CreatedAtUtc = DateTimeOffset.UtcNow.AddDays(-1),
                     UpdatedAtUtc = DateTimeOffset.UtcNow,
+                    Areas =
+                    [
+                        new BackupNetworkDiagramAreaRecord
+                        {
+                            AreaId = "area-house",
+                            Label = "House",
+                            Notes = "Main house network",
+                            X = 50,
+                            Y = 75,
+                            Width = 900,
+                            Height = 500,
+                            StyleKey = "blue",
+                            SortOrder = 0,
+                            CreatedAtUtc = DateTimeOffset.UtcNow.AddDays(-1),
+                            UpdatedAtUtc = DateTimeOffset.UtcNow
+                        }
+                    ],
                     Nodes =
                     [
                         new BackupNetworkDiagramNodeRecord

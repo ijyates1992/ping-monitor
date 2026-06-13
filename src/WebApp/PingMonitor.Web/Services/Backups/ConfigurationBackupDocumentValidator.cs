@@ -157,6 +157,31 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
             ValidateFinite(diagram.ViewportPanY, "diagram viewport pan Y");
             ValidateFinite(diagram.ViewportZoom, "diagram viewport zoom");
 
+
+            var areaIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var area in diagram.Areas)
+            {
+                if (string.IsNullOrWhiteSpace(area.AreaId) || string.IsNullOrWhiteSpace(area.Label))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains an invalid area record.");
+                }
+
+                if (!areaIds.Add(area.AreaId))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains duplicate area id '{area.AreaId}'.");
+                }
+
+                ValidateFinite(area.X, "area X");
+                ValidateFinite(area.Y, "area Y");
+                ValidateFinite(area.Width, "area width");
+                ValidateFinite(area.Height, "area height");
+                var styleKey = string.IsNullOrWhiteSpace(area.StyleKey) ? null : area.StyleKey.Trim().ToLowerInvariant();
+                if (styleKey is not null && styleKey is not ("neutral" or "blue" or "green" or "amber" or "red" or "purple"))
+                {
+                    throw new InvalidOperationException($"Network diagram '{diagram.Name}' contains unsupported area style '{area.StyleKey}'.");
+                }
+            }
+
             var nodeIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var node in diagram.Nodes)
             {

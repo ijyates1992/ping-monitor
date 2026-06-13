@@ -40,7 +40,7 @@ public sealed class StartupSchemaServiceTests
 
 
     [Fact]
-    public void NetworkDiagramVlanSchema_IsDeclaredInStartupGateMetadata()
+    public void NetworkDiagramAreaAndVlanSchema_IsDeclaredInStartupGateMetadata()
     {
         var repoRoot = FindRepositoryRoot();
         var sourcePath = Path.Combine(
@@ -58,8 +58,9 @@ public sealed class StartupSchemaServiceTests
         var appRequiredSchemaVersion = ReadRequiredSchemaVersion(appSettingsPath);
         var developmentRequiredSchemaVersion = ReadRequiredSchemaVersion(developmentSettingsPath);
 
+        Assert.Contains("\"NetworkDiagramAreas\"", source);
         Assert.Contains("\"NetworkDiagramLinkVlans\"", source);
-        Assert.Equal(18, appRequiredSchemaVersion);
+        Assert.Equal(19, appRequiredSchemaVersion);
         Assert.Equal(appRequiredSchemaVersion, developmentRequiredSchemaVersion);
     }
 

@@ -474,6 +474,7 @@ public sealed class AdminBackupsController : Controller
                 IdentityRoles = preview.Counts.IdentityRoles,
                 IdentityUserRoles = preview.Counts.IdentityUserRoles,
                 NetworkDiagrams = preview.Counts.NetworkDiagrams,
+                NetworkDiagramAreas = preview.Counts.NetworkDiagramAreas,
                 NetworkDiagramNodes = preview.Counts.NetworkDiagramNodes,
                 NetworkDiagramLinks = preview.Counts.NetworkDiagramLinks,
                 NetworkDiagramLinkVlans = preview.Counts.NetworkDiagramLinkVlans

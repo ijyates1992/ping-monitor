@@ -11,6 +11,7 @@
     const canvas = viewer.querySelector('[data-diagram-canvas]');
     const world = viewer.querySelector('[data-diagram-world]');
     const nodeLayer = viewer.querySelector('[data-node-layer]');
+    const areaLayer = viewer.querySelector('[data-area-layer]');
     const linkLayer = viewer.querySelector('[data-link-layer]');
     const emptyState = viewer.querySelector('[data-empty-state]');
     const zoomLabel = viewer.querySelector('[data-zoom-label]');
@@ -34,6 +35,7 @@
     const state = {
         nodes: [],
         links: [],
+        areas: [],
         overlayByNodeId: new Map(),
         lastOverlayRefreshUtc: null,
         summaryMessage: '',
@@ -91,6 +93,41 @@
         if (serverType === 'MonitoredEndpoint') { return { nodeType: 'monitored-endpoint', nodeKind: 'monitored-endpoint' }; }
         if (serverType === 'Note') { return { nodeType: 'note', nodeKind: 'custom-device' }; }
         return { nodeType: 'generic-device', nodeKind: 'custom-device' };
+    }
+
+    function normalizeAreaStyleKey(value) {
+        const requested = String(value || 'neutral').trim().toLowerCase();
+        return ['neutral', 'blue', 'green', 'amber', 'red', 'purple'].includes(requested) ? requested : 'neutral';
+    }
+
+    function createAreaElement(area) {
+        const element = document.createElement('div');
+        element.className = 'diagram-area diagram-viewer-area';
+        element.dataset.areaId = area.id;
+        element.dataset.styleKey = normalizeAreaStyleKey(area.styleKey);
+        element.setAttribute('aria-label', `${area.label} visual area box`);
+        element.innerHTML = `<div class="diagram-area-header"><span>${escapeHtml(area.label)}</span></div>${area.notes ? `<div class="diagram-area-notes">${escapeHtml(area.notes)}</div>` : ''}`;
+        element.style.transform = `translate(${Math.round(area.x)}px, ${Math.round(area.y)}px)`;
+        element.style.width = `${Math.round(area.width)}px`;
+        element.style.height = `${Math.round(area.height)}px`;
+        return element;
+    }
+
+    function addLoadedArea(savedArea) {
+        const area = {
+            id: savedArea.areaId,
+            label: savedArea.label || 'Area',
+            notes: savedArea.notes || '',
+            x: Number(savedArea.x) || 0,
+            y: Number(savedArea.y) || 0,
+            width: Math.max(80, Number(savedArea.width) || 600),
+            height: Math.max(60, Number(savedArea.height) || 350),
+            styleKey: normalizeAreaStyleKey(savedArea.styleKey),
+            sortOrder: Number(savedArea.sortOrder) || state.areas.length
+        };
+        area.element = createAreaElement(area);
+        areaLayer.appendChild(area.element);
+        state.areas.push(area);
     }
 
     function formatNodeType(type) {
@@ -253,7 +290,7 @@
         });
     }
 
-    function setEmptyState() { emptyState.hidden = state.nodes.length > 0; }
+    function setEmptyState() { emptyState.hidden = state.nodes.length > 0 || state.areas.length > 0; }
     function formatRtt(value) { return value == null ? '—' : `${Number(value).toFixed(1)} ms`; }
     function formatDate(value) { return value ? new Date(value).toLocaleString() : '—'; }
     function stateLabel(value) { return value || 'Unknown'; }
@@ -440,8 +477,9 @@
 
     function resetView() { state.zoom = 1; state.panX = 0; state.panY = 0; updateCanvasSize(); }
     function fitContent() {
-        if (state.nodes.length === 0) { resetView(); return; }
-        const bounds = state.nodes.reduce((acc, node) => ({ minX: Math.min(acc.minX, node.x), minY: Math.min(acc.minY, node.y), maxX: Math.max(acc.maxX, node.x + getNodeWidth(node)), maxY: Math.max(acc.maxY, node.y + getNodeHeight(node)) }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+        if (state.nodes.length === 0 && state.areas.length === 0) { resetView(); return; }
+        const items = [...state.areas.map(area => ({ x: area.x, y: area.y, width: area.width, height: area.height })), ...state.nodes.map(node => ({ x: node.x, y: node.y, width: getNodeWidth(node), height: getNodeHeight(node) }))];
+        const bounds = items.reduce((acc, item) => ({ minX: Math.min(acc.minX, item.x), minY: Math.min(acc.minY, item.y), maxX: Math.max(acc.maxX, item.x + item.width), maxY: Math.max(acc.maxY, item.y + item.height) }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
         const rect = canvas.getBoundingClientRect();
         const padding = 80;
         state.zoom = Math.min(Math.max(Math.min((rect.width - padding) / Math.max(bounds.maxX - bounds.minX, 1), (rect.height - padding) / Math.max(bounds.maxY - bounds.minY, 1)), minZoom), maxZoom);
@@ -485,7 +523,10 @@
         state.panY = diagram.viewportPanY || 0;
         state.zoom = diagram.viewportZoom || 1;
         nodeLayer.replaceChildren();
+        areaLayer.replaceChildren();
         state.nodes = [];
+        state.areas = [];
+        (diagram.areas || []).forEach(addLoadedArea);
         (diagram.nodes || []).forEach(addLoadedNode);
         state.links = (diagram.links || []).map(link => ({ id: link.linkId, sourceNodeId: link.sourceNodeId, targetNodeId: link.targetNodeId, label: link.label || '', sourcePort: link.sourcePortLabel || '', targetPort: link.targetPortLabel || '', notes: link.notes || '', mediaType: normalizeMediaType(link.mediaType, link.linkType), linkType: normalizeLinkType(link.linkType), linkSpeedValue: link.linkSpeedValue, linkSpeedUnit: link.linkSpeedUnit, vlans: normalizeVlans(link.vlans) }));
         setEmptyState();

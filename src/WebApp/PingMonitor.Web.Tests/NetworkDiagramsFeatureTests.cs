@@ -164,6 +164,38 @@ public sealed class NetworkDiagramsFeatureTests
     }
 
 
+
+    [Fact]
+    public void NetworkDiagramEditor_AreaBoxesUseCanvasObjectInteractionGuards()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var viewMarkup = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Views", "NetworkDiagrams", "Edit.cshtml"));
+        var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-editor.js"));
+        var styles = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "css", "network-diagrams.css"));
+
+        Assert.Contains("Advanced coordinates", viewMarkup);
+        Assert.Contains("Drag the area border/header to move it", viewMarkup);
+        Assert.Contains("diagram-area-hit", script);
+        Assert.Contains("resize.dataset.areaResizeHandle = position", script);
+        Assert.Contains("['nw', 'ne', 'sw', 'se']", script);
+        Assert.Contains("resizeAreaFromDrag", script);
+        Assert.Contains("screenToWorld(event.clientX, event.clientY)", script);
+        Assert.Contains("areaLayer?.addEventListener('pointermove', moveDrag)", script);
+        Assert.Contains("areaLayer?.addEventListener('pointerup', endDrag)", script);
+        Assert.Contains("formatDiagramNumber(area[propertyName])", script);
+        Assert.Contains(".diagram-area {", styles);
+        Assert.Contains("pointer-events: none;", styles);
+        Assert.Contains(".diagram-area-hit", styles);
+        Assert.Contains("Allow area border/header hit targets below the SVG layer to receive clicks.", styles);
+        Assert.Contains(".diagram-link-layer", styles);
+        Assert.Contains("pointer-events: none;", styles);
+        Assert.Contains("pointer-events: auto;", styles);
+        Assert.Contains(".diagram-area-resize-handle-nw", styles);
+        Assert.Contains(".diagram-area-resize-handle-se", styles);
+        Assert.Contains(@"html[data-theme=""dark""] .diagram-area[data-style-key=""blue""]", styles);
+        Assert.Contains(@"html[data-theme=""dark""] .diagram-area[data-style-key=""purple""]", styles);
+    }
+
     [Fact]
     public void NetworkDiagramEditor_ViewIncludesEndpointToolboxFilters()
     {

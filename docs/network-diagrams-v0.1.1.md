@@ -471,3 +471,37 @@ Authorization and safety boundary:
 - Test at 1366x768.
 - Confirm custom device buttons still work.
 - Confirm no monitoring, dependency, alerting, Startup Gate, or agent behaviour changed.
+
+## Area / Location Boxes
+
+Network diagrams support persistent area/location boxes for simple visual grouping. Operators can add rectangular boxes labelled for physical or logical regions such as **House**, **Garage**, **Rack**, **Office**, **Server Room**, or **Trading VMs**.
+
+Area boxes are visual annotations only:
+
+- They do **not** create application Groups.
+- They do **not** create endpoint dependencies.
+- They do **not** modify endpoints, agents, monitoring assignments, alerts, or state evaluation.
+- They do **not** perform SNMP discovery or topology discovery.
+
+Area boxes use saved diagram world coordinates and are rendered behind visual links and nodes in the editor, read-only viewer, PNG/SVG exports, and PDF exports. They are included with network diagram configuration backup and restore data so diagram documentation round-trips with the rest of the diagram canvas.
+
+### Manual Regression Checklist - Area / Location Boxes
+
+- Open the diagram editor.
+- Add an area box labelled `House`.
+- Move the area box.
+- Resize the area box using the visible handle.
+- Place nodes visually inside it.
+- Confirm nodes remain selectable and draggable.
+- Save and refresh.
+- Confirm the area box reloads.
+- Edit the label to `Garage` and add notes.
+- Save and refresh.
+- Confirm edits persist.
+- Delete the area box.
+- Confirm nodes and links inside it remain.
+- Add two boxes labelled `House` and `Garage`.
+- Open the read-only viewer and confirm boxes show behind nodes and links.
+- Export PNG and confirm boxes appear in the export.
+- Run configuration backup/restore when practical and confirm area boxes round-trip.
+- Confirm no monitoring, dependency, alert, endpoint, or agent behaviour changed.

@@ -280,12 +280,14 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             var deletedVlans = await _dbContext.NetworkDiagramLinkVlans.ExecuteDeleteAsync(cancellationToken);
             var deletedLinks = await _dbContext.NetworkDiagramLinks.ExecuteDeleteAsync(cancellationToken);
             var deletedNodes = await _dbContext.NetworkDiagramNodes.ExecuteDeleteAsync(cancellationToken);
+            var deletedAreas = await _dbContext.NetworkDiagramAreas.ExecuteDeleteAsync(cancellationToken);
             var deletedDiagrams = await _dbContext.NetworkDiagrams.ExecuteDeleteAsync(cancellationToken);
-            deletedCounts[ConfigurationBackupSections.NetworkDiagrams] = deletedVlans + deletedLinks + deletedNodes + deletedDiagrams;
+            deletedCounts[ConfigurationBackupSections.NetworkDiagrams] = deletedVlans + deletedLinks + deletedNodes + deletedAreas + deletedDiagrams;
             _logger.LogInformation(
-                "Replace delete completed for section {Section}. Deleted diagrams {DiagramCount}, nodes {NodeCount}, links {LinkCount}, VLAN metadata {VlanCount}.",
+                "Replace delete completed for section {Section}. Deleted diagrams {DiagramCount}, areas {AreaCount}, nodes {NodeCount}, links {LinkCount}, VLAN metadata {VlanCount}.",
                 ConfigurationBackupSections.NetworkDiagrams,
                 deletedDiagrams,
+                deletedAreas,
                 deletedNodes,
                 deletedLinks,
                 deletedVlans);
@@ -1019,6 +1021,7 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
         var existingEndpointIds = await _dbContext.Endpoints.AsNoTracking().Select(x => x.EndpointId).ToListAsync(cancellationToken);
         var existingEndpointIdSet = existingEndpointIds.ToHashSet(StringComparer.Ordinal);
         var existingDiagrams = await _dbContext.NetworkDiagrams
+            .Include(x => x.Areas)
             .Include(x => x.Nodes)
             .Include(x => x.Links)
                 .ThenInclude(x => x.Vlans)
@@ -1066,9 +1069,31 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             _dbContext.NetworkDiagramLinkVlans.RemoveRange(target.Links.SelectMany(x => x.Vlans));
             _dbContext.NetworkDiagramLinks.RemoveRange(target.Links);
             _dbContext.NetworkDiagramNodes.RemoveRange(target.Nodes);
+            _dbContext.NetworkDiagramAreas.RemoveRange(target.Areas);
             target.Links.Clear();
             target.Nodes.Clear();
+            target.Areas.Clear();
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+
+            foreach (var sourceArea in sourceDiagram.Areas.OrderBy(x => x.SortOrder).ThenBy(x => x.AreaId))
+            {
+                if (!TryBuildNetworkDiagramArea(sourceDiagram, sourceArea, target.DiagramId, result, out var area))
+                {
+                    result.SkippedCount++;
+                    continue;
+                }
+
+                target.Areas.Add(area);
+                if (!isInsert)
+                {
+                    result.UpdatedCount++;
+                }
+                else
+                {
+                    result.InsertedCount++;
+                }
+            }
 
             var restoredNodeIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var sourceNode in sourceDiagram.Nodes)
@@ -1162,6 +1187,62 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
         }
 
         return true;
+    }
+
+
+    private static bool TryBuildNetworkDiagramArea(
+        BackupNetworkDiagramRecord sourceDiagram,
+        BackupNetworkDiagramAreaRecord sourceArea,
+        string targetDiagramId,
+        RestoreSectionResult result,
+        out NetworkDiagramArea area)
+    {
+        area = new NetworkDiagramArea();
+        if (string.IsNullOrWhiteSpace(sourceArea.AreaId)
+            || string.IsNullOrWhiteSpace(sourceArea.Label)
+            || !IsFinite(sourceArea.X)
+            || !IsFinite(sourceArea.Y)
+            || !IsFinite(sourceArea.Width)
+            || !IsFinite(sourceArea.Height))
+        {
+            result.Warnings.Add($"Skipped area '{sourceArea.AreaId}' in network diagram '{sourceDiagram.Name}' because required area data is invalid.");
+            return false;
+        }
+
+        var styleKey = NormalizeAreaStyle(sourceArea.StyleKey);
+        if (styleKey == "__invalid")
+        {
+            result.Warnings.Add($"Skipped area '{sourceArea.AreaId}' in network diagram '{sourceDiagram.Name}' because area style '{sourceArea.StyleKey}' is unsupported.");
+            return false;
+        }
+
+        area = new NetworkDiagramArea
+        {
+            AreaId = TrimOrDefault(sourceArea.AreaId, 64, Guid.NewGuid().ToString("N")),
+            DiagramId = targetDiagramId,
+            Label = TrimOrDefault(sourceArea.Label, 255, "Restored area"),
+            Notes = TrimOptional(sourceArea.Notes, 2048),
+            X = ClampFinite(sourceArea.X, -1000, 21000),
+            Y = ClampFinite(sourceArea.Y, -1000, 21000),
+            Width = ClampFinite(sourceArea.Width <= 0 ? 600 : sourceArea.Width, 80, 20000),
+            Height = ClampFinite(sourceArea.Height <= 0 ? 350 : sourceArea.Height, 60, 20000),
+            StyleKey = styleKey,
+            SortOrder = sourceArea.SortOrder,
+            CreatedAtUtc = sourceArea.CreatedAtUtc == default ? DateTimeOffset.UtcNow : sourceArea.CreatedAtUtc,
+            UpdatedAtUtc = sourceArea.UpdatedAtUtc == default ? DateTimeOffset.UtcNow : sourceArea.UpdatedAtUtc
+        };
+        return true;
+    }
+
+    private static string? NormalizeAreaStyle(string? styleKey)
+    {
+        if (string.IsNullOrWhiteSpace(styleKey))
+        {
+            return null;
+        }
+
+        var normalized = styleKey.Trim().ToLowerInvariant();
+        return normalized is "neutral" or "blue" or "green" or "amber" or "red" or "purple" ? normalized : "__invalid";
     }
 
     private static bool TryBuildNetworkDiagramNode(

@@ -374,8 +374,24 @@ public sealed class BackupNetworkDiagramRecord
     public DateTimeOffset UpdatedAtUtc { get; init; }
     public string? CreatedByUserId { get; init; }
     public string? UpdatedByUserId { get; init; }
+    public IReadOnlyList<BackupNetworkDiagramAreaRecord> Areas { get; init; } = [];
     public IReadOnlyList<BackupNetworkDiagramNodeRecord> Nodes { get; init; } = [];
     public IReadOnlyList<BackupNetworkDiagramLinkRecord> Links { get; init; } = [];
+}
+
+public sealed class BackupNetworkDiagramAreaRecord
+{
+    public string AreaId { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public string? Notes { get; init; }
+    public double X { get; init; }
+    public double Y { get; init; }
+    public double Width { get; init; }
+    public double Height { get; init; }
+    public string? StyleKey { get; init; }
+    public int SortOrder { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
 }
 
 public sealed class BackupNetworkDiagramNodeRecord
@@ -538,6 +554,7 @@ public sealed class ConfigurationBackupSectionCounts
     public int IdentityRoles { get; init; }
     public int IdentityUserRoles { get; init; }
     public int NetworkDiagrams { get; init; }
+    public int NetworkDiagramAreas { get; init; }
     public int NetworkDiagramNodes { get; init; }
     public int NetworkDiagramLinks { get; init; }
     public int NetworkDiagramLinkVlans { get; init; }

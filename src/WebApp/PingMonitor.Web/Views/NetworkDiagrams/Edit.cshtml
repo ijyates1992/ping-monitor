@@ -125,6 +125,7 @@
                 <div class="diagram-workspace-toolbar" aria-label="Network diagram tools">
                     <button type="button" class="diagram-tool-button" data-tool-button="select" aria-pressed="true">Select / move</button>
                     <button type="button" class="diagram-tool-button" data-tool-button="draw-link" aria-pressed="false">Draw link</button>
+                    <button type="button" class="diagram-tool-button" data-add-area>Add area box</button>
                     <label class="diagram-toolbar-select-label diagram-link-type-toolbar">
                         Media
                         <select data-draw-media-type aria-label="Media type for newly drawn links">
@@ -207,6 +208,7 @@
                             Add a monitored endpoint or custom device from the toolbox. Drag empty space to pan. Use mouse wheel to zoom.
                         </div>
                         <div class="diagram-world" data-diagram-world>
+                            <div class="diagram-area-layer" data-area-layer></div>
                             <svg class="diagram-link-layer" data-link-layer></svg>
                             <div class="diagram-node-layer" data-node-layer></div>
                         </div>
@@ -217,8 +219,41 @@
             <aside class="diagram-properties" aria-label="Diagram selection properties">
                 <h2>Properties</h2>
                 <div data-no-selection-panel>
-                    <p>Select a node or visual link to edit saved diagram properties. Shift/Ctrl-click nodes to multi-select and move them as a group.</p>
+                    <p>Select an area, node, or visual link to edit saved diagram properties. Shift/Ctrl-click nodes to multi-select and move them as a group.</p>
                 </div>
+                <form class="area-properties" data-area-properties hidden>
+                    <p class="toolbox-help">Area boxes are visual annotations only. They do not create groups, dependencies, alerts, endpoint changes, or agent behaviour.</p>
+                    <label>
+                        Area label
+                        <input type="text" data-area-field="label" maxlength="255" />
+                    </label>
+                    <label>
+                        Notes
+                        <textarea data-area-field="notes" rows="4" maxlength="2048"></textarea>
+                    </label>
+                    <label>
+                        Style
+                        <select data-area-field="styleKey">
+                            <option value="neutral">Neutral</option>
+                            <option value="blue">Blue</option>
+                            <option value="green">Green</option>
+                            <option value="amber">Amber</option>
+                            <option value="red">Red</option>
+                            <option value="purple">Purple</option>
+                        </select>
+                    </label>
+                    <details class="area-geometry-details">
+                        <summary>Advanced coordinates</summary>
+                        <p class="toolbox-help">Drag the area border/header to move it and drag a visible corner handle to resize it. These fields are for precision adjustments only.</p>
+                        <div class="area-geometry-fields">
+                            <label>X<input type="number" data-area-field="x" step="1" /></label>
+                            <label>Y<input type="number" data-area-field="y" step="1" /></label>
+                            <label>Width<input type="number" data-area-field="width" min="80" step="1" /></label>
+                            <label>Height<input type="number" data-area-field="height" min="60" step="1" /></label>
+                        </div>
+                    </details>
+                    <button type="button" class="danger-button" data-delete-selection>Delete selected area</button>
+                </form>
                 <form class="node-properties" data-node-properties hidden>
                     <p class="toolbox-help" data-selected-node-kind>Selected diagram node</p>
                     <p class="toolbox-help" data-selected-node-help>Node edits affect only this saved diagram. Monitored endpoints are not renamed or modified.</p>
