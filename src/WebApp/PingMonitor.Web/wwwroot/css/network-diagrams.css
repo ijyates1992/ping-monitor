@@ -1679,7 +1679,8 @@ html[data-theme="dark"] .diagram-area[data-style-key="purple"] { border-color: r
     margin: 0;
 }
 
-.diagram-viewer-shell[data-toolbar-collapsed="true"] .diagram-viewer-toolbar {
+.diagram-viewer-shell[data-toolbar-collapsed="true"] .diagram-viewer-toolbar,
+.diagram-viewer-shell .diagram-viewer-toolbar[hidden] {
     display: none;
 }
 
@@ -1691,7 +1692,8 @@ html[data-theme="dark"] .diagram-area[data-style-key="purple"] { border-color: r
     grid-template-columns: minmax(0, 1fr);
 }
 
-.diagram-viewer-shell[data-details-collapsed="true"] .diagram-viewer-details {
+.diagram-viewer-shell[data-details-collapsed="true"] .diagram-viewer-details,
+.diagram-viewer-shell .diagram-viewer-details[hidden] {
     display: none;
 }
 

@@ -39,7 +39,7 @@
     }
 
     .site-nav {
-        max-width: 1180px;
+        width: 100%;
         margin: 0 auto;
         display: flex;
         gap: .5rem;
@@ -56,7 +56,7 @@
     }
 
     .site-nav-account details {
-        min-width: 160px;
+        min-width: 140px;
     }
 
     .site-nav-theme {
@@ -186,8 +186,17 @@
     }
 
     @@media (min-width: 860px) {
+        .site-nav {
+            flex-wrap: nowrap;
+        }
+
         .site-nav details {
-            min-width: 180px;
+            min-width: 140px;
+        }
+
+        .site-nav-account {
+            flex: 0 0 auto;
+            flex-wrap: nowrap;
         }
 
         .site-nav details[open] .site-nav-dropdown {

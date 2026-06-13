@@ -100,16 +100,26 @@
 
     function setToolbarCollapsed(collapsed) {
         viewer.dataset.toolbarCollapsed = collapsed ? 'true' : 'false';
-        toolbarShowButton?.toggleAttribute('hidden', !collapsed);
-        toolbar?.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        if (toolbarShowButton) {
+            toolbarShowButton.hidden = !collapsed;
+        }
+        if (toolbar) {
+            toolbar.hidden = collapsed;
+            toolbar.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        }
         writeStoredBoolean(toolbarCollapsedStorageKey, collapsed);
         scheduleCanvasResize();
     }
 
     function setDetailsCollapsed(collapsed) {
         viewer.dataset.detailsCollapsed = collapsed ? 'true' : 'false';
-        detailsShowButton?.toggleAttribute('hidden', !collapsed);
-        detailsPanel?.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        if (detailsShowButton) {
+            detailsShowButton.hidden = !collapsed;
+        }
+        if (detailsPanel) {
+            detailsPanel.hidden = collapsed;
+            detailsPanel.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        }
         writeStoredBoolean(detailsCollapsedStorageKey, collapsed);
         scheduleCanvasResize();
     }
@@ -585,10 +595,24 @@
     viewer.querySelector('[data-zoom-out]')?.addEventListener('click', () => zoomAt(canvas.getBoundingClientRect().left + canvas.clientWidth / 2, canvas.getBoundingClientRect().top + canvas.clientHeight / 2, state.zoom / zoomStep));
     viewer.querySelector('[data-reset-view]')?.addEventListener('click', resetView);
     viewer.querySelector('[data-fit-content]')?.addEventListener('click', fitContent);
-    viewer.querySelector('[data-hide-toolbar]')?.addEventListener('click', () => setToolbarCollapsed(true));
-    toolbarShowButton?.addEventListener('click', () => setToolbarCollapsed(false));
-    viewer.querySelector('[data-hide-details]')?.addEventListener('click', () => setDetailsCollapsed(true));
-    detailsShowButton?.addEventListener('click', () => setDetailsCollapsed(false));
+    viewer.addEventListener('click', event => {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const toggle = target?.closest('[data-hide-toolbar], [data-show-toolbar], [data-hide-details], [data-show-details]');
+        if (!toggle || !viewer.contains(toggle)) {
+            return;
+        }
+
+        event.preventDefault();
+        if (toggle.matches('[data-hide-toolbar]')) {
+            setToolbarCollapsed(true);
+        } else if (toggle.matches('[data-show-toolbar]')) {
+            setToolbarCollapsed(false);
+        } else if (toggle.matches('[data-hide-details]')) {
+            setDetailsCollapsed(true);
+        } else if (toggle.matches('[data-show-details]')) {
+            setDetailsCollapsed(false);
+        }
+    });
     exportPdfButton?.addEventListener('click', () => { const base = exportPdfButton.dataset.exportPdfUrl; if (base) { window.location.href = `${base}?paper=${encodeURIComponent(exportPaperSelect?.value || 'A4')}`; } });
     const exportImage = button => { const base = button?.dataset.exportImageUrl; if (base) { const separator = base.includes('?') ? '&' : '?'; window.location.href = `${base}${separator}scale=${encodeURIComponent(exportScaleSelect?.value || '1')}&background=light`; } };
     exportPngButton?.addEventListener('click', () => exportImage(exportPngButton));
