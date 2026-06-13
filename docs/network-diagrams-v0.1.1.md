@@ -505,3 +505,24 @@ Area boxes use saved diagram world coordinates and are rendered behind visual li
 - Export PNG and confirm boxes appear in the export.
 - Run configuration backup/restore when practical and confirm area boxes round-trip.
 - Confirm no monitoring, dependency, alert, endpoint, or agent behaviour changed.
+
+### Manual Regression Checklist - Viewer Canvas Space Controls
+
+Issue: #540
+
+- Open the read-only diagram viewer.
+- Confirm the large viewer title/header no longer consumes top space.
+- Confirm the diagram name and documentation-only note appear as small lower-left canvas overlay text.
+- Confirm the Edit diagram link appears in the viewer toolbar for admins/editors and is absent for read-only users.
+- Hide the toolbar and confirm canvas height increases.
+- Show the toolbar and confirm zoom, fit, export, live status text, and Edit diagram controls return.
+- Hide the right details panel and confirm canvas width increases.
+- Show the right details panel and confirm current summary/details return.
+- Select a node, hide/show details, and confirm the selected node details remain correct.
+- Wait for a live overlay poll with details hidden, show details, and confirm summary data is current.
+- Confirm pan, zoom, and fit content still work after hiding/showing toolbar and details.
+- Confirm PNG, SVG, and PDF exports still use the saved diagram layout rather than viewer chrome.
+- Confirm the dark mode control appears next to the Profile dropdown globally.
+- Confirm the endpoint status dashboard still renders with the global dark mode control in the nav row.
+- Test at 1366x768 in dark and light mode with toolbar visible/hidden, details visible/hidden, and both hidden.
+- Confirm no monitoring, dependency, agent, state-evaluation, alerting, schema, backup/restore, or export-behaviour changes were made.

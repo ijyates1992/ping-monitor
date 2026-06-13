@@ -25,6 +25,12 @@
     const exportSvgButton = viewer.querySelector('[data-export-svg]');
     const exportPaperSelect = viewer.querySelector('[data-export-paper]');
     const exportScaleSelect = viewer.querySelector('[data-export-scale]');
+    const toolbar = viewer.querySelector('[data-viewer-toolbar]');
+    const toolbarShowButton = viewer.querySelector('[data-show-toolbar]');
+    const detailsPanel = viewer.querySelector('[data-viewer-details]');
+    const detailsShowButton = viewer.querySelector('[data-show-details]');
+    const toolbarCollapsedStorageKey = 'pingMonitor.diagramViewer.toolbarCollapsed';
+    const detailsCollapsedStorageKey = 'pingMonitor.diagramViewer.detailsCollapsed';
 
     const zoomStep = 1.15;
     const minZoom = 0.15;
@@ -67,6 +73,45 @@
         if (zoomLabel) {
             zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
         }
+    }
+
+    function scheduleCanvasResize() {
+        window.requestAnimationFrame(() => {
+            updateCanvasSize();
+            window.requestAnimationFrame(updateCanvasSize);
+        });
+    }
+
+    function readStoredBoolean(key) {
+        try {
+            return window.localStorage?.getItem(key) === 'true';
+        } catch {
+            return false;
+        }
+    }
+
+    function writeStoredBoolean(key, value) {
+        try {
+            window.localStorage?.setItem(key, value ? 'true' : 'false');
+        } catch {
+            // Collapse state is an optional per-browser preference only.
+        }
+    }
+
+    function setToolbarCollapsed(collapsed) {
+        viewer.dataset.toolbarCollapsed = collapsed ? 'true' : 'false';
+        toolbarShowButton?.toggleAttribute('hidden', !collapsed);
+        toolbar?.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        writeStoredBoolean(toolbarCollapsedStorageKey, collapsed);
+        scheduleCanvasResize();
+    }
+
+    function setDetailsCollapsed(collapsed) {
+        viewer.dataset.detailsCollapsed = collapsed ? 'true' : 'false';
+        detailsShowButton?.toggleAttribute('hidden', !collapsed);
+        detailsPanel?.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        writeStoredBoolean(detailsCollapsedStorageKey, collapsed);
+        scheduleCanvasResize();
     }
 
     function updateCanvasSize() {
@@ -540,6 +585,10 @@
     viewer.querySelector('[data-zoom-out]')?.addEventListener('click', () => zoomAt(canvas.getBoundingClientRect().left + canvas.clientWidth / 2, canvas.getBoundingClientRect().top + canvas.clientHeight / 2, state.zoom / zoomStep));
     viewer.querySelector('[data-reset-view]')?.addEventListener('click', resetView);
     viewer.querySelector('[data-fit-content]')?.addEventListener('click', fitContent);
+    viewer.querySelector('[data-hide-toolbar]')?.addEventListener('click', () => setToolbarCollapsed(true));
+    toolbarShowButton?.addEventListener('click', () => setToolbarCollapsed(false));
+    viewer.querySelector('[data-hide-details]')?.addEventListener('click', () => setDetailsCollapsed(true));
+    detailsShowButton?.addEventListener('click', () => setDetailsCollapsed(false));
     exportPdfButton?.addEventListener('click', () => { const base = exportPdfButton.dataset.exportPdfUrl; if (base) { window.location.href = `${base}?paper=${encodeURIComponent(exportPaperSelect?.value || 'A4')}`; } });
     const exportImage = button => { const base = button?.dataset.exportImageUrl; if (base) { const separator = base.includes('?') ? '&' : '?'; window.location.href = `${base}${separator}scale=${encodeURIComponent(exportScaleSelect?.value || '1')}&background=light`; } };
     exportPngButton?.addEventListener('click', () => exportImage(exportPngButton));
@@ -558,6 +607,8 @@
     window.addEventListener('resize', updateCanvasSize);
     if ('ResizeObserver' in window) { new ResizeObserver(updateCanvasSize).observe(canvasHost); }
     window.addEventListener('beforeunload', () => { if (refreshTimer) { window.clearInterval(refreshTimer); } });
+    setToolbarCollapsed(readStoredBoolean(toolbarCollapsedStorageKey));
+    setDetailsCollapsed(readStoredBoolean(detailsCollapsedStorageKey));
     applyViewTransform();
     updateCanvasSize();
     loadDiagram();
