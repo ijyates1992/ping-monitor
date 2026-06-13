@@ -117,6 +117,10 @@
         { value: 'large', label: 'Large', width: 8000, height: 5657 },
         { value: 'extra-large', label: 'Extra large', width: 11314, height: 8000 }
     ];
+    const minimumAreaWidth = 80;
+    const minimumAreaHeight = 60;
+    const maximumAreaSize = 20000;
+
 
     const state = {
         nodes: [],
@@ -163,6 +167,15 @@
         }
 
         return Math.min(Math.max(value, min), max);
+    }
+
+    function formatDiagramNumber(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+            return '0';
+        }
+
+        return String(Math.round(number * 100) / 100);
     }
 
     function getNodeWidth(node) {
@@ -308,7 +321,7 @@
         const width = 600;
         const height = 350;
         const offset = ((areaSequence - 1) % 6) * 34;
-        return { id: makeClientId('diagram-area'), x: clamp(center.x - width / 2 + offset, -1000, state.virtualCanvasWidth - 80), y: clamp(center.y - height / 2 + offset, -1000, state.virtualCanvasHeight - 60), width, height };
+        return { id: makeClientId('diagram-area'), x: clamp(center.x - width / 2 + offset, -1000, state.virtualCanvasWidth - minimumAreaWidth), y: clamp(center.y - height / 2 + offset, -1000, state.virtualCanvasHeight - minimumAreaHeight), width, height };
     }
 
     function getNextNodePosition() {
@@ -552,11 +565,30 @@
         const notes = document.createElement('div');
         notes.className = 'diagram-area-notes';
         notes.dataset.areaNotes = 'true';
-        const resize = document.createElement('span');
-        resize.className = 'diagram-area-resize-handle';
-        resize.dataset.areaResizeHandle = 'true';
-        resize.setAttribute('aria-hidden', 'true');
-        element.append(header, notes, resize);
+        const hitTop = document.createElement('span');
+        hitTop.className = 'diagram-area-hit diagram-area-hit-top';
+        hitTop.dataset.areaDragHandle = 'true';
+        hitTop.setAttribute('aria-hidden', 'true');
+        const hitRight = document.createElement('span');
+        hitRight.className = 'diagram-area-hit diagram-area-hit-right';
+        hitRight.dataset.areaDragHandle = 'true';
+        hitRight.setAttribute('aria-hidden', 'true');
+        const hitBottom = document.createElement('span');
+        hitBottom.className = 'diagram-area-hit diagram-area-hit-bottom';
+        hitBottom.dataset.areaDragHandle = 'true';
+        hitBottom.setAttribute('aria-hidden', 'true');
+        const hitLeft = document.createElement('span');
+        hitLeft.className = 'diagram-area-hit diagram-area-hit-left';
+        hitLeft.dataset.areaDragHandle = 'true';
+        hitLeft.setAttribute('aria-hidden', 'true');
+        const resizeHandles = ['nw', 'ne', 'sw', 'se'].map(position => {
+            const resize = document.createElement('span');
+            resize.className = `diagram-area-resize-handle diagram-area-resize-handle-${position}`;
+            resize.dataset.areaResizeHandle = position;
+            resize.setAttribute('aria-label', `Resize area ${position}`);
+            return resize;
+        });
+        element.append(header, notes, hitTop, hitRight, hitBottom, hitLeft, ...resizeHandles);
         return element;
     }
 
@@ -844,11 +876,12 @@
 
         selectArea(area.id);
         const pointer = screenToWorld(event.clientX, event.clientY);
-        const isResize = Boolean(target?.closest('[data-area-resize-handle]'));
+        const resizeHandle = target?.closest('[data-area-resize-handle]');
         dragState = {
             pointerId: event.pointerId,
             area,
-            mode: isResize ? 'resize-area' : 'move-area',
+            mode: resizeHandle ? 'resize-area' : 'move-area',
+            resizeHandle: resizeHandle?.dataset.areaResizeHandle || 'se',
             startPointer: pointer,
             startArea: { x: area.x, y: area.y, width: area.width, height: area.height },
             moved: false
@@ -913,6 +946,36 @@
         event.stopPropagation();
     }
 
+    function resizeAreaFromDrag(area, drag, requestedDeltaX, requestedDeltaY) {
+        const start = drag.startArea;
+        const handle = drag.resizeHandle || 'se';
+        let left = start.x;
+        let top = start.y;
+        let right = start.x + start.width;
+        let bottom = start.y + start.height;
+
+        if (handle.includes('e')) {
+            right = clamp(right + requestedDeltaX, left + minimumAreaWidth, left + maximumAreaSize);
+        }
+
+        if (handle.includes('s')) {
+            bottom = clamp(bottom + requestedDeltaY, top + minimumAreaHeight, top + maximumAreaSize);
+        }
+
+        if (handle.includes('w')) {
+            left = clamp(left + requestedDeltaX, right - maximumAreaSize, right - minimumAreaWidth);
+        }
+
+        if (handle.includes('n')) {
+            top = clamp(top + requestedDeltaY, bottom - maximumAreaSize, bottom - minimumAreaHeight);
+        }
+
+        area.x = left;
+        area.y = top;
+        area.width = right - left;
+        area.height = bottom - top;
+    }
+
     function moveDrag(event) {
         if (!dragState || dragState.pointerId !== event.pointerId) {
             return;
@@ -925,11 +988,10 @@
         if (dragState.area) {
             const area = dragState.area;
             if (dragState.mode === 'resize-area') {
-                area.width = clamp(dragState.startArea.width + requestedDeltaX, 80, 20000);
-                area.height = clamp(dragState.startArea.height + requestedDeltaY, 60, 20000);
+                resizeAreaFromDrag(area, dragState, requestedDeltaX, requestedDeltaY);
             } else {
-                area.x = clamp(dragState.startArea.x + requestedDeltaX, -1000, state.virtualCanvasWidth - 80);
-                area.y = clamp(dragState.startArea.y + requestedDeltaY, -1000, state.virtualCanvasHeight - 60);
+                area.x = clamp(dragState.startArea.x + requestedDeltaX, -1000, state.virtualCanvasWidth - minimumAreaWidth);
+                area.y = clamp(dragState.startArea.y + requestedDeltaY, -1000, state.virtualCanvasHeight - minimumAreaHeight);
             }
 
             dragState.moved = dragState.moved || Math.abs(requestedDeltaX) > 1 || Math.abs(requestedDeltaY) > 1;
@@ -1329,6 +1391,8 @@
             const propertyName = field.dataset.areaField;
             if (!area || !propertyName) {
                 field.value = '';
+            } else if (['x', 'y', 'width', 'height'].includes(propertyName)) {
+                field.value = formatDiagramNumber(area[propertyName]);
             } else {
                 field.value = area[propertyName] ?? '';
             }
@@ -1460,8 +1524,8 @@
         }
 
         if (['x', 'y', 'width', 'height'].includes(propertyName)) {
-            const min = propertyName === 'width' ? 80 : propertyName === 'height' ? 60 : -1000;
-            const max = propertyName === 'x' || propertyName === 'y' ? 21000 : 20000;
+            const min = propertyName === 'width' ? minimumAreaWidth : propertyName === 'height' ? minimumAreaHeight : -1000;
+            const max = propertyName === 'x' || propertyName === 'y' ? 21000 : maximumAreaSize;
             area[propertyName] = clamp(Number(field.value) || 0, min, max);
         } else if (propertyName === 'styleKey') {
             area.styleKey = normalizeAreaStyleKey(field.value);
@@ -1834,8 +1898,8 @@
             notes: savedArea.notes || '',
             x: Number(savedArea.x) || 0,
             y: Number(savedArea.y) || 0,
-            width: Math.max(80, Number(savedArea.width) || 600),
-            height: Math.max(60, Number(savedArea.height) || 350),
+            width: Math.max(minimumAreaWidth, Number(savedArea.width) || 600),
+            height: Math.max(minimumAreaHeight, Number(savedArea.height) || 350),
             styleKey: normalizeAreaStyleKey(savedArea.styleKey),
             sortOrder: Number(savedArea.sortOrder) || state.areas.length,
             element: null
@@ -1967,8 +2031,8 @@
                 notes: area.notes || null,
                 x: Number(area.x) || 0,
                 y: Number(area.y) || 0,
-                width: Math.max(80, Number(area.width) || 600),
-                height: Math.max(60, Number(area.height) || 350),
+                width: Math.max(minimumAreaWidth, Number(area.width) || 600),
+                height: Math.max(minimumAreaHeight, Number(area.height) || 350),
                 styleKey: normalizeAreaStyleKey(area.styleKey),
                 sortOrder: index
             })),
@@ -2204,6 +2268,9 @@
     });
 
     areaLayer?.addEventListener('pointerdown', handleAreaPointerDown);
+    areaLayer?.addEventListener('pointermove', moveDrag);
+    areaLayer?.addEventListener('pointerup', endDrag);
+    areaLayer?.addEventListener('pointercancel', endDrag);
     nodeLayer.addEventListener('pointerdown', handleNodePointerDown);
     nodeLayer.addEventListener('pointermove', moveDrag);
     nodeLayer.addEventListener('pointerup', endDrag);

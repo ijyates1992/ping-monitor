@@ -1499,10 +1499,42 @@ html[data-theme="dark"] .diagram-link-port-label {
     pointer-events: none;
 }
 
+.diagram-area-hit {
+    position: absolute;
+    pointer-events: auto;
+    cursor: grab;
+}
+
+.diagram-area-hit-top {
+    top: -9px;
+    left: 18px;
+    right: 18px;
+    height: 18px;
+}
+
+.diagram-area-hit-right {
+    top: 18px;
+    right: -9px;
+    bottom: 18px;
+    width: 18px;
+}
+
+.diagram-area-hit-bottom {
+    right: 18px;
+    bottom: -9px;
+    left: 18px;
+    height: 18px;
+}
+
+.diagram-area-hit-left {
+    top: 18px;
+    bottom: 18px;
+    left: -9px;
+    width: 18px;
+}
+
 .diagram-area-resize-handle {
     position: absolute;
-    right: -9px;
-    bottom: -9px;
     width: 24px;
     height: 24px;
     border-radius: 999px;
@@ -1510,6 +1542,29 @@ html[data-theme="dark"] .diagram-link-port-label {
     background: var(--diagram-panel);
     box-shadow: 0 2px 8px rgba(16, 24, 40, .24);
     pointer-events: auto;
+}
+
+.diagram-area-resize-handle-nw {
+    top: -11px;
+    left: -11px;
+    cursor: nwse-resize;
+}
+
+.diagram-area-resize-handle-ne {
+    top: -11px;
+    right: -11px;
+    cursor: nesw-resize;
+}
+
+.diagram-area-resize-handle-sw {
+    bottom: -11px;
+    left: -11px;
+    cursor: nesw-resize;
+}
+
+.diagram-area-resize-handle-se {
+    right: -11px;
+    bottom: -11px;
     cursor: nwse-resize;
 }
 
@@ -1521,6 +1576,11 @@ html[data-theme="dark"] .diagram-link-port-label {
 
 .diagram-area[data-selected="false"] .diagram-area-resize-handle {
     display: none;
+}
+
+.diagram-area[data-dragging="true"] .diagram-area-header,
+.diagram-area[data-dragging="true"] .diagram-area-hit {
+    cursor: grabbing;
 }
 
 .area-geometry-fields {
@@ -1539,3 +1599,9 @@ html[data-theme="dark"] .diagram-area-header {
     background: rgba(15, 23, 42, .86);
     border-color: rgba(148, 163, 184, .32);
 }
+
+html[data-theme="dark"] .diagram-area[data-style-key="blue"] { border-color: rgba(96, 165, 250, .84); background: rgba(37, 99, 235, .22); }
+html[data-theme="dark"] .diagram-area[data-style-key="green"] { border-color: rgba(52, 211, 153, .84); background: rgba(5, 150, 105, .22); }
+html[data-theme="dark"] .diagram-area[data-style-key="amber"] { border-color: rgba(251, 191, 36, .88); background: rgba(217, 119, 6, .24); }
+html[data-theme="dark"] .diagram-area[data-style-key="red"] { border-color: rgba(248, 113, 113, .84); background: rgba(220, 38, 38, .2); }
+html[data-theme="dark"] .diagram-area[data-style-key="purple"] { border-color: rgba(196, 181, 253, .84); background: rgba(124, 58, 237, .24); }
