@@ -794,7 +794,29 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("centreOnNode", script);
         Assert.Contains("data-summary-node-id", script);
         Assert.Contains("selectNode(node.id)", script);
-        Assert.Contains("Viewer overlays existing monitoring status only. Visual links remain documentation-only.", script);
+        Assert.Contains("diagram-viewer-canvas-overlay", viewMarkup);
+        Assert.Contains("Visual links are documentation-only.", viewMarkup);
+        Assert.DoesNotContain("<header class=\"diagram-editor-toolbar\">", viewMarkup);
+        Assert.Contains("data-hide-toolbar", viewMarkup);
+        Assert.Contains("data-show-toolbar", viewMarkup);
+        Assert.Contains("data-hide-details", viewMarkup);
+        Assert.Contains("data-show-details", viewMarkup);
+        Assert.Contains("pingMonitor.diagramViewer.toolbarCollapsed", script);
+        Assert.Contains("pingMonitor.diagramViewer.detailsCollapsed", script);
+        Assert.Contains("data-viewer-layout", viewMarkup);
+        Assert.Contains("diagram-viewer-edit-link", viewMarkup);
+    }
+
+    [Fact]
+    public void AuthenticatedNav_PlacesDarkModeSelectorWithProfileMenu()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var navMarkup = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Views", "Shared", "_AuthenticatedNav.cshtml"));
+
+        Assert.Contains("site-nav-account", navMarkup);
+        Assert.Contains("nav-menu-profile", navMarkup);
+        Assert.Contains("_ThemeSelector", navMarkup);
+        Assert.True(navMarkup.IndexOf("site-nav-account", StringComparison.Ordinal) < navMarkup.IndexOf("_ThemeSelector", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -25,6 +25,15 @@
     const exportSvgButton = viewer.querySelector('[data-export-svg]');
     const exportPaperSelect = viewer.querySelector('[data-export-paper]');
     const exportScaleSelect = viewer.querySelector('[data-export-scale]');
+    const viewerLayout = viewer.querySelector('[data-viewer-layout]');
+    const viewerToolbar = viewer.querySelector('[data-viewer-toolbar]');
+    const hideToolbarButton = viewer.querySelector('[data-hide-toolbar]');
+    const showToolbarButton = viewer.querySelector('[data-show-toolbar]');
+    const hideDetailsButton = viewer.querySelector('[data-hide-details]');
+    const showDetailsButton = viewer.querySelector('[data-show-details]');
+
+    const toolbarCollapsedStorageKey = 'pingMonitor.diagramViewer.toolbarCollapsed';
+    const detailsCollapsedStorageKey = 'pingMonitor.diagramViewer.detailsCollapsed';
 
     const zoomStep = 1.15;
     const minZoom = 0.15;
@@ -53,6 +62,64 @@
     function updateNavHeight() {
         const height = nav ? nav.getBoundingClientRect().height : 0;
         document.documentElement.style.setProperty('--network-diagrams-nav-height', `${height}px`);
+    }
+
+
+    function readCollapsedPreference(key) {
+        try {
+            return window.localStorage.getItem(key) === 'true';
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function writeCollapsedPreference(key, value) {
+        try {
+            window.localStorage.setItem(key, value ? 'true' : 'false');
+        } catch (error) {
+            // Keep collapse state in memory only when storage is unavailable.
+        }
+    }
+
+    function scheduleCanvasResize() {
+        window.requestAnimationFrame(() => {
+            updateCanvasSize();
+            window.requestAnimationFrame(updateCanvasSize);
+        });
+    }
+
+    function setToolbarCollapsed(collapsed, persist = true) {
+        if (viewerToolbar) {
+            viewerToolbar.hidden = collapsed;
+        }
+        if (showToolbarButton) {
+            showToolbarButton.hidden = !collapsed;
+            showToolbarButton.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+        if (hideToolbarButton) {
+            hideToolbarButton.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+        if (persist) {
+            writeCollapsedPreference(toolbarCollapsedStorageKey, collapsed);
+        }
+        scheduleCanvasResize();
+    }
+
+    function setDetailsCollapsed(collapsed, persist = true) {
+        if (viewerLayout) {
+            viewerLayout.dataset.detailsCollapsed = collapsed ? 'true' : 'false';
+        }
+        if (showDetailsButton) {
+            showDetailsButton.hidden = !collapsed;
+            showDetailsButton.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+        if (hideDetailsButton) {
+            hideDetailsButton.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+        if (persist) {
+            writeCollapsedPreference(detailsCollapsedStorageKey, collapsed);
+        }
+        scheduleCanvasResize();
     }
 
     function applyViewTransform() {
@@ -540,6 +607,10 @@
     viewer.querySelector('[data-zoom-out]')?.addEventListener('click', () => zoomAt(canvas.getBoundingClientRect().left + canvas.clientWidth / 2, canvas.getBoundingClientRect().top + canvas.clientHeight / 2, state.zoom / zoomStep));
     viewer.querySelector('[data-reset-view]')?.addEventListener('click', resetView);
     viewer.querySelector('[data-fit-content]')?.addEventListener('click', fitContent);
+    hideToolbarButton?.addEventListener('click', () => setToolbarCollapsed(true));
+    showToolbarButton?.addEventListener('click', () => setToolbarCollapsed(false));
+    hideDetailsButton?.addEventListener('click', () => setDetailsCollapsed(true));
+    showDetailsButton?.addEventListener('click', () => setDetailsCollapsed(false));
     exportPdfButton?.addEventListener('click', () => { const base = exportPdfButton.dataset.exportPdfUrl; if (base) { window.location.href = `${base}?paper=${encodeURIComponent(exportPaperSelect?.value || 'A4')}`; } });
     const exportImage = button => { const base = button?.dataset.exportImageUrl; if (base) { const separator = base.includes('?') ? '&' : '?'; window.location.href = `${base}${separator}scale=${encodeURIComponent(exportScaleSelect?.value || '1')}&background=light`; } };
     exportPngButton?.addEventListener('click', () => exportImage(exportPngButton));
@@ -558,6 +629,8 @@
     window.addEventListener('resize', updateCanvasSize);
     if ('ResizeObserver' in window) { new ResizeObserver(updateCanvasSize).observe(canvasHost); }
     window.addEventListener('beforeunload', () => { if (refreshTimer) { window.clearInterval(refreshTimer); } });
+    setToolbarCollapsed(readCollapsedPreference(toolbarCollapsedStorageKey), false);
+    setDetailsCollapsed(readCollapsedPreference(detailsCollapsedStorageKey), false);
     applyViewTransform();
     updateCanvasSize();
     loadDiagram();

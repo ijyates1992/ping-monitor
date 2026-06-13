@@ -47,8 +47,15 @@
         align-items: stretch;
     }
 
-    .site-nav-theme {
+    .site-nav-account {
         margin-left: auto;
+        display: flex;
+        align-items: stretch;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+
+    .site-nav-account .site-nav-theme {
         display: flex;
         align-items: center;
     }
@@ -256,21 +263,23 @@
             </div>
         </details>
 
-        <details data-active="@profileOpen">
-            <summary aria-controls="nav-menu-profile" aria-expanded="false">Profile <span aria-hidden="true">▾</span></summary>
-            <div class="site-nav-dropdown" id="nav-menu-profile">
-                <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile">My profile</a>
-                <a class="site-nav-link" data-current="@IsCurrent(path, "/profile/notification-settings")" href="/profile/notification-settings">Notification settings</a>
-                <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile#change-password">Change password</a>
-                <form method="post" action="/account/logout">
-                    @Html.AntiForgeryToken()
-                    <button class="site-nav-logout" type="submit">Logout</button>
-                </form>
-            </div>
-        </details>
+        <div class="site-nav-account">
+            <details data-active="@profileOpen">
+                <summary aria-controls="nav-menu-profile" aria-expanded="false">Profile <span aria-hidden="true">▾</span></summary>
+                <div class="site-nav-dropdown" id="nav-menu-profile">
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile">My profile</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/profile/notification-settings")" href="/profile/notification-settings">Notification settings</a>
+                    <a class="site-nav-link" data-current="@IsCurrent(path, "/profile")" href="/profile#change-password">Change password</a>
+                    <form method="post" action="/account/logout">
+                        @Html.AntiForgeryToken()
+                        <button class="site-nav-logout" type="submit">Logout</button>
+                    </form>
+                </div>
+            </details>
 
-        <div class="site-nav-theme" aria-label="Dark mode selector">
-            @await Html.PartialAsync("_ThemeSelector")
+            <div class="site-nav-theme" aria-label="Dark mode selector">
+                @await Html.PartialAsync("_ThemeSelector")
+            </div>
         </div>
     </div>
 </nav>
