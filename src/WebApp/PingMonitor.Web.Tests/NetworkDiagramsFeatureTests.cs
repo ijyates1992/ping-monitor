@@ -777,6 +777,7 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("data-export-scale", viewMarkup);
         Assert.Contains("Exports saved diagram layout", viewMarkup);
         Assert.Contains("diagram-viewer-canvas-overlay", viewMarkup);
+        Assert.Matches("diagram-canvas[\\s\\S]*data-show-toolbar", viewMarkup);
         Assert.Contains("Visual links are documentation-only.", viewMarkup);
         Assert.Contains("data-hide-toolbar", viewMarkup);
         Assert.Contains("data-show-toolbar", viewMarkup);
