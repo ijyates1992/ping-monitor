@@ -758,6 +758,7 @@ public sealed class NetworkDiagramsFeatureTests
         var repoRoot = FindRepositoryRoot();
         var viewMarkup = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Views", "NetworkDiagrams", "View.cshtml"));
         var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-viewer.js"));
+        var styles = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "css", "network-diagrams.css"));
 
         Assert.Contains("data-network-diagram-viewer", viewMarkup);
         Assert.Contains("data-live-data-url", viewMarkup);
@@ -780,6 +781,14 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Visual links are documentation-only.", viewMarkup);
         Assert.Contains("data-hide-toolbar", viewMarkup);
         Assert.Contains("data-show-toolbar", viewMarkup);
+        var canvasIndex = viewMarkup.IndexOf("data-diagram-canvas role=", StringComparison.Ordinal);
+        var showToolbarIndex = viewMarkup.IndexOf("data-show-toolbar", StringComparison.Ordinal);
+        Assert.True(canvasIndex >= 0, "The viewer canvas should remain present in the read-only viewer markup.");
+        Assert.True(
+            showToolbarIndex > canvasIndex,
+            "The collapsed toolbar restore control should render inside the canvas so it does not reserve a separate toolbar row.");
+        Assert.Contains(".diagram-viewer-shell.diagram-viewer--toolbar-collapsed .diagram-workspace", styles);
+        Assert.Contains("grid-template-rows: minmax(0, 1fr);", styles);
         Assert.Contains("data-hide-details", viewMarkup);
         Assert.Contains("data-show-details", viewMarkup);
         Assert.Contains("pingMonitor.diagramViewer.toolbarCollapsed", script);
