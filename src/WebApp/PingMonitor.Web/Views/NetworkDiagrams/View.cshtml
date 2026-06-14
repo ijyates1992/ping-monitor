@@ -16,7 +16,6 @@
 
         <div class="diagram-viewer-layout">
             <section class="diagram-workspace" aria-label="Read-only network diagram viewer">
-                <button type="button" class="diagram-tool-button diagram-viewer-toolbar-show" data-show-toolbar aria-controls="diagram-viewer-toolbar">Show toolbar</button>
                 <div class="diagram-workspace-toolbar diagram-viewer-toolbar" id="diagram-viewer-toolbar" data-viewer-toolbar>
                     <button type="button" class="diagram-tool-button" data-hide-toolbar aria-controls="diagram-viewer-toolbar">Hide toolbar</button>
                     <button type="button" class="diagram-tool-button" data-zoom-out>Zoom out</button>
@@ -56,6 +55,7 @@
                 </div>
                 <div class="diagram-canvas-host" data-diagram-canvas-host>
                     <div class="diagram-canvas" data-diagram-canvas role="application" aria-label="Read-only network diagram canvas" tabindex="0">
+                        <button type="button" class="diagram-tool-button diagram-viewer-toolbar-show" data-show-toolbar aria-controls="diagram-viewer-toolbar">Show toolbar</button>
                         <div class="diagram-viewer-canvas-overlay" aria-hidden="true">
                             <strong>@Model.DiagramName</strong>
                             <span>Visual links are documentation-only.</span>

@@ -780,6 +780,9 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("Visual links are documentation-only.", viewMarkup);
         Assert.Contains("data-hide-toolbar", viewMarkup);
         Assert.Contains("data-show-toolbar", viewMarkup);
+        Assert.True(
+            viewMarkup.IndexOf("data-diagram-canvas role=", StringComparison.Ordinal) < viewMarkup.IndexOf("data-show-toolbar", StringComparison.Ordinal),
+            "The collapsed toolbar restore button must render inside the canvas viewport so it does not reserve a separate row above the canvas.");
         Assert.Contains("data-hide-details", viewMarkup);
         Assert.Contains("data-show-details", viewMarkup);
         Assert.Contains("pingMonitor.diagramViewer.toolbarCollapsed", script);
