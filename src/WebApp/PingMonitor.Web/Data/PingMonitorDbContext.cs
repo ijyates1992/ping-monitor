@@ -39,6 +39,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<SecuritySettings> SecuritySettings => Set<SecuritySettings>();
     public DbSet<SecurityIpBlock> SecurityIpBlocks => Set<SecurityIpBlock>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
+    public DbSet<AiAssistantSettings> AiAssistantSettings => Set<AiAssistantSettings>();
     public DbSet<UserNotificationSettings> UserNotificationSettings => Set<UserNotificationSettings>();
     public DbSet<PendingTelegramLink> PendingTelegramLinks => Set<PendingTelegramLink>();
     public DbSet<TelegramAccount> TelegramAccounts => Set<TelegramAccount>();
@@ -326,6 +327,28 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         appSettings.Property(x => x.DegradedMinimumSamples).IsRequired();
         appSettings.Property(x => x.NetworkDiagramsEnabled).IsRequired();
         appSettings.Property(x => x.UpdatedAtUtc).IsRequired();
+
+        var aiAssistantSettings = modelBuilder.Entity<AiAssistantSettings>();
+        aiAssistantSettings.ToTable("AiAssistantSettings");
+        aiAssistantSettings.HasKey(x => x.AiAssistantSettingsId);
+        aiAssistantSettings.Property(x => x.AiAssistantSettingsId).ValueGeneratedNever();
+        aiAssistantSettings.Property(x => x.AssistantEnabled).IsRequired();
+        aiAssistantSettings.Property(x => x.WebChatEnabled).IsRequired();
+        aiAssistantSettings.Property(x => x.TelegramChatEnabled).IsRequired();
+        aiAssistantSettings.Property(x => x.MemoryEnabled).IsRequired();
+        aiAssistantSettings.Property(x => x.DebugLoggingEnabled).IsRequired();
+        aiAssistantSettings.Property(x => x.ProviderDisplayName).HasMaxLength(128).IsRequired();
+        aiAssistantSettings.Property(x => x.ProviderType).HasMaxLength(64).IsRequired();
+        aiAssistantSettings.Property(x => x.BaseUrl).HasMaxLength(2048).IsRequired();
+        aiAssistantSettings.Property(x => x.ModelName).HasMaxLength(255).IsRequired();
+        aiAssistantSettings.Property(x => x.ApiKeyProtected).HasMaxLength(4096);
+        aiAssistantSettings.Property(x => x.RequestTimeoutSeconds).IsRequired();
+        aiAssistantSettings.Property(x => x.MaxOutputTokens).IsRequired();
+        aiAssistantSettings.Property(x => x.Temperature).IsRequired();
+        aiAssistantSettings.Property(x => x.ToolCallingEnabled).IsRequired();
+        aiAssistantSettings.Property(x => x.GlobalSystemPrompt).HasColumnType("longtext").IsRequired();
+        aiAssistantSettings.Property(x => x.UpdatedAtUtc).IsRequired();
+        aiAssistantSettings.Property(x => x.UpdatedByUserId).HasMaxLength(255);
 
         var notificationSettings = modelBuilder.Entity<NotificationSettings>();
         notificationSettings.ToTable("NotificationSettings");

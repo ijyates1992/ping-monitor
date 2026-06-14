@@ -104,6 +104,9 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
             UserNotificationSettings = selectedSections.Contains(ConfigurationBackupSections.UserNotificationSettings, StringComparer.Ordinal)
                 ? await LoadUserNotificationSettingsAsync(cancellationToken)
                 : null,
+            AiAssistantSettings = selectedSections.Contains(ConfigurationBackupSections.AiAssistantSettings, StringComparer.Ordinal)
+                ? await LoadAiAssistantSettingsAsync(cancellationToken)
+                : null,
             Identity = selectedSections.Contains(ConfigurationBackupSections.Identity, StringComparer.Ordinal)
                 ? await LoadIdentityAsync(cancellationToken)
                 : null,
@@ -483,6 +486,39 @@ public sealed class ConfigurationBackupService : IConfigurationBackupService
             SmtpNotifyEndpointRecovered = settings.SmtpNotifyEndpointRecovered,
             SmtpNotifyAgentOffline = settings.SmtpNotifyAgentOffline,
             SmtpNotifyAgentOnline = settings.SmtpNotifyAgentOnline,
+            UpdatedAtUtc = settings.UpdatedAtUtc,
+            UpdatedByUserId = settings.UpdatedByUserId
+        };
+    }
+
+
+    private async Task<BackupAiAssistantSettingsRecord?> LoadAiAssistantSettingsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _dbContext.AiAssistantSettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.AiAssistantSettingsId == AiAssistantSettings.SingletonId, cancellationToken);
+        if (settings is null)
+        {
+            return null;
+        }
+
+        return new BackupAiAssistantSettingsRecord
+        {
+            AssistantEnabled = settings.AssistantEnabled,
+            WebChatEnabled = settings.WebChatEnabled,
+            TelegramChatEnabled = settings.TelegramChatEnabled,
+            MemoryEnabled = settings.MemoryEnabled,
+            DebugLoggingEnabled = settings.DebugLoggingEnabled,
+            ProviderDisplayName = settings.ProviderDisplayName,
+            ProviderType = settings.ProviderType,
+            BaseUrl = settings.BaseUrl,
+            ModelName = settings.ModelName,
+            ApiKeyProtected = settings.ApiKeyProtected,
+            RequestTimeoutSeconds = settings.RequestTimeoutSeconds,
+            MaxOutputTokens = settings.MaxOutputTokens,
+            Temperature = settings.Temperature,
+            ToolCallingEnabled = settings.ToolCallingEnabled,
+            GlobalSystemPrompt = settings.GlobalSystemPrompt,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             UpdatedByUserId = settings.UpdatedByUserId
         };

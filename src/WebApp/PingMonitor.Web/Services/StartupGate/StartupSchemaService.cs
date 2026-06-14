@@ -42,6 +42,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SecuritySettings",
         "SecurityIpBlocks",
         "NotificationSettings",
+        "AiAssistantSettings",
         "UserNotificationSettings",
         "PendingTelegramLinks",
         "TelegramAccounts",
@@ -231,6 +232,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "UpdatedAtUtc",
         "UpdatedByUserId"
     ];
+
+    private static readonly string[] RequiredAiAssistantSettingsColumns =
+    [
+        "AiAssistantSettingsId",
+        "AssistantEnabled",
+        "WebChatEnabled",
+        "TelegramChatEnabled",
+        "MemoryEnabled",
+        "DebugLoggingEnabled",
+        "ProviderDisplayName",
+        "ProviderType",
+        "BaseUrl",
+        "ModelName",
+        "ApiKeyProtected",
+        "RequestTimeoutSeconds",
+        "MaxOutputTokens",
+        "Temperature",
+        "ToolCallingEnabled",
+        "GlobalSystemPrompt",
+        "UpdatedAtUtc",
+        "UpdatedByUserId"
+    ];
     private static readonly string[] RequiredUserNotificationSettingsColumns =
     [
         "UserId",
@@ -389,6 +412,14 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             status.Diagnostics.Add($"NotificationSettings table is missing required columns: {string.Join(", ", missingNotificationSettingsColumns)}.");
             return status;
         }
+        var missingAiAssistantSettingsColumns = await GetMissingColumnsAsync(connection, "AiAssistantSettings", RequiredAiAssistantSettingsColumns, cancellationToken);
+        if (missingAiAssistantSettingsColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiAssistantSettings table is missing required columns: {string.Join(", ", missingAiAssistantSettingsColumns)}.");
+            return status;
+        }
+
         var missingUserNotificationSettingsColumns = await GetMissingUserNotificationSettingsColumnsAsync(connection, cancellationToken);
         if (missingUserNotificationSettingsColumns.Length > 0)
         {
@@ -665,6 +696,30 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedByUserId` varchar(255) NULL,
                 PRIMARY KEY (`NotificationSettingsId`)
+            );
+            """;
+
+        const string createAiAssistantSettingsSql = """
+            CREATE TABLE IF NOT EXISTS `AiAssistantSettings` (
+                `AiAssistantSettingsId` int NOT NULL,
+                `AssistantEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `WebChatEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `TelegramChatEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `MemoryEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `DebugLoggingEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `ProviderDisplayName` varchar(128) NOT NULL DEFAULT 'Local Ollama',
+                `ProviderType` varchar(64) NOT NULL DEFAULT 'OpenAICompatible',
+                `BaseUrl` varchar(2048) NOT NULL DEFAULT 'http://localhost:11434/v1',
+                `ModelName` varchar(255) NOT NULL DEFAULT '',
+                `ApiKeyProtected` varchar(4096) NULL,
+                `RequestTimeoutSeconds` int NOT NULL DEFAULT 60,
+                `MaxOutputTokens` int NOT NULL DEFAULT 2048,
+                `Temperature` double NOT NULL DEFAULT 0.2,
+                `ToolCallingEnabled` tinyint(1) NOT NULL DEFAULT 1,
+                `GlobalSystemPrompt` longtext NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedByUserId` varchar(255) NULL,
+                PRIMARY KEY (`AiAssistantSettingsId`)
             );
             """;
         const string createUserNotificationSettingsSql = """
@@ -1009,6 +1064,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createSecuritySettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityIpBlocksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNotificationSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiAssistantSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createPendingTelegramLinksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createTelegramAccountsSql, cancellationToken);
@@ -1028,6 +1084,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureApplicationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
+        await EnsureAiAssistantSettingsSchemaAsync(dbContext, cancellationToken);
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
@@ -2170,6 +2227,26 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
     }
 
+
+    private static async Task EnsureAiAssistantSettingsSchemaAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await IsColumnLongTextAsync(connection, "AiAssistantSettings", "GlobalSystemPrompt", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `AiAssistantSettings`
+                MODIFY COLUMN `GlobalSystemPrompt` longtext NOT NULL;
+                """,
+                cancellationToken);
+        }
+    }
+
     private static async Task EnsureUserNotificationSettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         await using var connection = dbContext.Database.GetDbConnection();
@@ -2418,6 +2495,30 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
         var value = await command.ExecuteScalarAsync(cancellationToken);
         return value is string dataType && string.Equals(dataType, "double", StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private static async Task<bool> IsColumnLongTextAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, CancellationToken cancellationToken)
+    {
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = @tableName
+              AND column_name = @columnName
+            LIMIT 1;
+            """;
+        AddParameter(command, "@tableName", tableName);
+        AddParameter(command, "@columnName", columnName);
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is string dataType && string.Equals(dataType, "longtext", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<bool> HasCheckResultsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)

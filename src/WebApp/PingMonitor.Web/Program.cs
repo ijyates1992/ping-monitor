@@ -197,6 +197,7 @@ builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
 builder.Services.AddScoped<IAgentTemplateVersionProvider, AgentTemplateVersionProvider>();
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
+builder.Services.AddScoped<IAiAssistantSettingsService, AiAssistantSettingsService>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
 builder.Services.AddHttpClient(nameof(GitHubReleaseLookupService));
 builder.Services.AddHttpClient(nameof(ApplicationUpdateStagingService));
