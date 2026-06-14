@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Services.AiProviders;
 using PingMonitor.Web.ViewModels.Admin;
 
 namespace PingMonitor.Web.Controllers;
@@ -11,11 +12,17 @@ namespace PingMonitor.Web.Controllers;
 [Route("admin/ai-assistant-settings")]
 public sealed class AdminAiAssistantSettingsController : Controller
 {
-    private readonly IAiAssistantSettingsService _settingsService;
+    private const int TestMaxOutputTokens = 256;
+    private const string TestSystemPrompt = "You are a connectivity test for Ping Monitor. Follow the user's instruction exactly.";
+    private const string TestUserPrompt = "Reply with exactly: Ping Monitor AI test OK";
 
-    public AdminAiAssistantSettingsController(IAiAssistantSettingsService settingsService)
+    private readonly IAiAssistantSettingsService _settingsService;
+    private readonly IAiProviderClient _providerClient;
+
+    public AdminAiAssistantSettingsController(IAiAssistantSettingsService settingsService, IAiProviderClient providerClient)
     {
         _settingsService = settingsService;
+        _providerClient = providerClient;
     }
 
     [HttpGet]
@@ -58,6 +65,56 @@ public sealed class AdminAiAssistantSettingsController : Controller
         }, cancellationToken);
 
         return View("Index", ToViewModel(updated, saved: true));
+    }
+
+    [HttpPost("test")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Test(CancellationToken cancellationToken)
+    {
+        var settings = await _settingsService.GetProviderRuntimeSettingsAsync(cancellationToken);
+        var pageModel = ToViewModel(await _settingsService.GetCurrentAsync(cancellationToken), saved: false);
+
+        AiProviderChatResult result;
+        if (!string.Equals(settings.ProviderType, AiAssistantSettings.OpenAICompatibleProviderType, StringComparison.Ordinal))
+        {
+            result = new AiProviderChatResult { Succeeded = false, ErrorMessage = "Provider type must be OpenAICompatible." };
+        }
+        else if (string.IsNullOrWhiteSpace(settings.BaseUrl))
+        {
+            result = new AiProviderChatResult { Succeeded = false, ErrorMessage = "Base URL is required before testing the provider connection." };
+        }
+        else if (string.IsNullOrWhiteSpace(settings.ModelName))
+        {
+            result = new AiProviderChatResult { Succeeded = false, ErrorMessage = "Model name is required before testing the provider connection." };
+        }
+        else
+        {
+            result = await _providerClient.SendChatAsync(new AiProviderChatRequest
+            {
+                ProviderName = settings.ProviderDisplayName,
+                BaseUrl = settings.BaseUrl,
+                ModelName = settings.ModelName,
+                ApiKey = settings.ApiKey,
+                TimeoutSeconds = settings.RequestTimeoutSeconds,
+                Temperature = settings.Temperature,
+                MaxOutputTokens = Math.Min(settings.MaxOutputTokens, TestMaxOutputTokens),
+                Messages =
+                {
+                    new AiProviderChatMessage { Role = "system", Content = TestSystemPrompt },
+                    new AiProviderChatMessage { Role = "user", Content = TestUserPrompt }
+                }
+            }, cancellationToken);
+        }
+
+        pageModel.TestResult = new AiProviderTestConnectionViewModel
+        {
+            Succeeded = result.Succeeded,
+            ResponseText = result.ResponseText,
+            ElapsedMilliseconds = result.ElapsedMilliseconds,
+            StatusCode = result.StatusCode,
+            ErrorMessage = result.ErrorMessage
+        };
+        return View("Index", pageModel);
     }
 
     private void ValidateSettings(AiAssistantSettingsPageViewModel model)

@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AI assistant settings</title>
     <style>
-        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --success:#137333; --warning-bg:#fff7ed; --warning-border:#fed7aa; --error-bg:#fee4e2; --error-text:#b42318; }
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --success:#137333; --success-bg:#ebffee; --success-border:#c2f0c2; --warning-bg:#fff7ed; --warning-border:#fed7aa; --error-bg:#fee4e2; --error-text:#b42318; }
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
         main { max-width: 860px; margin: 0 auto; padding: 1rem; }
@@ -25,7 +25,7 @@
         input[type="checkbox"] { width: auto; min-height: 0; transform: scale(1.2); }
         .field-help, .muted { color: var(--muted); }
         .field-help { font-size: .9rem; margin: .25rem 0 0; }
-        .saved { border: 1px solid #c2f0c2; background: #ebffee; color: var(--success); border-radius: 10px; padding: .8rem; }
+        .saved { border: 1px solid var(--success-border); background: var(--success-bg); color: var(--success); border-radius: 10px; padding: .8rem; }
         .errors { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: .8rem; }
         .warning { border: 1px solid var(--warning-border); background: var(--warning-bg); border-radius: 10px; padding: .8rem; }
         .validation { color: var(--error-text); font-size: .9rem; }
@@ -89,6 +89,22 @@
             <textarea asp-for="GlobalSystemPrompt" maxlength="20000"></textarea>
             <p class="field-help">Use this for site-specific guidance only. Admin instructions cannot override read-only mode, permissions, application safety rules, or tool-result truthfulness.</p>
             <span class="validation" asp-validation-for="GlobalSystemPrompt"></span>
+        </section>
+
+        <section class="card grid">
+            <h2>Test AI provider connection</h2>
+            <p class="field-help">Save changes before testing. This sends a small test prompt to the configured OpenAI-compatible endpoint and does not send monitoring data, endpoint data, tools, prompt history, memories, or secrets.</p>
+            @if (Model.TestResult is not null)
+            {
+                <div class="@(Model.TestResult.Succeeded ? "saved" : "errors")" role="status">
+                    <strong>@(Model.TestResult.Succeeded ? "AI provider connection succeeded." : "AI provider connection failed.")</strong>
+                    <div>Elapsed: @Model.TestResult.ElapsedMilliseconds ms</div>
+                    @if (Model.TestResult.StatusCode.HasValue) { <div>HTTP status: @Model.TestResult.StatusCode.Value</div> }
+                    @if (Model.TestResult.Succeeded) { <div>Returned text: <code>@Model.TestResult.ResponseText</code></div> }
+                    else { <div>Error: @Model.TestResult.ErrorMessage</div> }
+                </div>
+            }
+            <div class="button-row"><button class="button-secondary" type="submit" formaction="/admin/ai-assistant-settings/test" formmethod="post">Test saved provider settings</button></div>
         </section>
 
         <section class="card warning">

@@ -53,4 +53,14 @@ public sealed class AiAssistantSettingsPageViewModel
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public string? UpdatedByUserId { get; set; }
     public bool Saved { get; set; }
+    public AiProviderTestConnectionViewModel? TestResult { get; set; }
+}
+
+public sealed class AiProviderTestConnectionViewModel
+{
+    public bool Succeeded { get; set; }
+    public string? ResponseText { get; set; }
+    public long ElapsedMilliseconds { get; set; }
+    public int? StatusCode { get; set; }
+    public string? ErrorMessage { get; set; }
 }
