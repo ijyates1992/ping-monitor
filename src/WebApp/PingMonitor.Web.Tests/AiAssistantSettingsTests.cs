@@ -116,6 +116,7 @@ public sealed class AiAssistantSettingsTests
         Assert.Contains("AiAssistantSettings", source);
         Assert.Contains("ApiKeyProtected", source);
         Assert.Contains("GlobalSystemPrompt", source);
+        Assert.Contains("`GlobalSystemPrompt` longtext NOT NULL", source);
     }
 
     private sealed class FakeAiAssistantSettingsService : IAiAssistantSettingsService
