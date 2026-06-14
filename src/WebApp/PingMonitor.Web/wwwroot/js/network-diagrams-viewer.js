@@ -100,16 +100,26 @@
 
     function setToolbarCollapsed(collapsed) {
         viewer.dataset.toolbarCollapsed = collapsed ? 'true' : 'false';
-        toolbarShowButton?.toggleAttribute('hidden', !collapsed);
-        toolbar?.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        viewer.classList.toggle('diagram-viewer--toolbar-collapsed', collapsed);
+        if (toolbarShowButton) {
+            toolbarShowButton.setAttribute('aria-hidden', collapsed ? 'false' : 'true');
+        }
+        if (toolbar) {
+            toolbar.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        }
         writeStoredBoolean(toolbarCollapsedStorageKey, collapsed);
         scheduleCanvasResize();
     }
 
     function setDetailsCollapsed(collapsed) {
         viewer.dataset.detailsCollapsed = collapsed ? 'true' : 'false';
-        detailsShowButton?.toggleAttribute('hidden', !collapsed);
-        detailsPanel?.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        viewer.classList.toggle('diagram-viewer--details-collapsed', collapsed);
+        if (detailsShowButton) {
+            detailsShowButton.setAttribute('aria-hidden', collapsed ? 'false' : 'true');
+        }
+        if (detailsPanel) {
+            detailsPanel.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        }
         writeStoredBoolean(detailsCollapsedStorageKey, collapsed);
         scheduleCanvasResize();
     }
@@ -581,14 +591,25 @@
         refreshTimer = window.setInterval(refreshLiveData, refreshIntervalMs);
     }
 
+    function bindCollapseToggle(selector, collapsed) {
+        const button = viewer.querySelector(selector);
+        if (!button) { return; }
+        button.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            collapsed();
+        });
+        button.addEventListener('pointerdown', event => event.stopPropagation());
+    }
+
+    bindCollapseToggle('[data-hide-toolbar]', () => setToolbarCollapsed(true));
+    bindCollapseToggle('[data-show-toolbar]', () => setToolbarCollapsed(false));
+    bindCollapseToggle('[data-hide-details]', () => setDetailsCollapsed(true));
+    bindCollapseToggle('[data-show-details]', () => setDetailsCollapsed(false));
     viewer.querySelector('[data-zoom-in]')?.addEventListener('click', () => zoomAt(canvas.getBoundingClientRect().left + canvas.clientWidth / 2, canvas.getBoundingClientRect().top + canvas.clientHeight / 2, state.zoom * zoomStep));
     viewer.querySelector('[data-zoom-out]')?.addEventListener('click', () => zoomAt(canvas.getBoundingClientRect().left + canvas.clientWidth / 2, canvas.getBoundingClientRect().top + canvas.clientHeight / 2, state.zoom / zoomStep));
     viewer.querySelector('[data-reset-view]')?.addEventListener('click', resetView);
     viewer.querySelector('[data-fit-content]')?.addEventListener('click', fitContent);
-    viewer.querySelector('[data-hide-toolbar]')?.addEventListener('click', () => setToolbarCollapsed(true));
-    toolbarShowButton?.addEventListener('click', () => setToolbarCollapsed(false));
-    viewer.querySelector('[data-hide-details]')?.addEventListener('click', () => setDetailsCollapsed(true));
-    detailsShowButton?.addEventListener('click', () => setDetailsCollapsed(false));
     exportPdfButton?.addEventListener('click', () => { const base = exportPdfButton.dataset.exportPdfUrl; if (base) { window.location.href = `${base}?paper=${encodeURIComponent(exportPaperSelect?.value || 'A4')}`; } });
     const exportImage = button => { const base = button?.dataset.exportImageUrl; if (base) { const separator = base.includes('?') ? '&' : '?'; window.location.href = `${base}${separator}scale=${encodeURIComponent(exportScaleSelect?.value || '1')}&background=light`; } };
     exportPngButton?.addEventListener('click', () => exportImage(exportPngButton));

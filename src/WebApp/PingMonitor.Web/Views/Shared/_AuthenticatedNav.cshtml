@@ -39,24 +39,24 @@
     }
 
     .site-nav {
-        max-width: 1180px;
+        width: 100%;
         margin: 0 auto;
         display: flex;
+        justify-content: center;
+        align-items: center;
         gap: .5rem;
         flex-wrap: wrap;
-        align-items: stretch;
     }
 
     .site-nav-account {
-        margin-left: auto;
         display: flex;
         flex-wrap: wrap;
         gap: .5rem;
-        align-items: stretch;
+        align-items: center;
     }
 
     .site-nav-account details {
-        min-width: 160px;
+        min-width: 140px;
     }
 
     .site-nav-theme {
@@ -186,8 +186,17 @@
     }
 
     @@media (min-width: 860px) {
+        .site-nav {
+            flex-wrap: nowrap;
+        }
+
         .site-nav details {
-            min-width: 180px;
+            min-width: 140px;
+        }
+
+        .site-nav-account {
+            flex: 0 0 auto;
+            flex-wrap: nowrap;
         }
 
         .site-nav details[open] .site-nav-dropdown {

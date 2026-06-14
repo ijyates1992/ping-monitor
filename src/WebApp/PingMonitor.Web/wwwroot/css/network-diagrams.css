@@ -1657,6 +1657,7 @@ html[data-theme="dark"] .diagram-area[data-style-key="purple"] { border-color: r
 
 .diagram-viewer-toolbar-show,
 .diagram-viewer-details-show {
+    display: none;
     justify-self: start;
     z-index: 6;
 }
@@ -1679,22 +1680,29 @@ html[data-theme="dark"] .diagram-area[data-style-key="purple"] { border-color: r
     margin: 0;
 }
 
-.diagram-viewer-shell[data-toolbar-collapsed="true"] .diagram-viewer-toolbar {
+.diagram-viewer-shell.diagram-viewer--toolbar-collapsed .diagram-viewer-toolbar,
+.diagram-viewer-shell[data-toolbar-collapsed="true"] .diagram-viewer-toolbar,
+.diagram-viewer-shell .diagram-viewer-toolbar[hidden] {
     display: none;
 }
 
+.diagram-viewer-shell.diagram-viewer--toolbar-collapsed .diagram-viewer-toolbar-show,
 .diagram-viewer-shell[data-toolbar-collapsed="true"] .diagram-viewer-toolbar-show {
     display: inline-flex;
 }
 
+.diagram-viewer-shell.diagram-viewer--details-collapsed .diagram-viewer-layout,
 .diagram-viewer-shell[data-details-collapsed="true"] .diagram-viewer-layout {
     grid-template-columns: minmax(0, 1fr);
 }
 
-.diagram-viewer-shell[data-details-collapsed="true"] .diagram-viewer-details {
+.diagram-viewer-shell.diagram-viewer--details-collapsed .diagram-viewer-details,
+.diagram-viewer-shell[data-details-collapsed="true"] .diagram-viewer-details,
+.diagram-viewer-shell .diagram-viewer-details[hidden] {
     display: none;
 }
 
+.diagram-viewer-shell.diagram-viewer--details-collapsed .diagram-viewer-details-show,
 .diagram-viewer-shell[data-details-collapsed="true"] .diagram-viewer-details-show {
     display: inline-flex;
 }

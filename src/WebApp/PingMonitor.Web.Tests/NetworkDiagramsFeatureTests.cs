@@ -787,6 +787,12 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("setToolbarCollapsed", script);
         Assert.Contains("setDetailsCollapsed", script);
         Assert.Contains("scheduleCanvasResize", script);
+        Assert.Contains("diagram-viewer--toolbar-collapsed", script);
+        Assert.Contains("diagram-viewer--details-collapsed", script);
+        Assert.Contains("bindCollapseToggle('[data-hide-toolbar]'", script);
+        Assert.Contains("bindCollapseToggle('[data-show-toolbar]'", script);
+        Assert.Contains("bindCollapseToggle('[data-hide-details]'", script);
+        Assert.Contains("bindCollapseToggle('[data-show-details]'", script);
         Assert.DoesNotContain("diagram-editor-heading", viewMarkup);
         Assert.Contains("Diagram live summary", script);
         Assert.Contains("Total nodes", script);
@@ -818,8 +824,11 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("site-nav-account", navMarkup);
         Assert.Contains("site-nav-theme", navMarkup);
         Assert.Contains("_ThemeSelector", navMarkup);
+        Assert.Contains("width: 100%;", navMarkup);
+        Assert.Contains("flex-wrap: nowrap;", navMarkup);
+        Assert.Contains("min-width: 140px;", navMarkup);
         Assert.Contains(@"Profile <span aria-hidden=""true"">▾</span>", navMarkup);
-        Assert.True(navMarkup.IndexOf("site-nav-account", StringComparison.Ordinal) < navMarkup.IndexOf("site-nav-theme", StringComparison.Ordinal));
+        Assert.True(navMarkup.IndexOf(@"<div class=""site-nav-account"">", StringComparison.Ordinal) < navMarkup.IndexOf(@"<div class=""site-nav-theme""", StringComparison.Ordinal));
     }
 
     [Fact]
