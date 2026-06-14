@@ -56,6 +56,7 @@ public sealed class ConfigurationRestorePreviewService : IConfigurationRestorePr
                 Assignments = document.Sections.Assignments?.Count ?? 0,
                 SecuritySettings = document.Sections.SecuritySettings is null ? 0 : 1,
                 NotificationSettings = document.Sections.NotificationSettings is null ? 0 : 1,
+                AiAssistantSettings = document.Sections.AiAssistantSettings is null ? 0 : 1,
                 UserNotificationSettings = document.Sections.UserNotificationSettings?.Count ?? 0,
                 IdentityUsers = document.Sections.Identity?.Users.Count ?? 0,
                 IdentityRoles = document.Sections.Identity?.Roles.Count ?? 0,
@@ -202,6 +203,10 @@ public sealed class ConfigurationRestorePreviewService : IConfigurationRestorePr
         if (document.Sections.UserNotificationSettings is not null)
         {
             yield return ConfigurationBackupSections.UserNotificationSettings;
+        }
+        if (document.Sections.AiAssistantSettings is not null)
+        {
+            yield return ConfigurationBackupSections.AiAssistantSettings;
         }
 
         if (document.Sections.Identity is not null)

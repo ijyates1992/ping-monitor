@@ -42,6 +42,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SecuritySettings",
         "SecurityIpBlocks",
         "NotificationSettings",
+        "AiAssistantSettings",
         "UserNotificationSettings",
         "PendingTelegramLinks",
         "TelegramAccounts",
@@ -231,6 +232,28 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "UpdatedAtUtc",
         "UpdatedByUserId"
     ];
+
+    private static readonly string[] RequiredAiAssistantSettingsColumns =
+    [
+        "AiAssistantSettingsId",
+        "AssistantEnabled",
+        "WebChatEnabled",
+        "TelegramChatEnabled",
+        "MemoryEnabled",
+        "DebugLoggingEnabled",
+        "ProviderDisplayName",
+        "ProviderType",
+        "BaseUrl",
+        "ModelName",
+        "ApiKeyProtected",
+        "RequestTimeoutSeconds",
+        "MaxOutputTokens",
+        "Temperature",
+        "ToolCallingEnabled",
+        "GlobalSystemPrompt",
+        "UpdatedAtUtc",
+        "UpdatedByUserId"
+    ];
     private static readonly string[] RequiredUserNotificationSettingsColumns =
     [
         "UserId",
@@ -389,6 +412,14 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             status.Diagnostics.Add($"NotificationSettings table is missing required columns: {string.Join(", ", missingNotificationSettingsColumns)}.");
             return status;
         }
+        var missingAiAssistantSettingsColumns = await GetMissingColumnsAsync(connection, "AiAssistantSettings", RequiredAiAssistantSettingsColumns, cancellationToken);
+        if (missingAiAssistantSettingsColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiAssistantSettings table is missing required columns: {string.Join(", ", missingAiAssistantSettingsColumns)}.");
+            return status;
+        }
+
         var missingUserNotificationSettingsColumns = await GetMissingUserNotificationSettingsColumnsAsync(connection, cancellationToken);
         if (missingUserNotificationSettingsColumns.Length > 0)
         {
@@ -665,6 +696,30 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedByUserId` varchar(255) NULL,
                 PRIMARY KEY (`NotificationSettingsId`)
+            );
+            """;
+
+        const string createAiAssistantSettingsSql = """
+            CREATE TABLE IF NOT EXISTS `AiAssistantSettings` (
+                `AiAssistantSettingsId` int NOT NULL,
+                `AssistantEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `WebChatEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `TelegramChatEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `MemoryEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `DebugLoggingEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `ProviderDisplayName` varchar(128) NOT NULL DEFAULT 'Local Ollama',
+                `ProviderType` varchar(64) NOT NULL DEFAULT 'OpenAICompatible',
+                `BaseUrl` varchar(2048) NOT NULL DEFAULT 'http://localhost:11434/v1',
+                `ModelName` varchar(255) NOT NULL DEFAULT '',
+                `ApiKeyProtected` varchar(4096) NULL,
+                `RequestTimeoutSeconds` int NOT NULL DEFAULT 60,
+                `MaxOutputTokens` int NOT NULL DEFAULT 2048,
+                `Temperature` double NOT NULL DEFAULT 0.2,
+                `ToolCallingEnabled` tinyint(1) NOT NULL DEFAULT 1,
+                `GlobalSystemPrompt` varchar(20000) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedByUserId` varchar(255) NULL,
+                PRIMARY KEY (`AiAssistantSettingsId`)
             );
             """;
         const string createUserNotificationSettingsSql = """
@@ -1009,6 +1064,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createSecuritySettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityIpBlocksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNotificationSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiAssistantSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createPendingTelegramLinksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createTelegramAccountsSql, cancellationToken);

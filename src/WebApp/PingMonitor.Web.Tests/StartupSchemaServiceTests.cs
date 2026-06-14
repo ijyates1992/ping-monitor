@@ -60,7 +60,9 @@ public sealed class StartupSchemaServiceTests
 
         Assert.Contains("\"NetworkDiagramAreas\"", source);
         Assert.Contains("\"NetworkDiagramLinkVlans\"", source);
-        Assert.Equal(19, appRequiredSchemaVersion);
+        Assert.Equal(20, appRequiredSchemaVersion);
+        Assert.Contains("AiAssistantSettings", source);
+        Assert.Contains("RequiredAiAssistantSettingsColumns", source);
         Assert.Equal(appRequiredSchemaVersion, developmentRequiredSchemaVersion);
     }
 

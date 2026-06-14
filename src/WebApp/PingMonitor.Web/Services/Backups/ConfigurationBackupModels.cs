@@ -15,6 +15,7 @@ public static class ConfigurationBackupSections
     public const string SecuritySettings = "security_settings";
     public const string NotificationSettings = "notification_settings";
     public const string UserNotificationSettings = "user_notification_settings";
+    public const string AiAssistantSettings = "ai_assistant_settings";
     public const string Identity = "identity";
     public const string NetworkDiagrams = "network_diagrams";
 
@@ -28,6 +29,7 @@ public static class ConfigurationBackupSections
         SecuritySettings,
         NotificationSettings,
         UserNotificationSettings,
+        AiAssistantSettings,
         Identity,
         NetworkDiagrams
     ];
@@ -161,6 +163,9 @@ public sealed class ConfigurationBackupSectionData
     [JsonPropertyName("user_notification_settings")]
     public IReadOnlyList<BackupUserNotificationSettingsRecord>? UserNotificationSettings { get; init; }
 
+    [JsonPropertyName("ai_assistant_settings")]
+    public BackupAiAssistantSettingsRecord? AiAssistantSettings { get; init; }
+
     [JsonPropertyName("identity")]
     public BackupIdentitySection? Identity { get; init; }
 
@@ -289,6 +294,28 @@ public sealed class BackupNotificationSettingsRecord
     public bool SmtpNotifyEndpointRecovered { get; init; }
     public bool SmtpNotifyAgentOffline { get; init; }
     public bool SmtpNotifyAgentOnline { get; init; }
+    public DateTimeOffset UpdatedAtUtc { get; init; }
+    public string? UpdatedByUserId { get; init; }
+}
+
+
+public sealed class BackupAiAssistantSettingsRecord
+{
+    public bool AssistantEnabled { get; init; }
+    public bool WebChatEnabled { get; init; }
+    public bool TelegramChatEnabled { get; init; }
+    public bool MemoryEnabled { get; init; }
+    public bool DebugLoggingEnabled { get; init; }
+    public string ProviderDisplayName { get; init; } = "Local Ollama";
+    public string ProviderType { get; init; } = "OpenAICompatible";
+    public string BaseUrl { get; init; } = "http://localhost:11434/v1";
+    public string ModelName { get; init; } = string.Empty;
+    public string? ApiKeyProtected { get; init; }
+    public int RequestTimeoutSeconds { get; init; }
+    public int MaxOutputTokens { get; init; }
+    public double Temperature { get; init; }
+    public bool ToolCallingEnabled { get; init; }
+    public string GlobalSystemPrompt { get; init; } = string.Empty;
     public DateTimeOffset UpdatedAtUtc { get; init; }
     public string? UpdatedByUserId { get; init; }
 }
@@ -550,6 +577,7 @@ public sealed class ConfigurationBackupSectionCounts
     public int SecuritySettings { get; init; }
     public int NotificationSettings { get; init; }
     public int UserNotificationSettings { get; init; }
+    public int AiAssistantSettings { get; init; }
     public int IdentityUsers { get; init; }
     public int IdentityRoles { get; init; }
     public int IdentityUserRoles { get; init; }
