@@ -758,6 +758,7 @@ public sealed class NetworkDiagramsFeatureTests
         var repoRoot = FindRepositoryRoot();
         var viewMarkup = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Views", "NetworkDiagrams", "View.cshtml"));
         var script = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "js", "network-diagrams-viewer.js"));
+        var stylesheet = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "wwwroot", "css", "network-diagrams.css"));
 
         Assert.Contains("data-network-diagram-viewer", viewMarkup);
         Assert.Contains("data-live-data-url", viewMarkup);
@@ -796,6 +797,8 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("bindCollapseToggle('[data-show-toolbar]'", script);
         Assert.Contains("bindCollapseToggle('[data-hide-details]'", script);
         Assert.Contains("bindCollapseToggle('[data-show-details]'", script);
+        Assert.Contains("grid-template-rows: auto minmax(0, 1fr) auto;", stylesheet);
+        Assert.Contains(".diagram-viewer-toolbar-show {\n    position: absolute;", stylesheet);
         Assert.DoesNotContain("diagram-editor-heading", viewMarkup);
         Assert.Contains("Diagram live summary", script);
         Assert.Contains("Total nodes", script);

@@ -1609,7 +1609,7 @@ html[data-theme="dark"] .diagram-area[data-style-key="purple"] { border-color: r
 
 /* Read-only viewer layout compaction controls. Keep scoped to the viewer shell. */
 .diagram-viewer-shell {
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .diagram-viewer-shell .diagram-workspace {
