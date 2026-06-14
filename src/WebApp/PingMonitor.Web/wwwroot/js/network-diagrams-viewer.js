@@ -25,6 +25,12 @@
     const exportSvgButton = viewer.querySelector('[data-export-svg]');
     const exportPaperSelect = viewer.querySelector('[data-export-paper]');
     const exportScaleSelect = viewer.querySelector('[data-export-scale]');
+    const toolbar = viewer.querySelector('[data-viewer-toolbar]');
+    const toolbarShowButton = viewer.querySelector('[data-show-toolbar]');
+    const detailsPanel = viewer.querySelector('[data-viewer-details]');
+    const detailsShowButton = viewer.querySelector('[data-show-details]');
+    const toolbarCollapsedStorageKey = 'pingMonitor.diagramViewer.toolbarCollapsed';
+    const detailsCollapsedStorageKey = 'pingMonitor.diagramViewer.detailsCollapsed';
 
     const zoomStep = 1.15;
     const minZoom = 0.15;
@@ -67,6 +73,55 @@
         if (zoomLabel) {
             zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
         }
+    }
+
+    function scheduleCanvasResize() {
+        window.requestAnimationFrame(() => {
+            updateCanvasSize();
+            window.requestAnimationFrame(updateCanvasSize);
+        });
+    }
+
+    function readStoredBoolean(key) {
+        try {
+            return window.localStorage?.getItem(key) === 'true';
+        } catch {
+            return false;
+        }
+    }
+
+    function writeStoredBoolean(key, value) {
+        try {
+            window.localStorage?.setItem(key, value ? 'true' : 'false');
+        } catch {
+            // Collapse state is an optional per-browser preference only.
+        }
+    }
+
+    function setToolbarCollapsed(collapsed) {
+        viewer.dataset.toolbarCollapsed = collapsed ? 'true' : 'false';
+        viewer.classList.toggle('diagram-viewer--toolbar-collapsed', collapsed);
+        if (toolbarShowButton) {
+            toolbarShowButton.setAttribute('aria-hidden', collapsed ? 'false' : 'true');
+        }
+        if (toolbar) {
+            toolbar.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        }
+        writeStoredBoolean(toolbarCollapsedStorageKey, collapsed);
+        scheduleCanvasResize();
+    }
+
+    function setDetailsCollapsed(collapsed) {
+        viewer.dataset.detailsCollapsed = collapsed ? 'true' : 'false';
+        viewer.classList.toggle('diagram-viewer--details-collapsed', collapsed);
+        if (detailsShowButton) {
+            detailsShowButton.setAttribute('aria-hidden', collapsed ? 'false' : 'true');
+        }
+        if (detailsPanel) {
+            detailsPanel.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        }
+        writeStoredBoolean(detailsCollapsedStorageKey, collapsed);
+        scheduleCanvasResize();
     }
 
     function updateCanvasSize() {
@@ -536,6 +591,21 @@
         refreshTimer = window.setInterval(refreshLiveData, refreshIntervalMs);
     }
 
+    function bindCollapseToggle(selector, collapsed) {
+        const button = viewer.querySelector(selector);
+        if (!button) { return; }
+        button.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            collapsed();
+        });
+        button.addEventListener('pointerdown', event => event.stopPropagation());
+    }
+
+    bindCollapseToggle('[data-hide-toolbar]', () => setToolbarCollapsed(true));
+    bindCollapseToggle('[data-show-toolbar]', () => setToolbarCollapsed(false));
+    bindCollapseToggle('[data-hide-details]', () => setDetailsCollapsed(true));
+    bindCollapseToggle('[data-show-details]', () => setDetailsCollapsed(false));
     viewer.querySelector('[data-zoom-in]')?.addEventListener('click', () => zoomAt(canvas.getBoundingClientRect().left + canvas.clientWidth / 2, canvas.getBoundingClientRect().top + canvas.clientHeight / 2, state.zoom * zoomStep));
     viewer.querySelector('[data-zoom-out]')?.addEventListener('click', () => zoomAt(canvas.getBoundingClientRect().left + canvas.clientWidth / 2, canvas.getBoundingClientRect().top + canvas.clientHeight / 2, state.zoom / zoomStep));
     viewer.querySelector('[data-reset-view]')?.addEventListener('click', resetView);
@@ -558,6 +628,8 @@
     window.addEventListener('resize', updateCanvasSize);
     if ('ResizeObserver' in window) { new ResizeObserver(updateCanvasSize).observe(canvasHost); }
     window.addEventListener('beforeunload', () => { if (refreshTimer) { window.clearInterval(refreshTimer); } });
+    setToolbarCollapsed(readStoredBoolean(toolbarCollapsedStorageKey));
+    setDetailsCollapsed(readStoredBoolean(detailsCollapsedStorageKey));
     applyViewTransform();
     updateCanvasSize();
     loadDiagram();

@@ -12,26 +12,13 @@
 @await Html.PartialAsync("_AuthenticatedNav")
 <main class="network-diagrams-main">
     <section class="diagram-editor-shell diagram-viewer-shell" data-network-diagram-viewer data-load-url="@Model.LoadUrl" data-live-data-url="@Model.LiveDataUrl" aria-labelledby="network-diagram-viewer-title">
-        <header class="diagram-editor-toolbar">
-            <div class="diagram-editor-heading">
-                <h1 id="network-diagram-viewer-title">@Model.DiagramName</h1>
-                @if (!string.IsNullOrWhiteSpace(Model.DiagramDescription))
-                {
-                    <p>@Model.DiagramDescription</p>
-                }
-                <p class="diagram-viewer-note">@Model.Notice</p>
-            </div>
-            <div class="diagram-viewer-actions">
-                @if (Model.IsAdmin && !string.IsNullOrWhiteSpace(Model.EditUrl))
-                {
-                    <a class="diagram-tool-button" href="@Model.EditUrl">Edit diagram</a>
-                }
-            </div>
-        </header>
+        <h1 id="network-diagram-viewer-title" class="sr-only">@Model.DiagramName</h1>
 
         <div class="diagram-viewer-layout">
             <section class="diagram-workspace" aria-label="Read-only network diagram viewer">
-                <div class="diagram-workspace-toolbar diagram-viewer-toolbar">
+                <button type="button" class="diagram-tool-button diagram-viewer-toolbar-show" data-show-toolbar aria-controls="diagram-viewer-toolbar">Show toolbar</button>
+                <div class="diagram-workspace-toolbar diagram-viewer-toolbar" id="diagram-viewer-toolbar" data-viewer-toolbar>
+                    <button type="button" class="diagram-tool-button" data-hide-toolbar aria-controls="diagram-viewer-toolbar">Hide toolbar</button>
                     <button type="button" class="diagram-tool-button" data-zoom-out>Zoom out</button>
                     <span class="diagram-zoom-label" data-zoom-label>100%</span>
                     <button type="button" class="diagram-tool-button" data-zoom-in>Zoom in</button>
@@ -60,10 +47,24 @@
                         </label>
                         <button type="button" class="diagram-tool-button" data-export-pdf data-export-pdf-url="@Model.ExportPdfUrl">Export PDF</button>
                     }
+                    @if (Model.IsAdmin && !string.IsNullOrWhiteSpace(Model.EditUrl))
+                    {
+                        <span class="diagram-toolbar-spacer" aria-hidden="true"></span>
+                        <a class="diagram-tool-button" href="@Model.EditUrl">Edit diagram</a>
+                    }
                     <span class="diagram-tool-hint" data-refresh-status>Live overlay pending</span>
                 </div>
                 <div class="diagram-canvas-host" data-diagram-canvas-host>
                     <div class="diagram-canvas" data-diagram-canvas role="application" aria-label="Read-only network diagram canvas" tabindex="0">
+                        <div class="diagram-viewer-canvas-overlay" aria-hidden="true">
+                            <strong>@Model.DiagramName</strong>
+                            <span>Visual links are documentation-only.</span>
+                            @if (!string.IsNullOrWhiteSpace(Model.DiagramDescription))
+                            {
+                                <span>@Model.DiagramDescription</span>
+                            }
+                        </div>
+                        <button type="button" class="diagram-tool-button diagram-viewer-details-show" data-show-details aria-controls="diagram-viewer-details">Show details</button>
                         <div class="diagram-empty-state" data-empty-state>Loading saved diagram…</div>
                         <div class="diagram-world" data-diagram-world>
                             <div class="diagram-area-layer" data-area-layer></div>
@@ -74,8 +75,11 @@
                 </div>
             </section>
 
-            <aside class="diagram-properties diagram-viewer-details" aria-label="Read-only diagram details">
-                <h2>Details</h2>
+            <aside class="diagram-properties diagram-viewer-details" id="diagram-viewer-details" data-viewer-details aria-label="Read-only diagram details">
+                <div class="diagram-viewer-details-header">
+                    <h2>Details</h2>
+                    <button type="button" class="diagram-tool-button" data-hide-details aria-controls="diagram-viewer-details">Hide details</button>
+                </div>
                 <div class="diagram-summary-panel" data-no-selection-panel data-summary-panel>
                     <p class="toolbox-help">Loading diagram summary…</p>
                 </div>
@@ -85,7 +89,7 @@
         </div>
 
         <footer class="diagram-status-bar">
-            <span>Read-only viewer. Visual links do not create monitoring dependencies.</span>
+            <span>Read-only viewer.</span>
             <span data-canvas-size>Canvas size pending</span>
         </footer>
     </section>
