@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using PingMonitor.Web.Controllers;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
+using PingMonitor.Web.Services.AiProviders;
 using PingMonitor.Web.ViewModels.Admin;
 using Xunit;
 
@@ -22,7 +22,7 @@ public sealed class AiAssistantSettingsTests
     [Fact]
     public async Task AdminCanAccessSettingsPage()
     {
-        var controller = new AdminAiAssistantSettingsController(new FakeAiAssistantSettingsService(new AiAssistantSettingsDto()));
+        var controller = new AdminAiAssistantSettingsController(new FakeAiAssistantSettingsService(new AiAssistantSettingsDto()), new FakeAiProviderClient());
         var result = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
         Assert.Equal("Index", result.ViewName);
         Assert.IsType<AiAssistantSettingsPageViewModel>(result.Model);
@@ -32,7 +32,7 @@ public sealed class AiAssistantSettingsTests
     public async Task AdminCanSaveValidSettings_AndApiKeyIsNotEchoed()
     {
         var service = new FakeAiAssistantSettingsService(new AiAssistantSettingsDto());
-        var controller = new AdminAiAssistantSettingsController(service);
+        var controller = new AdminAiAssistantSettingsController(service, new FakeAiProviderClient());
 
         var result = Assert.IsType<ViewResult>(await controller.Save(new AiAssistantSettingsPageViewModel
         {
@@ -64,7 +64,7 @@ public sealed class AiAssistantSettingsTests
     public async Task InvalidSettingsAreRejected(bool enabled, string baseUrl, string modelName, int timeout, int tokens, double temperature)
     {
         var service = new FakeAiAssistantSettingsService(new AiAssistantSettingsDto());
-        var controller = new AdminAiAssistantSettingsController(service);
+        var controller = new AdminAiAssistantSettingsController(service, new FakeAiProviderClient());
         controller.ModelState.Clear();
         if (timeout is < 1 or > 300) controller.ModelState.AddModelError(nameof(AiAssistantSettingsPageViewModel.RequestTimeoutSeconds), "range");
         if (tokens is < 64 or > 32768) controller.ModelState.AddModelError(nameof(AiAssistantSettingsPageViewModel.MaxOutputTokens), "range");
@@ -85,6 +85,60 @@ public sealed class AiAssistantSettingsTests
         Assert.False(controller.ModelState.IsValid);
         Assert.Null(service.LastCommand);
         Assert.IsType<AiAssistantSettingsPageViewModel>(result.Model);
+    }
+
+
+    [Fact]
+    public void TestAction_IsAntiForgeryProtected()
+    {
+        var method = typeof(AdminAiAssistantSettingsController).GetMethod(nameof(AdminAiAssistantSettingsController.Test));
+        Assert.NotNull(method);
+        Assert.NotNull(method!.GetCustomAttributes(typeof(ValidateAntiForgeryTokenAttribute), inherit: true).SingleOrDefault());
+        var route = Assert.Single(method.GetCustomAttributes(typeof(HttpPostAttribute), inherit: true).Cast<HttpPostAttribute>());
+        Assert.Equal("test", route.Template);
+    }
+
+    [Fact]
+    public async Task TestFailsClearlyWhenModelIsMissing_WithoutCallingProvider()
+    {
+        var provider = new FakeAiProviderClient();
+        var controller = new AdminAiAssistantSettingsController(new FakeAiAssistantSettingsService(new AiAssistantSettingsDto
+        {
+            ProviderType = AiAssistantSettings.OpenAICompatibleProviderType,
+            BaseUrl = "http://localhost:11434/v1",
+            ModelName = string.Empty
+        }), provider);
+
+        var result = Assert.IsType<ViewResult>(await controller.Test(CancellationToken.None));
+
+        var model = Assert.IsType<AiAssistantSettingsPageViewModel>(result.Model);
+        Assert.False(model.TestResult!.Succeeded);
+        Assert.Contains("Model name is required", model.TestResult.ErrorMessage);
+        Assert.Null(provider.LastRequest);
+    }
+
+    [Fact]
+    public async Task TestSuccessDisplaysReturnedText_AndDoesNotExposeApiKey()
+    {
+        var provider = new FakeAiProviderClient();
+        var controller = new AdminAiAssistantSettingsController(new FakeAiAssistantSettingsService(new AiAssistantSettingsDto
+        {
+            ProviderType = AiAssistantSettings.OpenAICompatibleProviderType,
+            BaseUrl = "http://localhost:11434/v1",
+            ModelName = "llama",
+            MaxOutputTokens = 2048,
+            RequestTimeoutSeconds = 60,
+            Temperature = 0.2
+        }), provider);
+
+        var result = Assert.IsType<ViewResult>(await controller.Test(CancellationToken.None));
+
+        var model = Assert.IsType<AiAssistantSettingsPageViewModel>(result.Model);
+        Assert.True(model.TestResult!.Succeeded);
+        Assert.Equal("Ping Monitor AI test OK", model.TestResult.ResponseText);
+        Assert.Null(model.ApiKey);
+        Assert.Equal("runtime-secret", provider.LastRequest!.ApiKey);
+        Assert.Equal(256, provider.LastRequest.MaxOutputTokens);
     }
 
     [Fact]
@@ -126,6 +180,18 @@ public sealed class AiAssistantSettingsTests
 
         public FakeAiAssistantSettingsService(AiAssistantSettingsDto current) => _current = current;
         public Task<AiAssistantSettingsDto> GetCurrentAsync(CancellationToken cancellationToken) => Task.FromResult(_current);
+        public Task<AiProviderRuntimeSettingsDto> GetProviderRuntimeSettingsAsync(CancellationToken cancellationToken) => Task.FromResult(new AiProviderRuntimeSettingsDto
+        {
+            ProviderDisplayName = _current.ProviderDisplayName,
+            ProviderType = _current.ProviderType,
+            BaseUrl = _current.BaseUrl,
+            ModelName = _current.ModelName,
+            ApiKey = "runtime-secret",
+            RequestTimeoutSeconds = _current.RequestTimeoutSeconds,
+            MaxOutputTokens = _current.MaxOutputTokens,
+            Temperature = _current.Temperature,
+            ToolCallingEnabled = _current.ToolCallingEnabled
+        });
         public Task<AiAssistantSettingsDto> UpdateAsync(UpdateAiAssistantSettingsCommand command, CancellationToken cancellationToken)
         {
             LastCommand = command;
@@ -143,6 +209,17 @@ public sealed class AiAssistantSettingsTests
                 ToolCallingEnabled = command.ToolCallingEnabled
             };
             return Task.FromResult(_current);
+        }
+    }
+
+    private sealed class FakeAiProviderClient : IAiProviderClient
+    {
+        public AiProviderChatRequest? LastRequest { get; private set; }
+        public AiProviderChatResult Result { get; set; } = new() { Succeeded = true, ResponseText = "Ping Monitor AI test OK", ElapsedMilliseconds = 12, StatusCode = 200 };
+        public Task<AiProviderChatResult> SendChatAsync(AiProviderChatRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(Result);
         }
     }
 

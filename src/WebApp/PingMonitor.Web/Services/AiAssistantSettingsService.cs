@@ -23,6 +23,23 @@ internal sealed class AiAssistantSettingsService : IAiAssistantSettingsService
         return ToDto(settings);
     }
 
+    public async Task<AiProviderRuntimeSettingsDto> GetProviderRuntimeSettingsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateEntityAsync(cancellationToken);
+        return new AiProviderRuntimeSettingsDto
+        {
+            ProviderDisplayName = settings.ProviderDisplayName,
+            ProviderType = settings.ProviderType,
+            BaseUrl = settings.BaseUrl,
+            ModelName = settings.ModelName,
+            ApiKey = UnprotectSecret(settings.ApiKeyProtected),
+            RequestTimeoutSeconds = settings.RequestTimeoutSeconds,
+            MaxOutputTokens = settings.MaxOutputTokens,
+            Temperature = settings.Temperature,
+            ToolCallingEnabled = settings.ToolCallingEnabled
+        };
+    }
+
     public async Task<AiAssistantSettingsDto> UpdateAsync(UpdateAiAssistantSettingsCommand command, CancellationToken cancellationToken)
     {
         var settings = await GetOrCreateEntityAsync(cancellationToken);
@@ -115,6 +132,17 @@ internal sealed class AiAssistantSettingsService : IAiAssistantSettingsService
         }
 
         return Convert.ToBase64String(payload);
+    }
+
+    private static string? UnprotectSecret(string? protectedSecret)
+    {
+        if (string.IsNullOrWhiteSpace(protectedSecret)) return null;
+        var payload = Convert.FromBase64String(protectedSecret);
+        if (OperatingSystem.IsWindows())
+        {
+            payload = ProtectedData.Unprotect(payload, optionalEntropy: null, DataProtectionScope.LocalMachine);
+        }
+        return Encoding.UTF8.GetString(payload);
     }
 
     private static string? NormalizeString(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

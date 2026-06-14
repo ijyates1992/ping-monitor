@@ -12,6 +12,7 @@ using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Agents;
+using PingMonitor.Web.Services.AiProviders;
 using PingMonitor.Web.Services.Backups;
 using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.Endpoints;
@@ -198,7 +199,9 @@ builder.Services.AddScoped<IAgentTemplateVersionProvider, AgentTemplateVersionPr
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<IAiAssistantSettingsService, AiAssistantSettingsService>();
+builder.Services.AddScoped<IAiProviderClient, OpenAiCompatibleProviderClient>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
+builder.Services.AddHttpClient(nameof(OpenAiCompatibleProviderClient));
 builder.Services.AddHttpClient(nameof(GitHubReleaseLookupService));
 builder.Services.AddHttpClient(nameof(ApplicationUpdateStagingService));
 builder.Services.AddHttpClient(nameof(ReleaseSchemaMetadataService));
