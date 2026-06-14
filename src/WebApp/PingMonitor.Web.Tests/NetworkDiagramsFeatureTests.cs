@@ -787,9 +787,12 @@ public sealed class NetworkDiagramsFeatureTests
         Assert.Contains("setToolbarCollapsed", script);
         Assert.Contains("setDetailsCollapsed", script);
         Assert.Contains("scheduleCanvasResize", script);
-        Assert.Contains("toolbar.hidden = collapsed", script);
-        Assert.Contains("detailsPanel.hidden = collapsed", script);
-        Assert.Contains("[data-hide-toolbar], [data-show-toolbar], [data-hide-details], [data-show-details]", script);
+        Assert.Contains("diagram-viewer--toolbar-collapsed", script);
+        Assert.Contains("diagram-viewer--details-collapsed", script);
+        Assert.Contains("bindCollapseToggle('[data-hide-toolbar]'", script);
+        Assert.Contains("bindCollapseToggle('[data-show-toolbar]'", script);
+        Assert.Contains("bindCollapseToggle('[data-hide-details]'", script);
+        Assert.Contains("bindCollapseToggle('[data-show-details]'", script);
         Assert.DoesNotContain("diagram-editor-heading", viewMarkup);
         Assert.Contains("Diagram live summary", script);
         Assert.Contains("Total nodes", script);
