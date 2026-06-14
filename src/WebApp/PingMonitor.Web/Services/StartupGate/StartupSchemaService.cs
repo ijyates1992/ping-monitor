@@ -716,7 +716,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `MaxOutputTokens` int NOT NULL DEFAULT 2048,
                 `Temperature` double NOT NULL DEFAULT 0.2,
                 `ToolCallingEnabled` tinyint(1) NOT NULL DEFAULT 1,
-                `GlobalSystemPrompt` varchar(20000) NOT NULL,
+                `GlobalSystemPrompt` longtext NOT NULL,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedByUserId` varchar(255) NULL,
                 PRIMARY KEY (`AiAssistantSettingsId`)
@@ -1084,6 +1084,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureApplicationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
+        await EnsureAiAssistantSettingsSchemaAsync(dbContext, cancellationToken);
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
@@ -2226,6 +2227,26 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
     }
 
+
+    private static async Task EnsureAiAssistantSettingsSchemaAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await IsColumnLongTextAsync(connection, "AiAssistantSettings", "GlobalSystemPrompt", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `AiAssistantSettings`
+                MODIFY COLUMN `GlobalSystemPrompt` longtext NOT NULL;
+                """,
+                cancellationToken);
+        }
+    }
+
     private static async Task EnsureUserNotificationSettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         await using var connection = dbContext.Database.GetDbConnection();
@@ -2474,6 +2495,30 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
         var value = await command.ExecuteScalarAsync(cancellationToken);
         return value is string dataType && string.Equals(dataType, "double", StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private static async Task<bool> IsColumnLongTextAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, CancellationToken cancellationToken)
+    {
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = @tableName
+              AND column_name = @columnName
+            LIMIT 1;
+            """;
+        AddParameter(command, "@tableName", tableName);
+        AddParameter(command, "@columnName", columnName);
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is string dataType && string.Equals(dataType, "longtext", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<bool> HasCheckResultsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)
