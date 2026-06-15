@@ -38,13 +38,20 @@ internal sealed class AiMonitoringContextService : IAiMonitoringContextService
 
         var now = DateTimeOffset.UtcNow;
         var visibleEndpointIds = scope.IsAdmin ? null : scope.VisibleEndpointIds.ToArray();
-        var assignmentQuery = _dbContext.MonitorAssignments.AsNoTracking();
-        if (visibleEndpointIds is not null)
+        SummaryEndpointRow[] rows;
+        if (visibleEndpointIds is { Length: 0 })
         {
-            assignmentQuery = assignmentQuery.Where(x => visibleEndpointIds.Contains(x.EndpointId));
+            rows = [];
         }
+        else
+        {
+            var assignmentQuery = _dbContext.MonitorAssignments.AsNoTracking();
+            if (visibleEndpointIds is not null)
+            {
+                assignmentQuery = assignmentQuery.Where(x => visibleEndpointIds.Contains(x.EndpointId));
+            }
 
-        var rows = await (from assignment in assignmentQuery
+            rows = await (from assignment in assignmentQuery
             join endpoint in _dbContext.Endpoints.AsNoTracking() on assignment.EndpointId equals endpoint.EndpointId
             join state in _dbContext.EndpointStates.AsNoTracking() on assignment.AssignmentId equals state.AssignmentId into stateJoin
             from state in stateJoin.DefaultIfEmpty()
@@ -55,43 +62,52 @@ internal sealed class AiMonitoringContextService : IAiMonitoringContextService
                 state != null ? state.CurrentState : EndpointStateKind.Unknown,
                 state != null ? state.LastStateChangeUtc : null,
                 assignment.AgentId))
-            .ToArrayAsync(cancellationToken);
+                .ToArrayAsync(cancellationToken);
+        }
 
         var visibleIdsFromRows = rows.Select(x => x.EndpointId).Distinct(StringComparer.Ordinal).ToArray();
         var visibleIdSet = visibleIdsFromRows.ToHashSet(StringComparer.Ordinal);
         var agentIds = rows.Select(x => x.AgentId).Distinct(StringComparer.Ordinal).ToArray();
 
-        var staleAgents = await _dbContext.Agents.AsNoTracking()
-            .Where(x => agentIds.Contains(x.AgentId) && (x.Status == AgentHealthStatus.Stale || x.Status == AgentHealthStatus.Offline))
-            .OrderBy(x => x.Name ?? x.InstanceId)
-            .ThenBy(x => x.InstanceId)
-            .Take(EndpointListLimit)
-            .Select(x => new AiNetworkHealthAgent
-            {
-                AgentId = x.AgentId,
-                Name = string.IsNullOrWhiteSpace(x.Name) ? "(unnamed agent)" : x.Name!,
-                InstanceId = x.InstanceId,
-                Status = x.Status.ToString().ToUpperInvariant(),
-                LastHeartbeatUtc = x.LastHeartbeatUtc
-            })
-            .ToArrayAsync(cancellationToken);
+        AiNetworkHealthAgent[] staleAgents = [];
+        if (agentIds.Length > 0)
+        {
+            staleAgents = await _dbContext.Agents.AsNoTracking()
+                .Where(x => agentIds.Contains(x.AgentId) && (x.Status == AgentHealthStatus.Stale || x.Status == AgentHealthStatus.Offline))
+                .OrderBy(x => x.Name ?? x.InstanceId)
+                .ThenBy(x => x.InstanceId)
+                .Take(EndpointListLimit)
+                .Select(x => new AiNetworkHealthAgent
+                {
+                    AgentId = x.AgentId,
+                    Name = string.IsNullOrWhiteSpace(x.Name) ? "(unnamed agent)" : x.Name!,
+                    InstanceId = x.InstanceId,
+                    Status = x.Status.ToString().ToUpperInvariant(),
+                    LastHeartbeatUtc = x.LastHeartbeatUtc
+                })
+                .ToArrayAsync(cancellationToken);
+        }
 
         var recentStart = now - RecentChangeWindow;
-        var recentStateChanges = await (from transition in _dbContext.StateTransitions.AsNoTracking()
-            join endpoint in _dbContext.Endpoints.AsNoTracking() on transition.EndpointId equals endpoint.EndpointId
-            where visibleIdsFromRows.Contains(transition.EndpointId) && transition.TransitionAtUtc >= recentStart
-            orderby transition.TransitionAtUtc descending
-            select new AiNetworkHealthStateChange
-            {
-                EndpointId = transition.EndpointId,
-                Name = endpoint.Name,
-                PreviousState = transition.PreviousState.ToString().ToUpperInvariant(),
-                NewState = transition.NewState.ToString().ToUpperInvariant(),
-                ChangedAtUtc = transition.TransitionAtUtc,
-                ReasonCode = transition.ReasonCode
-            })
-            .Take(RecentChangeLimit)
-            .ToArrayAsync(cancellationToken);
+        AiNetworkHealthStateChange[] recentStateChanges = [];
+        if (visibleIdsFromRows.Length > 0)
+        {
+            recentStateChanges = await (from transition in _dbContext.StateTransitions.AsNoTracking()
+                join endpoint in _dbContext.Endpoints.AsNoTracking() on transition.EndpointId equals endpoint.EndpointId
+                where visibleIdsFromRows.Contains(transition.EndpointId) && transition.TransitionAtUtc >= recentStart
+                orderby transition.TransitionAtUtc descending
+                select new AiNetworkHealthStateChange
+                {
+                    EndpointId = transition.EndpointId,
+                    Name = endpoint.Name,
+                    PreviousState = transition.PreviousState.ToString().ToUpperInvariant(),
+                    NewState = transition.NewState.ToString().ToUpperInvariant(),
+                    ChangedAtUtc = transition.TransitionAtUtc,
+                    ReasonCode = transition.ReasonCode
+                })
+                .Take(RecentChangeLimit)
+                .ToArrayAsync(cancellationToken);
+        }
 
         var summary = new AiNetworkHealthSummary
         {
