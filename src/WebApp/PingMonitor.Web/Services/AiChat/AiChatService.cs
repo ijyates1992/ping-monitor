@@ -14,17 +14,19 @@ internal sealed class AiChatService : IAiChatService
 You are the Ping Monitor AI assistant.
 
 You are read-only.
-You may be given a read-only network health summary from Ping Monitor.
-Use it as the source of truth for current endpoint and agent state visible to the user.
-Do not invent endpoint state, agents, outages, diagrams, ports, VLANs, metrics, raw CheckResults, or topology.
-If the supplied summary is absent or incomplete, say so.
-Raw CheckResults diagnostics, diagram lookup, endpoint diagnostic packs, baseline comparisons, detailed latency/loss/jitter diagnostics, prompt history, persistent AI audit logs, and memory are not connected yet.
+You may be given read-only Ping Monitor context including network health summaries, endpoint lookup results, endpoint diagnostics packs, bounded uptime/state interval summaries, and bounded check-result summaries or series.
+Use supplied context as the source of truth for current endpoint and agent state visible to the user.
+Do not invent endpoint states, uptime, CheckResults, RTT, packet loss, agents, diagrams, ports, VLANs, outage history, metrics, or topology.
+If endpoint diagnostics context is missing, ambiguous, or incomplete, say so.
+Diagram lookup, switch port/VLAN answers, persistent memory, prompt history, persistent AI audit logs, write actions, formal tool-calling, and unrestricted raw CheckResults export are not connected yet.
 You may summarize and explain only. Do not suggest or perform write actions, remediation, alert acknowledgement, endpoint edits, dependency edits, diagram edits, agent commands, direct SQL, or autonomous actions.
 """;
 
     private readonly IAiAssistantSettingsService _settingsService;
     private readonly IAiProviderClient _providerClient;
     private readonly IAiMonitoringContextService _monitoringContextService;
+    private readonly IAiEndpointLookupService _endpointLookupService;
+    private readonly IAiEndpointDiagnosticsService _endpointDiagnosticsService;
     private readonly ILogger<AiChatService> _logger;
 
     private static readonly JsonSerializerOptions MonitoringSummaryJsonOptions = new(JsonSerializerDefaults.Web)
@@ -37,11 +39,15 @@ You may summarize and explain only. Do not suggest or perform write actions, rem
         IAiAssistantSettingsService settingsService,
         IAiProviderClient providerClient,
         IAiMonitoringContextService monitoringContextService,
+        IAiEndpointLookupService endpointLookupService,
+        IAiEndpointDiagnosticsService endpointDiagnosticsService,
         ILogger<AiChatService> logger)
     {
         _settingsService = settingsService;
         _providerClient = providerClient;
         _monitoringContextService = monitoringContextService;
+        _endpointLookupService = endpointLookupService;
+        _endpointDiagnosticsService = endpointDiagnosticsService;
         _logger = logger;
     }
 
@@ -172,11 +178,44 @@ You may summarize and explain only. Do not suggest or perform write actions, rem
             || normalized.Contains("agent stale", StringComparison.Ordinal);
     }
 
+
+    internal static bool ShouldRequestEndpointDiagnostics(string userMessage)
+    {
+        if (string.IsNullOrWhiteSpace(userMessage)) return false;
+        var normalized = userMessage.Trim().ToLowerInvariant();
+        return normalized.Contains("what is going on with", StringComparison.Ordinal)
+            || normalized.Contains("what's going on with", StringComparison.Ordinal)
+            || normalized.Contains("uptime", StringComparison.Ordinal)
+            || normalized.Contains("down today", StringComparison.Ordinal)
+            || normalized.Contains("been down", StringComparison.Ordinal)
+            || normalized.Contains("flapping", StringComparison.Ordinal)
+            || normalized.Contains("recent check", StringComparison.Ordinal)
+            || normalized.Contains("check pattern", StringComparison.Ordinal)
+            || normalized.Contains("packet loss", StringComparison.Ordinal)
+            || normalized.Contains("latency", StringComparison.Ordinal)
+            || normalized.Contains("rtt", StringComparison.Ordinal)
+            || normalized.Contains("reliable", StringComparison.Ordinal);
+    }
+
+    internal static string RequestedWindowFromMessage(string userMessage)
+    {
+        var normalized = userMessage.ToLowerInvariant();
+        if (normalized.Contains("1h", StringComparison.Ordinal) || normalized.Contains("last hour", StringComparison.Ordinal)) return "1h";
+        if (normalized.Contains("6h", StringComparison.Ordinal) || normalized.Contains("six hours", StringComparison.Ordinal)) return "6h";
+        if (normalized.Contains("7d", StringComparison.Ordinal) || normalized.Contains("week", StringComparison.Ordinal)) return "7d";
+        if (normalized.Contains("today", StringComparison.Ordinal)) return "today";
+        if (normalized.Contains("24h", StringComparison.Ordinal) || normalized.Contains("24 hours", StringComparison.Ordinal)) return "24h";
+        if (normalized.Contains("month", StringComparison.Ordinal) || normalized.Contains("year", StringComparison.Ordinal)) return "30d";
+        return "24h";
+    }
+
     private async Task<MonitoringContextPromptResult> GetMonitoringContextPromptAsync(
         AiChatRequest request,
         CancellationToken cancellationToken)
     {
-        if (!ShouldRequestNetworkHealthSummary(request.UserMessage))
+        var wantsEndpointDiagnostics = ShouldRequestEndpointDiagnostics(request.UserMessage);
+        var wantsNetworkSummary = ShouldRequestNetworkHealthSummary(request.UserMessage);
+        if (!wantsEndpointDiagnostics && !wantsNetworkSummary)
         {
             return MonitoringContextPromptResult.None;
         }
@@ -184,6 +223,34 @@ You may summarize and explain only. Do not suggest or perform write actions, rem
         if (request.User is null)
         {
             return MonitoringContextPromptResult.Unavailable(BuildMonitoringUnavailableMessage());
+        }
+
+        if (wantsEndpointDiagnostics)
+        {
+            var lookup = await _endpointLookupService.SearchEndpointsAsync(request.User, request.UserMessage, cancellationToken);
+            if (lookup.Ambiguous)
+            {
+                var choices = string.Join("\n", lookup.Matches.Select(x => $"- {x.Name} ({x.Target})"));
+                return MonitoringContextPromptResult.Unavailable($"I found multiple visible endpoints that could match. Which one do you mean?\n{choices}");
+            }
+            if (lookup.StrongMatch is null)
+            {
+                return MonitoringContextPromptResult.Unavailable(lookup.Message ?? "No matching visible endpoint was found.");
+            }
+            var diagnostics = await _endpointDiagnosticsService.GetDiagnosticsPackAsync(request.User, lookup.StrongMatch.EndpointId, RequestedWindowFromMessage(request.UserMessage), cancellationToken);
+            if (!diagnostics.Succeeded || diagnostics.Pack is null)
+            {
+                return MonitoringContextPromptResult.Unavailable(diagnostics.ErrorMessage ?? "I couldn't retrieve endpoint diagnostics safely.");
+            }
+            var diagnosticsJson = JsonSerializer.Serialize(diagnostics.Pack, MonitoringSummaryJsonOptions);
+            return MonitoringContextPromptResult.Available($"""
+Read-only Ping Monitor tool result: {AiEndpointDiagnosticsPack.ToolName}
+This structured endpoint diagnostics pack is permission-filtered for the authenticated application user.
+Use it as source of truth. Answer in plain text and do not display the raw JSON.
+CheckResults context is bounded; UNKNOWN is not DOWN; SUPPRESSED is not downtime.
+
+{diagnosticsJson}
+""");
         }
 
         AiMonitoringContextResult contextResult;
@@ -215,7 +282,7 @@ This is current saved monitoring state, not raw packet-level diagnostics.
 
         static string BuildMonitoringUnavailableMessage()
         {
-            return "I couldn't retrieve Ping Monitor's current network health summary, so I don't have enough monitoring data to answer that safely. Raw CheckResults diagnostics, diagram lookup, endpoint diagnostic packs, baseline comparisons, and memory are not connected yet.";
+            return "I couldn't retrieve Ping Monitor's current network health summary, so I don't have enough monitoring data to answer that safely. Endpoint diagnostics are bounded. Diagram lookup, switch port/VLAN answers, memory, write actions, and unrestricted raw CheckResults export are not connected yet.";
         }
     }
 

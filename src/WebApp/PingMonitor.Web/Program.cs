@@ -204,6 +204,8 @@ builder.Services.AddScoped<IAiAssistantSettingsService, AiAssistantSettingsServi
 builder.Services.AddScoped<IAiProviderClient, OpenAiCompatibleProviderClient>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAiMonitoringContextService, AiMonitoringContextService>();
+builder.Services.AddScoped<IAiEndpointLookupService, AiEndpointLookupService>();
+builder.Services.AddScoped<IAiEndpointDiagnosticsService, AiEndpointDiagnosticsService>();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
 builder.Services.AddSingleton<ITelegramAiConversationStore, TelegramAiConversationStore>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();

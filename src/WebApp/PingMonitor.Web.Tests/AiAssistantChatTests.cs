@@ -59,7 +59,7 @@ public sealed class AiAssistantChatTests
         var settings = EnabledSettings();
         settings.TelegramChatEnabled = false;
         var monitoring = new FakeAiMonitoringContextService();
-        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, monitoring, NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, monitoring, new FakeAiEndpointLookupService(), new FakeAiEndpointDiagnosticsService(), NullLogger<AiChatService>.Instance);
 
         var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, UserMessage = "hello" }, CancellationToken.None);
 
@@ -76,7 +76,7 @@ public sealed class AiAssistantChatTests
         var settings = EnabledSettings(webChatEnabled: false);
         settings.TelegramChatEnabled = true;
         var monitoring = new FakeAiMonitoringContextService();
-        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, monitoring, NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, monitoring, new FakeAiEndpointLookupService(), new FakeAiEndpointDiagnosticsService(), NullLogger<AiChatService>.Instance);
 
         var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, User = User(), UserMessage = "How is my network looking today?" }, CancellationToken.None);
 
@@ -112,7 +112,7 @@ public sealed class AiAssistantChatTests
         {
             Result = AiMonitoringContextResult.Unavailable("database unavailable")
         };
-        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, monitoring, NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, monitoring, new FakeAiEndpointLookupService(), new FakeAiEndpointDiagnosticsService(), NullLogger<AiChatService>.Instance);
 
         var response = await chat.SendAsync(new AiChatRequest { User = User(), UserMessage = "How is my network looking today?" }, CancellationToken.None);
 
@@ -128,14 +128,47 @@ public sealed class AiAssistantChatTests
     {
         var provider = new FakeAiProviderClient();
         var monitoring = new FakeAiMonitoringContextService();
-        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, monitoring, NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, monitoring, new FakeAiEndpointLookupService(), new FakeAiEndpointDiagnosticsService(), NullLogger<AiChatService>.Instance);
 
         await chat.SendAsync(new AiChatRequest { User = User(), UserMessage = "Is WFP WAN RTT higher than its 24h baseline?" }, CancellationToken.None);
 
         Assert.Equal(0, monitoring.CallCount);
         Assert.NotNull(provider.LastRequest);
-        Assert.Contains("baseline comparisons", provider.LastRequest.Messages[0].Content, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Raw CheckResults diagnostics", provider.LastRequest.Messages[0].Content, StringComparison.Ordinal);
+        Assert.Contains("bounded check-result", provider.LastRequest.Messages[0].Content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unrestricted raw CheckResults export", provider.LastRequest.Messages[0].Content, StringComparison.Ordinal);
+    }
+
+
+
+    [Fact]
+    public async Task WebChatInjectsEndpointDiagnosticsForEndpointQuestion()
+    {
+        var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "WFP WAN is UP.", Model = "llama" } };
+        var lookup = new FakeAiEndpointLookupService { Result = new AiEndpointLookupResult { Succeeded = true, Matches = [new AiEndpointLookupItem { EndpointId = "e-wfp", Name = "WFP WAN", Target = "1.2.3.4", Enabled = true }] } };
+        var diagnostics = new FakeAiEndpointDiagnosticsService();
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, new FakeAiMonitoringContextService(), lookup, diagnostics, NullLogger<AiChatService>.Instance);
+
+        var response = await chat.SendAsync(new AiChatRequest { User = User(), UserMessage = "What is going on with WFP WAN?" }, CancellationToken.None);
+
+        Assert.True(response.Succeeded);
+        Assert.Equal(1, lookup.CallCount);
+        Assert.Equal("24h", diagnostics.RequestedWindow);
+        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("get_endpoint_diagnostics_pack", StringComparison.Ordinal));
+        Assert.Contains(provider.LastRequest.Messages, x => x.Content.Contains("WFP WAN", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AmbiguousEndpointLookupReturnsClarificationWithoutProviderCall()
+    {
+        var provider = new FakeAiProviderClient();
+        var lookup = new FakeAiEndpointLookupService { Result = new AiEndpointLookupResult { Ambiguous = true, Matches = [new AiEndpointLookupItem { Name = "Kitchen AP", Target = "10.0.0.2" }, new AiEndpointLookupItem { Name = "Kitchen Switch", Target = "10.0.0.3" }] } };
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, new FakeAiMonitoringContextService(), lookup, new FakeAiEndpointDiagnosticsService(), NullLogger<AiChatService>.Instance);
+
+        var response = await chat.SendAsync(new AiChatRequest { User = User(), UserMessage = "Is Kitchen flapping?" }, CancellationToken.None);
+
+        Assert.True(response.Succeeded);
+        Assert.Contains("Which one", response.AssistantMessage);
+        Assert.Null(provider.LastRequest);
     }
 
     [Fact]
@@ -238,10 +271,10 @@ public sealed class AiAssistantChatTests
     public void PromptLayeringIncludesSafetyPromptBeforeAdminPrompt()
     {
         var messages = AiChatService.BuildMessages("Site guidance", [], "How is my network looking today?");
-        Assert.Contains("read-only network health summary", messages[0].Content);
-        Assert.Contains("Raw CheckResults diagnostics", messages[0].Content);
-        Assert.Contains("diagram lookup", messages[0].Content);
-        Assert.Contains("endpoint diagnostic packs", messages[0].Content);
+        Assert.Contains("endpoint diagnostics packs", messages[0].Content);
+        Assert.Contains("bounded check-result summaries", messages[0].Content);
+        Assert.Contains("Diagram lookup", messages[0].Content);
+        Assert.Contains("switch port/VLAN", messages[0].Content);
         Assert.Contains("memory", messages[0].Content);
         Assert.Contains("Do not invent endpoint state", messages[0].Content);
         Assert.Contains("Admin-configured site instructions", messages[1].Content);
@@ -273,7 +306,7 @@ public sealed class AiAssistantChatTests
         FakeAiMonitoringContextService? monitoringContextService = null)
     {
         var settingsService = new FakeAiAssistantSettingsService(settings);
-        var chat = new AiChatService(settingsService, provider, monitoringContextService ?? new FakeAiMonitoringContextService(), NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(settingsService, provider, monitoringContextService ?? new FakeAiMonitoringContextService(), new FakeAiEndpointLookupService(), new FakeAiEndpointDiagnosticsService(), NullLogger<AiChatService>.Instance);
         return new AiAssistantController(settingsService, chat);
     }
 
@@ -391,6 +424,29 @@ public sealed class AiAssistantChatTests
         {
             CallCount += 1;
             return Task.FromResult(Result);
+        }
+    }
+
+
+
+    private sealed class FakeAiEndpointLookupService : IAiEndpointLookupService
+    {
+        public int CallCount { get; private set; }
+        public AiEndpointLookupResult Result { get; set; } = new() { Succeeded = true, Matches = [new AiEndpointLookupItem { EndpointId = "endpoint-farm-router", Name = "Farm Router WAN", Target = "1.2.3.4", Enabled = true }] };
+        public Task<AiEndpointLookupResult> SearchEndpointsAsync(ClaimsPrincipal user, string userMessage, CancellationToken cancellationToken)
+        {
+            CallCount += 1;
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class FakeAiEndpointDiagnosticsService : IAiEndpointDiagnosticsService
+    {
+        public string? RequestedWindow { get; private set; }
+        public Task<AiEndpointDiagnosticsResult> GetDiagnosticsPackAsync(ClaimsPrincipal user, string endpointId, string requestedWindow, CancellationToken cancellationToken)
+        {
+            RequestedWindow = requestedWindow;
+            return Task.FromResult(new AiEndpointDiagnosticsResult { Succeeded = true, Pack = new AiEndpointDiagnosticsPack { GeneratedAtUtc = DateTimeOffset.Parse("2026-06-15T12:00:00Z"), Endpoint = new AiEndpointLookupItem { EndpointId = endpointId, Name = "WFP WAN", Target = "1.2.3.4", Enabled = true }, CurrentState = new AiEndpointCurrentStateInfo { State = EndpointStateKind.Up }, Checks = new AiEndpointCheckSummary { ReceivedSamples = 1, SuccessfulSamples = 1 }, Uptime = new AiEndpointUptimeSummary { UptimeSeconds = 3600, UptimePercent = 100 } } });
         }
     }
 
