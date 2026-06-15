@@ -35,4 +35,28 @@ public sealed class DegradedEndpointQueryTranslationTests
 
         Assert.DoesNotContain("RefreshAssignmentsAsync", source);
     }
+
+    [Fact]
+    public void AiMonitoringContextService_GuardsEmptyIdCollectionsBeforeMySqlContainsQueries()
+    {
+        var sourcePath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "PingMonitor.Web",
+            "Services",
+            "AiChat",
+            "AiMonitoringContextService.cs"));
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("if (visibleEndpointIds is { Length: 0 })", source);
+        Assert.Contains("if (agentIds.Length > 0)", source);
+        Assert.Contains("if (visibleIdsFromRows.Length > 0)", source);
+        Assert.Contains("WhereStringEqualsAny", source);
+        Assert.DoesNotContain("visibleEndpointIds.Contains", source);
+        Assert.DoesNotContain("agentIds.Contains", source);
+        Assert.DoesNotContain("visibleIdsFromRows.Contains", source);
+    }
 }
