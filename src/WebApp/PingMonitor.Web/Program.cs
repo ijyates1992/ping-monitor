@@ -201,7 +201,9 @@ builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>(
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<IAiAssistantSettingsService, AiAssistantSettingsService>();
 builder.Services.AddScoped<IAiProviderClient, OpenAiCompatibleProviderClient>();
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
+builder.Services.AddSingleton<ITelegramAiConversationStore, TelegramAiConversationStore>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
 builder.Services.AddHttpClient(nameof(OpenAiCompatibleProviderClient));
 builder.Services.AddHttpClient(nameof(GitHubReleaseLookupService));
