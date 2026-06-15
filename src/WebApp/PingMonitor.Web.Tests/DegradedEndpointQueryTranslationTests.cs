@@ -54,5 +54,9 @@ public sealed class DegradedEndpointQueryTranslationTests
         Assert.Contains("if (visibleEndpointIds is { Length: 0 })", source);
         Assert.Contains("if (agentIds.Length > 0)", source);
         Assert.Contains("if (visibleIdsFromRows.Length > 0)", source);
+        Assert.Contains("WhereStringEqualsAny", source);
+        Assert.DoesNotContain("visibleEndpointIds.Contains", source);
+        Assert.DoesNotContain("agentIds.Contains", source);
+        Assert.DoesNotContain("visibleIdsFromRows.Contains", source);
     }
 }
