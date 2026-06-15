@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.AiProviders;
@@ -130,9 +129,66 @@ You do not have database access and must not ask for or produce SQL.
             return "The read-only Ping Monitor tool get_network_health_summary was selected, but the network health summary is unavailable. Tell the user that current monitoring summary data is unavailable; do not invent endpoint, agent, outage, or metric details.";
         }
 
-        var json = JsonSerializer.Serialize(context.Summary, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        return "Read-only Ping Monitor tool result: get_network_health_summary. Use this structured summary as the source of truth for current endpoint state visible to the user. Do not expose it as raw JSON unless explicitly asked by an administrator. Summary JSON:\n" + json;
+        var summary = context.Summary;
+        var lines = new List<string>
+        {
+            "Read-only Ping Monitor tool result: get_network_health_summary.",
+            "Use this summary as the source of truth for current endpoint state visible to the user.",
+            "Do not invent endpoint, agent, outage, metric, or raw CheckResults details.",
+            $"GeneratedAtUtc: {summary.GeneratedAtUtc:O}",
+            $"DataSource: {summary.DataSource}",
+            $"VisibleEndpointCount: {summary.VisibleEndpointCount}",
+            $"StateCounts: UP={summary.StateCounts.Up}; DEGRADED={summary.StateCounts.Degraded}; DOWN={summary.StateCounts.Down}; SUPPRESSED={summary.StateCounts.Suppressed}; UNKNOWN={summary.StateCounts.Unknown}"
+        };
+
+        AppendEndpointSection(lines, "DownEndpoints", summary.DownEndpoints);
+        AppendEndpointSection(lines, "DegradedEndpoints", summary.DegradedEndpoints);
+        AppendEndpointSection(lines, "UnknownEndpoints", summary.UnknownEndpoints);
+        AppendEndpointSection(lines, "SuppressedEndpoints", summary.SuppressedEndpoints);
+        AppendAgentSection(lines, summary.StaleAgents);
+        AppendStateChangeSection(lines, summary.RecentStateChanges);
+        AppendStringSection(lines, "Limitations", summary.Limitations);
+
+        return string.Join("\n", lines);
     }
+
+    private static void AppendEndpointSection(List<string> lines, string name, IReadOnlyList<AiNetworkHealthEndpoint> endpoints)
+    {
+        lines.Add($"{name}: {(endpoints.Count == 0 ? "none" : endpoints.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
+        foreach (var endpoint in endpoints)
+        {
+            lines.Add($"- {endpoint.State}: {endpoint.Name} ({endpoint.Target}); EndpointId={endpoint.EndpointId}; LastChangedUtc={FormatTimestamp(endpoint.LastChangedUtc)}");
+        }
+    }
+
+    private static void AppendAgentSection(List<string> lines, IReadOnlyList<AiNetworkHealthAgent> agents)
+    {
+        lines.Add($"StaleOrOfflineAgents: {(agents.Count == 0 ? "none" : agents.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
+        foreach (var agent in agents)
+        {
+            lines.Add($"- {agent.Status}: {agent.Name}; InstanceId={agent.InstanceId}; AgentId={agent.AgentId}; LastHeartbeatUtc={FormatTimestamp(agent.LastHeartbeatUtc)}");
+        }
+    }
+
+    private static void AppendStateChangeSection(List<string> lines, IReadOnlyList<AiNetworkHealthStateChange> changes)
+    {
+        lines.Add($"RecentStateChanges: {(changes.Count == 0 ? "none" : changes.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
+        foreach (var change in changes)
+        {
+            lines.Add($"- {change.ChangedAtUtc:O}: {change.Name} ({change.EndpointId}) {change.PreviousState}->{change.NewState}; ReasonCode={change.ReasonCode ?? "none"}");
+        }
+    }
+
+    private static void AppendStringSection(List<string> lines, string name, IReadOnlyList<string> values)
+    {
+        lines.Add($"{name}: {(values.Count == 0 ? "none" : values.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
+        foreach (var value in values)
+        {
+            lines.Add($"- {value}");
+        }
+    }
+
+    private static string FormatTimestamp(DateTimeOffset? timestamp) => timestamp.HasValue ? timestamp.Value.ToString("O") : "unknown";
 
     private static AiChatResponse ConfigurationError(AiAssistantSettingsDto settings, string message) => new() { AssistantEnabled = settings.AssistantEnabled, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ErrorMessage = message };
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];

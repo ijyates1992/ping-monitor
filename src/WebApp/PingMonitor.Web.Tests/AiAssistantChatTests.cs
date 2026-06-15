@@ -77,6 +77,31 @@ public sealed class AiAssistantChatTests
 
 
     [Fact]
+    public void HealthSummaryPromptUsesCompactTextInsteadOfRawJson()
+    {
+        var messages = AiChatService.BuildMessages(null, [], "Is anything down?", new AiMonitoringContextResult
+        {
+            ShouldInclude = true,
+            Succeeded = true,
+            Summary = new AiNetworkHealthSummary
+            {
+                GeneratedAtUtc = DateTimeOffset.Parse("2026-06-15T12:00:00Z"),
+                VisibleEndpointCount = 1,
+                StateCounts = new AiNetworkHealthStateCounts { Down = 1 },
+                DownEndpoints = [new AiNetworkHealthEndpoint { EndpointId = "endpoint-1", Name = "Farm Router WAN", Target = "1.2.3.4", State = "DOWN", LastChangedUtc = DateTimeOffset.Parse("2026-06-15T11:55:00Z") }],
+                StaleAgents = [new AiNetworkHealthAgent { AgentId = "agent-1", Name = "Shed Agent", InstanceId = "shed", Status = "OFFLINE" }],
+                RecentStateChanges = [new AiNetworkHealthStateChange { EndpointId = "endpoint-1", Name = "Farm Router WAN", PreviousState = "UP", NewState = "DOWN", ChangedAtUtc = DateTimeOffset.Parse("2026-06-15T11:55:00Z"), ReasonCode = "failure_threshold_met" }]
+            }
+        });
+
+        var contextPrompt = Assert.Single(messages, x => x.Content.Contains("get_network_health_summary", StringComparison.Ordinal));
+        Assert.Contains("StateCounts: UP=0; DEGRADED=0; DOWN=1; SUPPRESSED=0; UNKNOWN=0", contextPrompt.Content);
+        Assert.Contains("DOWN: Farm Router WAN (1.2.3.4)", contextPrompt.Content);
+        Assert.Contains("OFFLINE: Shed Agent", contextPrompt.Content);
+        Assert.DoesNotContain("{\"", contextPrompt.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WebChatInjectsHealthSummaryForBroadNetworkStatusQuestion()
     {
         var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "Based on current state, one endpoint is DOWN.", Model = "llama" } };
