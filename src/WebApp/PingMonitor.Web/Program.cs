@@ -12,6 +12,7 @@ using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Agents;
+using PingMonitor.Web.Services.AiTools;
 using PingMonitor.Web.Services.AiProviders;
 using PingMonitor.Web.Services.AiChat;
 using PingMonitor.Web.Services.Backups;
@@ -202,6 +203,7 @@ builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsServi
 builder.Services.AddScoped<IAiAssistantSettingsService, AiAssistantSettingsService>();
 builder.Services.AddScoped<IAiProviderClient, OpenAiCompatibleProviderClient>();
 builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IAiMonitoringContextService, AiMonitoringContextService>();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
 builder.Services.AddSingleton<ITelegramAiConversationStore, TelegramAiConversationStore>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();

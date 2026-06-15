@@ -1,11 +1,17 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PingMonitor.Web.Controllers;
+using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.AiChat;
+using PingMonitor.Web.Services.AiTools;
 using PingMonitor.Web.Services.AiProviders;
+using PingMonitor.Web.Services.Telegram;
 using PingMonitor.Web.ViewModels.AiAssistant;
 using Xunit;
 
@@ -36,11 +42,13 @@ public sealed class AiAssistantChatTests
     public async Task DisabledFlagsShowMessageAndDoNotCallProvider(bool assistantEnabled, bool webChatEnabled)
     {
         var provider = new FakeAiProviderClient();
-        var controller = CreateController(provider, EnabledSettings(assistantEnabled, webChatEnabled));
+        var monitoring = new FakeAiMonitoringContextService();
+        var controller = CreateController(provider, EnabledSettings(assistantEnabled, webChatEnabled), monitoring);
         var result = Assert.IsType<ViewResult>(await controller.Send(new AiAssistantPageViewModel { Message = "hello" }, CancellationToken.None));
         var model = Assert.IsType<AiAssistantPageViewModel>(result.Model);
         Assert.Contains("disabled", model.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Null(provider.LastRequest);
+        Assert.Equal(0, monitoring.CallCount);
     }
 
 
@@ -50,28 +58,121 @@ public sealed class AiAssistantChatTests
         var provider = new FakeAiProviderClient();
         var settings = EnabledSettings();
         settings.TelegramChatEnabled = false;
-        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, NullLogger<AiChatService>.Instance);
+        var monitoring = new FakeAiMonitoringContextService();
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, monitoring, NullLogger<AiChatService>.Instance);
 
         var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, UserMessage = "hello" }, CancellationToken.None);
 
         Assert.False(response.Succeeded);
         Assert.Contains("Telegram AI chat is disabled", response.ErrorMessage);
         Assert.Null(provider.LastRequest);
+        Assert.Equal(0, monitoring.CallCount);
     }
 
     [Fact]
     public async Task TelegramChatSourceUsesSharedSafetyPromptAndProviderPath()
     {
-        var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "I am chat-only.", Model = "llama" } };
+        var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "The network summary was used.", Model = "llama" } };
         var settings = EnabledSettings(webChatEnabled: false);
         settings.TelegramChatEnabled = true;
-        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, NullLogger<AiChatService>.Instance);
+        var monitoring = new FakeAiMonitoringContextService();
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, monitoring, NullLogger<AiChatService>.Instance);
 
-        var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, UserMessage = "How is my network looking today?" }, CancellationToken.None);
+        var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, User = User(), UserMessage = "How is my network looking today?" }, CancellationToken.None);
 
         Assert.True(response.Succeeded);
-        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("live monitoring data", StringComparison.Ordinal));
+        Assert.Equal(1, monitoring.CallCount);
+        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("get_network_health_summary", StringComparison.Ordinal));
+        Assert.Contains(provider.LastRequest.Messages, x => x.Role == "system" && x.Content.Contains("Farm Router WAN", StringComparison.Ordinal));
         Assert.Contains(provider.LastRequest.Messages, x => x.Role == "system" && x.Content.Contains("CheckResults", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WebChatInjectsHealthSummaryForBroadNetworkStatusQuestion()
+    {
+        var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "Farm Router WAN is down.", Model = "llama" } };
+        var monitoring = new FakeAiMonitoringContextService();
+        var controller = CreateController(provider, EnabledSettings(), monitoring);
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = User() } };
+
+        var result = Assert.IsType<ViewResult>(await controller.Send(new AiAssistantPageViewModel { Message = "Is anything down?" }, CancellationToken.None));
+
+        var model = Assert.IsType<AiAssistantPageViewModel>(result.Model);
+        Assert.Contains(model.Messages, x => x.Role == "assistant" && x.Content == "Farm Router WAN is down.");
+        Assert.Equal(1, monitoring.CallCount);
+        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("get_network_health_summary", StringComparison.Ordinal));
+        Assert.Contains(provider.LastRequest.Messages, x => x.Role == "system" && x.Content.Contains("Farm Router WAN", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HealthSummaryUnavailableReturnsSafeAnswerWithoutProviderCall()
+    {
+        var provider = new FakeAiProviderClient();
+        var monitoring = new FakeAiMonitoringContextService
+        {
+            Result = AiMonitoringContextResult.Unavailable("database unavailable")
+        };
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, monitoring, NullLogger<AiChatService>.Instance);
+
+        var response = await chat.SendAsync(new AiChatRequest { User = User(), UserMessage = "How is my network looking today?" }, CancellationToken.None);
+
+        Assert.True(response.Succeeded);
+        Assert.Contains("couldn't retrieve", response.AssistantMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not connected yet", response.AssistantMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(provider.LastRequest);
+        Assert.Equal(1, monitoring.CallCount);
+    }
+
+    [Fact]
+    public async Task DetailedBaselineQuestionDoesNotRequestSummaryContext()
+    {
+        var provider = new FakeAiProviderClient();
+        var monitoring = new FakeAiMonitoringContextService();
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, monitoring, NullLogger<AiChatService>.Instance);
+
+        await chat.SendAsync(new AiChatRequest { User = User(), UserMessage = "Is WFP WAN RTT higher than its 24h baseline?" }, CancellationToken.None);
+
+        Assert.Equal(0, monitoring.CallCount);
+        Assert.NotNull(provider.LastRequest);
+        Assert.Contains("baseline comparisons", provider.LastRequest.Messages[0].Content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Raw CheckResults diagnostics", provider.LastRequest.Messages[0].Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TelegramProcessorPassesLinkedApplicationUserToSharedAiChat()
+    {
+        await using var dbContext = CreateDbContext();
+        dbContext.TelegramAccounts.Add(new TelegramAccount
+        {
+            TelegramAccountId = "tga-1",
+            UserId = "app-user-1",
+            ChatId = "chat-1",
+            Verified = true,
+            IsActive = true,
+            LinkedAtUtc = DateTimeOffset.UtcNow
+        });
+        await dbContext.SaveChangesAsync();
+
+        var chat = new CapturingAiChatService();
+        var processor = new TelegramMessageProcessor(
+            new FakeTelegramLinkService(),
+            new FakeNotificationSettingsService(),
+            new FakeAiAssistantSettingsService(EnabledSettings()),
+            chat,
+            new FakeTelegramAiConversationStore(),
+            dbContext);
+
+        var result = await processor.ProcessAsync(new TelegramInboundMessage
+        {
+            ChatId = "chat-1",
+            ChatType = "private",
+            Text = "Is anything down?"
+        }, CancellationToken.None);
+
+        Assert.True(result.ShouldReply);
+        Assert.NotNull(chat.LastRequest);
+        Assert.Equal(AiChatSource.Telegram, chat.LastRequest!.Source);
+        Assert.Equal("app-user-1", chat.LastRequest.User?.FindFirstValue(ClaimTypes.NameIdentifier));
     }
 
     [Theory]
@@ -137,10 +238,14 @@ public sealed class AiAssistantChatTests
     public void PromptLayeringIncludesSafetyPromptBeforeAdminPrompt()
     {
         var messages = AiChatService.BuildMessages("Site guidance", [], "How is my network looking today?");
-        Assert.Contains("do not currently have access to live monitoring data", messages[0].Content);
-        Assert.Contains("CheckResults", messages[0].Content);
-        Assert.Contains("tools", messages[0].Content);
+        Assert.Contains("read-only network health summary", messages[0].Content);
+        Assert.Contains("Raw CheckResults diagnostics", messages[0].Content);
+        Assert.Contains("diagram lookup", messages[0].Content);
+        Assert.Contains("endpoint diagnostic packs", messages[0].Content);
+        Assert.Contains("memory", messages[0].Content);
+        Assert.Contains("Do not invent endpoint state", messages[0].Content);
         Assert.Contains("Admin-configured site instructions", messages[1].Content);
+        Assert.Contains("supplied monitoring-summary truth", messages[1].Content);
         Assert.Contains("Site guidance", messages[1].Content);
     }
 
@@ -162,11 +267,26 @@ public sealed class AiAssistantChatTests
         return CreateController(provider, settings ?? EnabledSettings());
     }
 
-    private static AiAssistantController CreateController(FakeAiProviderClient provider, AiAssistantSettingsDto settings)
+    private static AiAssistantController CreateController(
+        FakeAiProviderClient provider,
+        AiAssistantSettingsDto settings,
+        FakeAiMonitoringContextService? monitoringContextService = null)
     {
         var settingsService = new FakeAiAssistantSettingsService(settings);
-        var chat = new AiChatService(settingsService, provider, NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(settingsService, provider, monitoringContextService ?? new FakeAiMonitoringContextService(), NullLogger<AiChatService>.Instance);
         return new AiAssistantController(settingsService, chat);
+    }
+
+    private static ClaimsPrincipal User() => new(new ClaimsIdentity(
+        [new Claim(ClaimTypes.NameIdentifier, "user-1")],
+        authenticationType: "test"));
+
+    private static PingMonitorDbContext CreateDbContext()
+    {
+        var options = new DbContextOptionsBuilder<PingMonitorDbContext>()
+            .UseInMemoryDatabase($"ai-chat-{Guid.NewGuid():N}")
+            .Options;
+        return new PingMonitorDbContext(options);
     }
 
     private static AiAssistantSettingsDto EnabledSettings(bool assistantEnabled = true, bool webChatEnabled = true, string globalPrompt = "") => new()
@@ -183,6 +303,24 @@ public sealed class AiAssistantChatTests
         GlobalSystemPrompt = globalPrompt,
         TelegramChatEnabled = true
     };
+
+    private sealed class CapturingAiChatService : IAiChatService
+    {
+        public AiChatRequest? LastRequest { get; private set; }
+
+        public Task<AiChatResponse> SendAsync(AiChatRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(new AiChatResponse
+            {
+                Succeeded = true,
+                AssistantEnabled = true,
+                WebChatEnabled = true,
+                TelegramChatEnabled = true,
+                AssistantMessage = "captured"
+            });
+        }
+    }
 
     private sealed class FakeAiAssistantSettingsService : IAiAssistantSettingsService
     {
@@ -202,6 +340,88 @@ public sealed class AiAssistantChatTests
             ToolCallingEnabled = _settings.ToolCallingEnabled
         });
         public Task<AiAssistantSettingsDto> UpdateAsync(UpdateAiAssistantSettingsCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeAiMonitoringContextService : IAiMonitoringContextService
+    {
+        public int CallCount { get; private set; }
+        public AiMonitoringContextResult Result { get; set; } = AiMonitoringContextResult.Success(new AiNetworkHealthSummary
+        {
+            GeneratedAtUtc = DateTimeOffset.Parse("2026-06-15T12:00:00Z"),
+            VisibleEndpointCount = 3,
+            VisibleAssignmentCount = 3,
+            StateCounts = new AiNetworkStateCounts
+            {
+                Up = 2,
+                Down = 1
+            },
+            DownEndpoints =
+            [
+                new AiEndpointStateSummaryItem
+                {
+                    EndpointId = "endpoint-farm-router",
+                    AssignmentId = "assignment-farm-router",
+                    Name = "Farm Router WAN",
+                    Target = "1.2.3.4",
+                    State = EndpointStateKind.Down,
+                    LastChangedUtc = DateTimeOffset.Parse("2026-06-15T11:42:00Z"),
+                    AgentId = "agent-1",
+                    AgentName = "Main Agent"
+                }
+            ],
+            RecentStateChangeCount = 1,
+            RecentStateChanges =
+            [
+                new AiRecentStateChangeSummaryItem
+                {
+                    EndpointId = "endpoint-farm-router",
+                    AssignmentId = "assignment-farm-router",
+                    EndpointName = "Farm Router WAN",
+                    AgentId = "agent-1",
+                    AgentName = "Main Agent",
+                    PreviousState = EndpointStateKind.Up,
+                    NewState = EndpointStateKind.Down,
+                    TransitionAtUtc = DateTimeOffset.Parse("2026-06-15T11:42:00Z"),
+                    ReasonCode = StateTransitionReasonCodes.FailureThresholdReached
+                }
+            ]
+        });
+
+        public Task<AiMonitoringContextResult> GetNetworkHealthSummaryAsync(ClaimsPrincipal user, CancellationToken cancellationToken)
+        {
+            CallCount += 1;
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class FakeNotificationSettingsService : INotificationSettingsService
+    {
+        public Task<NotificationSettingsDto> GetCurrentAsync(CancellationToken cancellationToken) => Task.FromResult(new NotificationSettingsDto { TelegramEnabled = true });
+        public Task<SmtpChannelSettingsDto> GetSmtpChannelAsync(CancellationToken cancellationToken) => Task.FromResult(new SmtpChannelSettingsDto());
+        public Task<TelegramChannelSettingsDto> GetTelegramChannelAsync(CancellationToken cancellationToken) => Task.FromResult(new TelegramChannelSettingsDto { TelegramEnabled = true });
+        public Task AdvanceTelegramLastProcessedUpdateIdAsync(long updateId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<NotificationSettingsDto> UpdateAsync(UpdateNotificationSettingsCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeTelegramLinkService : ITelegramLinkService
+    {
+        public Task<PendingTelegramLinkDto> GenerateCodeAsync(string userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<PendingTelegramLinkDto?> GetActiveCodeAsync(string userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<TelegramLinkConsumeResult> ConsumeCodeAsync(string code, string chatId, string chatType, string? username, string? displayName, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<TelegramAccountStatusDto?> GetAccountStatusAsync(string userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> UnlinkAccountAsync(string userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeTelegramAiConversationStore : ITelegramAiConversationStore
+    {
+        public IReadOnlyList<AiChatMessageDto> GetHistory(string chatId, string userId) => [];
+        public void AddTurn(string chatId, string userId, string userMessage, string assistantMessage)
+        {
+        }
+
+        public void Clear(string chatId, string userId)
+        {
+        }
     }
 
     private sealed class FakeAiProviderClient : IAiProviderClient
