@@ -140,6 +140,11 @@ public sealed class AdminAiAssistantSettingsController : Controller
         {
             ModelState.AddModelError(nameof(model.BaseUrl), "Base URL must be an absolute http or https URL.");
         }
+
+        if (model.RequestTimeoutSeconds is < 1 or > 600)
+        {
+            ModelState.AddModelError(nameof(model.RequestTimeoutSeconds), "Request timeout seconds must be between 1 and 600.");
+        }
     }
 
     private static AiAssistantSettingsPageViewModel ToViewModel(AiAssistantSettingsDto settings, bool saved)

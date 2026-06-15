@@ -6,7 +6,7 @@ public sealed class AiProviderChatRequest
     public string BaseUrl { get; set; } = string.Empty;
     public string ModelName { get; set; } = string.Empty;
     public string? ApiKey { get; set; }
-    public int TimeoutSeconds { get; set; } = 60;
+    public int TimeoutSeconds { get; set; } = 180;
     public double Temperature { get; set; } = 0.2;
     public int MaxOutputTokens { get; set; } = 256;
     public IList<AiProviderChatMessage> Messages { get; set; } = new List<AiProviderChatMessage>();

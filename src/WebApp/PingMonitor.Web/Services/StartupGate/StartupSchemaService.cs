@@ -712,7 +712,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `BaseUrl` varchar(2048) NOT NULL DEFAULT 'http://localhost:11434/v1',
                 `ModelName` varchar(255) NOT NULL DEFAULT '',
                 `ApiKeyProtected` varchar(4096) NULL,
-                `RequestTimeoutSeconds` int NOT NULL DEFAULT 60,
+                `RequestTimeoutSeconds` int NOT NULL DEFAULT 180,
                 `MaxOutputTokens` int NOT NULL DEFAULT 2048,
                 `Temperature` double NOT NULL DEFAULT 0.2,
                 `ToolCallingEnabled` tinyint(1) NOT NULL DEFAULT 1,
@@ -2245,6 +2245,13 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 """,
                 cancellationToken);
         }
+
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE `AiAssistantSettings`
+            MODIFY COLUMN `RequestTimeoutSeconds` int NOT NULL DEFAULT 180;
+            """,
+            cancellationToken);
     }
 
     private static async Task EnsureUserNotificationSettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)

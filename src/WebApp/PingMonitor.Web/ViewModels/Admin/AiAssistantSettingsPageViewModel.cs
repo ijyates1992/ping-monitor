@@ -35,8 +35,8 @@ public sealed class AiAssistantSettingsPageViewModel
     public bool ApiKeyConfigured { get; set; }
 
     [Display(Name = "Request timeout seconds")]
-    [Range(1, 300)]
-    public int RequestTimeoutSeconds { get; set; } = 60;
+    [Range(1, 600)]
+    public int RequestTimeoutSeconds { get; set; } = 180;
     [Display(Name = "Max output tokens")]
     [Range(64, 32768)]
     public int MaxOutputTokens { get; set; } = 2048;

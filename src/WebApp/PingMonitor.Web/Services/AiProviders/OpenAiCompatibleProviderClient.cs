@@ -37,7 +37,7 @@ internal sealed class OpenAiCompatibleProviderClient : IAiProviderClient
         if (request.Messages.Count == 0) return Fail(result, sw, "At least one message is required.");
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 300)));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 600)));
 
         try
         {

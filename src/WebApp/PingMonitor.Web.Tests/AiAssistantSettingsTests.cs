@@ -42,7 +42,7 @@ public sealed class AiAssistantSettingsTests
             ProviderType = AiAssistantSettings.OpenAICompatibleProviderType,
             ProviderDisplayName = "Ops AI",
             ApiKey = "secret",
-            RequestTimeoutSeconds = 60,
+            RequestTimeoutSeconds = 600,
             MaxOutputTokens = 2048,
             Temperature = 0.2,
             ToolCallingEnabled = true
@@ -52,6 +52,7 @@ public sealed class AiAssistantSettingsTests
         Assert.True(model.Saved);
         Assert.Null(model.ApiKey);
         Assert.Equal("secret", service.LastCommand?.ApiKey);
+        Assert.Equal(600, service.LastCommand?.RequestTimeoutSeconds);
     }
 
     [Theory]
@@ -59,6 +60,7 @@ public sealed class AiAssistantSettingsTests
     [InlineData(true, "ftp://example.test", "model", 60, 2048, 0.2)]
     [InlineData(true, "https://example.test/v1", "", 60, 2048, 0.2)]
     [InlineData(true, "https://example.test/v1", "model", 0, 2048, 0.2)]
+    [InlineData(true, "https://example.test/v1", "model", 601, 2048, 0.2)]
     [InlineData(true, "https://example.test/v1", "model", 60, 63, 0.2)]
     [InlineData(true, "https://example.test/v1", "model", 60, 2048, 2.1)]
     public async Task InvalidSettingsAreRejected(bool enabled, string baseUrl, string modelName, int timeout, int tokens, double temperature)
@@ -66,7 +68,7 @@ public sealed class AiAssistantSettingsTests
         var service = new FakeAiAssistantSettingsService(new AiAssistantSettingsDto());
         var controller = new AdminAiAssistantSettingsController(service, new FakeAiProviderClient());
         controller.ModelState.Clear();
-        if (timeout is < 1 or > 300) controller.ModelState.AddModelError(nameof(AiAssistantSettingsPageViewModel.RequestTimeoutSeconds), "range");
+        if (timeout is < 1 or > 600) controller.ModelState.AddModelError(nameof(AiAssistantSettingsPageViewModel.RequestTimeoutSeconds), "range");
         if (tokens is < 64 or > 32768) controller.ModelState.AddModelError(nameof(AiAssistantSettingsPageViewModel.MaxOutputTokens), "range");
         if (temperature is < 0 or > 2) controller.ModelState.AddModelError(nameof(AiAssistantSettingsPageViewModel.Temperature), "range");
 
@@ -127,7 +129,7 @@ public sealed class AiAssistantSettingsTests
             BaseUrl = "http://localhost:11434/v1",
             ModelName = "llama",
             MaxOutputTokens = 2048,
-            RequestTimeoutSeconds = 60,
+            RequestTimeoutSeconds = 180,
             Temperature = 0.2
         }), provider);
 
@@ -138,6 +140,7 @@ public sealed class AiAssistantSettingsTests
         Assert.Equal("Ping Monitor AI test OK", model.TestResult.ResponseText);
         Assert.Null(model.ApiKey);
         Assert.Equal("runtime-secret", provider.LastRequest!.ApiKey);
+        Assert.Equal(180, provider.LastRequest.TimeoutSeconds);
         Assert.Equal(256, provider.LastRequest.MaxOutputTokens);
     }
 
@@ -160,7 +163,7 @@ public sealed class AiAssistantSettingsTests
         Assert.Equal("Local Ollama", settings.ProviderDisplayName);
         Assert.Equal("OpenAICompatible", settings.ProviderType);
         Assert.Equal("http://localhost:11434/v1", settings.BaseUrl);
-        Assert.Equal(60, settings.RequestTimeoutSeconds);
+        Assert.Equal(180, settings.RequestTimeoutSeconds);
         Assert.Equal(2048, settings.MaxOutputTokens);
         Assert.Equal(0.2, settings.Temperature);
         Assert.True(settings.ToolCallingEnabled);
