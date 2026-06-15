@@ -106,7 +106,7 @@ internal sealed class AiAssistantSettingsService : IAiAssistantSettingsService
             ProviderType = AiAssistantSettings.OpenAICompatibleProviderType,
             BaseUrl = "http://localhost:11434/v1",
             ModelName = string.Empty,
-            RequestTimeoutSeconds = 60,
+            RequestTimeoutSeconds = 180,
             MaxOutputTokens = 2048,
             Temperature = 0.2,
             ToolCallingEnabled = true,

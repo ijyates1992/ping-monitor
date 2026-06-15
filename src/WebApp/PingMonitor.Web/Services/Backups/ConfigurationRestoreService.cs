@@ -868,7 +868,7 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
         target.BaseUrl = source.BaseUrl ?? string.Empty;
         target.ModelName = source.ModelName ?? string.Empty;
         target.ApiKeyProtected = source.ApiKeyProtected;
-        target.RequestTimeoutSeconds = source.RequestTimeoutSeconds <= 0 ? 60 : source.RequestTimeoutSeconds;
+        target.RequestTimeoutSeconds = source.RequestTimeoutSeconds <= 0 ? 180 : source.RequestTimeoutSeconds;
         target.MaxOutputTokens = source.MaxOutputTokens <= 0 ? 2048 : source.MaxOutputTokens;
         target.Temperature = source.Temperature;
         target.ToolCallingEnabled = source.ToolCallingEnabled;

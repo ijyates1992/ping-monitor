@@ -80,7 +80,7 @@ public sealed class OpenAiCompatibleProviderClientTests
         BaseUrl = baseUrl,
         ModelName = "llama",
         ApiKey = "secret",
-        TimeoutSeconds = 60,
+        TimeoutSeconds = 180,
         Temperature = 0.2,
         MaxOutputTokens = 256,
         Messages = { new AiProviderChatMessage { Role = "system", Content = "sys" }, new AiProviderChatMessage { Role = "user", Content = "user" } }
