@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using PingMonitor.Web.Controllers;
 using PingMonitor.Web.Models;
@@ -50,7 +51,7 @@ public sealed class AiAssistantChatTests
         var provider = new FakeAiProviderClient();
         var settings = EnabledSettings();
         settings.TelegramChatEnabled = false;
-        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, new FakeAiMonitoringContextService(), new HttpContextAccessor(), NullLogger<AiChatService>.Instance);
 
         var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, UserMessage = "hello" }, CancellationToken.None);
 
@@ -65,13 +66,80 @@ public sealed class AiAssistantChatTests
         var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "I am chat-only.", Model = "llama" } };
         var settings = EnabledSettings(webChatEnabled: false);
         settings.TelegramChatEnabled = true;
-        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, new FakeAiMonitoringContextService(), new HttpContextAccessor(), NullLogger<AiChatService>.Instance);
 
         var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, UserMessage = "How is my network looking today?" }, CancellationToken.None);
 
         Assert.True(response.Succeeded);
-        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("live monitoring data", StringComparison.Ordinal));
+        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("read-only network health summary", StringComparison.Ordinal));
         Assert.Contains(provider.LastRequest.Messages, x => x.Role == "system" && x.Content.Contains("CheckResults", StringComparison.Ordinal));
+    }
+
+
+    [Fact]
+    public async Task WebChatInjectsHealthSummaryForBroadNetworkStatusQuestion()
+    {
+        var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "Based on current state, one endpoint is DOWN.", Model = "llama" } };
+        var context = new FakeAiMonitoringContextService
+        {
+            Result = new AiMonitoringContextResult
+            {
+                ShouldInclude = true,
+                Succeeded = true,
+                Summary = new AiNetworkHealthSummary
+                {
+                    GeneratedAtUtc = DateTimeOffset.Parse("2026-06-15T12:00:00Z"),
+                    VisibleEndpointCount = 2,
+                    StateCounts = new AiNetworkHealthStateCounts { Up = 1, Down = 1 },
+                    DownEndpoints = [new AiNetworkHealthEndpoint { EndpointId = "visible-down", Name = "Farm Router WAN", Target = "1.2.3.4", State = "DOWN" }]
+                }
+            }
+        };
+        var settings = EnabledSettings();
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, context, new HttpContextAccessor(), NullLogger<AiChatService>.Instance);
+
+        var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Web, UserMessage = "Is anything down?" }, CancellationToken.None);
+
+        Assert.True(response.Succeeded);
+        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("get_network_health_summary", StringComparison.Ordinal) && x.Content.Contains("Farm Router WAN", StringComparison.Ordinal));
+        Assert.DoesNotContain(provider.LastRequest.Messages, x => x.Content.Contains("runtime-secret", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TelegramChatUsesSameHealthSummaryInjectionPath()
+    {
+        var provider = new FakeAiProviderClient();
+        var context = new FakeAiMonitoringContextService { Result = new AiMonitoringContextResult { ShouldInclude = true, Succeeded = true, Summary = new AiNetworkHealthSummary { VisibleEndpointCount = 0 } } };
+        var settings = EnabledSettings(webChatEnabled: false);
+        settings.TelegramChatEnabled = true;
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, context, new HttpContextAccessor(), NullLogger<AiChatService>.Instance);
+
+        await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, UserId = "linked-user", UserMessage = "How is my network looking today?" }, CancellationToken.None);
+
+        Assert.Equal("linked-user", context.LastRequest?.UserId);
+        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("get_network_health_summary", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UnavailableHealthSummaryTellsModelNotToInvent()
+    {
+        var provider = new FakeAiProviderClient();
+        var context = new FakeAiMonitoringContextService { Result = new AiMonitoringContextResult { ShouldInclude = true, Succeeded = false, ErrorMessage = "boom" } };
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(EnabledSettings()), provider, context, new HttpContextAccessor(), NullLogger<AiChatService>.Instance);
+
+        await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Web, UserMessage = "Any outages?" }, CancellationToken.None);
+
+        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("summary is unavailable", StringComparison.Ordinal) && x.Content.Contains("do not invent", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("How is my network looking today?")]
+    [InlineData("Is anything down?")]
+    [InlineData("Any endpoints unknown?")]
+    [InlineData("Are any agents offline?")]
+    public void HealthSummaryIntentDetectionMatchesBroadStatusQuestions(string message)
+    {
+        Assert.True(AiMonitoringContextService.LooksLikeHealthQuestion(message));
     }
 
     [Theory]
@@ -137,9 +205,9 @@ public sealed class AiAssistantChatTests
     public void PromptLayeringIncludesSafetyPromptBeforeAdminPrompt()
     {
         var messages = AiChatService.BuildMessages("Site guidance", [], "How is my network looking today?");
-        Assert.Contains("do not currently have access to live monitoring data", messages[0].Content);
+        Assert.Contains("read-only network health summary", messages[0].Content);
         Assert.Contains("CheckResults", messages[0].Content);
-        Assert.Contains("tools", messages[0].Content);
+        Assert.Contains("diagram lookup", messages[0].Content);
         Assert.Contains("Admin-configured site instructions", messages[1].Content);
         Assert.Contains("Site guidance", messages[1].Content);
     }
@@ -165,7 +233,7 @@ public sealed class AiAssistantChatTests
     private static AiAssistantController CreateController(FakeAiProviderClient provider, AiAssistantSettingsDto settings)
     {
         var settingsService = new FakeAiAssistantSettingsService(settings);
-        var chat = new AiChatService(settingsService, provider, NullLogger<AiChatService>.Instance);
+        var chat = new AiChatService(settingsService, provider, new FakeAiMonitoringContextService(), new HttpContextAccessor(), NullLogger<AiChatService>.Instance);
         return new AiAssistantController(settingsService, chat);
     }
 
@@ -183,6 +251,17 @@ public sealed class AiAssistantChatTests
         GlobalSystemPrompt = globalPrompt,
         TelegramChatEnabled = true
     };
+
+    private sealed class FakeAiMonitoringContextService : IAiMonitoringContextService
+    {
+        public AiMonitoringContextRequest? LastRequest { get; private set; }
+        public AiMonitoringContextResult Result { get; set; } = new() { ShouldInclude = false, Succeeded = true };
+        public Task<AiMonitoringContextResult> TryGetNetworkHealthSummaryAsync(AiMonitoringContextRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(Result);
+        }
+    }
 
     private sealed class FakeAiAssistantSettingsService : IAiAssistantSettingsService
     {

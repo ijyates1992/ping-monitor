@@ -90,6 +90,7 @@ internal sealed partial class TelegramMessageProcessor : ITelegramMessageProcess
         {
             Source = AiChatSource.Telegram,
             UserMessage = userMessage,
+            UserId = account.UserId,
             ConversationHistory = _conversationStore.GetHistory(inboundMessage.ChatId, account.UserId).ToList()
         }, cancellationToken);
 

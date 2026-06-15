@@ -11,6 +11,7 @@ public sealed class AiChatRequest
     public AiChatSource Source { get; set; } = AiChatSource.Web;
     public IList<AiChatMessageDto> ConversationHistory { get; set; } = new List<AiChatMessageDto>();
     public string UserMessage { get; set; } = string.Empty;
+    public string? UserId { get; set; }
 }
 
 public sealed class AiChatResponse

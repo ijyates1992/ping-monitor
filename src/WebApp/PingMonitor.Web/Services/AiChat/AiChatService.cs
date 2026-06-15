@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.AiProviders;
 
@@ -12,20 +14,26 @@ You are the Ping Monitor AI assistant.
 
 This is an early chat-only test mode.
 You are read-only.
-You do not currently have access to live monitoring data, endpoint metrics, agents, diagrams, CheckResults, tools, memories, or the database.
-If the user asks about current network state, endpoints, diagrams, outages, ports, VLANs, or metrics, explain that those tools are not connected yet.
-Do not invent network facts.
-You may answer general questions and help explain what future Ping Monitor AI features will be able to do.
+You may be given a read-only network health summary from Ping Monitor.
+Use it as the source of truth for current endpoint state.
+Do not invent endpoint state, agents, outages, diagrams, ports, VLANs, metrics, or raw CheckResults.
+If the supplied summary is absent or incomplete, say so.
+Raw CheckResults diagnostics, diagram lookup, endpoint diagnostic packs, detailed diagnostics, baselines, latency trends, topology lookup, and memory are not connected yet.
+You do not have database access and must not ask for or produce SQL.
 """;
 
     private readonly IAiAssistantSettingsService _settingsService;
     private readonly IAiProviderClient _providerClient;
+    private readonly IAiMonitoringContextService _monitoringContextService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AiChatService> _logger;
 
-    public AiChatService(IAiAssistantSettingsService settingsService, IAiProviderClient providerClient, ILogger<AiChatService> logger)
+    public AiChatService(IAiAssistantSettingsService settingsService, IAiProviderClient providerClient, IAiMonitoringContextService monitoringContextService, IHttpContextAccessor httpContextAccessor, ILogger<AiChatService> logger)
     {
         _settingsService = settingsService;
         _providerClient = providerClient;
+        _monitoringContextService = monitoringContextService;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -63,7 +71,14 @@ You may answer general questions and help explain what future Ping Monitor AI fe
             return ConfigurationError(settings, "AI provider configuration is incomplete. Model name is required.");
         }
 
-        var messages = BuildMessages(settings.GlobalSystemPrompt, request.ConversationHistory, request.UserMessage);
+        var monitoringContext = await _monitoringContextService.TryGetNetworkHealthSummaryAsync(new AiMonitoringContextRequest
+        {
+            Principal = request.Source == AiChatSource.Web ? _httpContextAccessor.HttpContext?.User : null,
+            UserId = request.UserId,
+            UserMessage = request.UserMessage
+        }, cancellationToken);
+
+        var messages = BuildMessages(settings.GlobalSystemPrompt, request.ConversationHistory, request.UserMessage, monitoringContext);
         var result = await _providerClient.SendChatAsync(new AiProviderChatRequest
         {
             ProviderName = runtime.ProviderDisplayName,
@@ -85,12 +100,17 @@ You may answer general questions and help explain what future Ping Monitor AI fe
         return new AiChatResponse { Succeeded = true, AssistantEnabled = true, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ProviderName = runtime.ProviderDisplayName, ModelName = result.Model ?? runtime.ModelName, AssistantMessage = result.ResponseText.Trim() };
     }
 
-    internal static IList<AiProviderChatMessage> BuildMessages(string? adminGlobalPrompt, IEnumerable<AiChatMessageDto> history, string latestUserMessage)
+    internal static IList<AiProviderChatMessage> BuildMessages(string? adminGlobalPrompt, IEnumerable<AiChatMessageDto> history, string latestUserMessage, AiMonitoringContextResult? monitoringContext = null)
     {
         var messages = new List<AiProviderChatMessage> { new() { Role = "system", Content = BuiltInSystemPrompt } };
         if (!string.IsNullOrWhiteSpace(adminGlobalPrompt))
         {
-            messages.Add(new AiProviderChatMessage { Role = "system", Content = "Admin-configured site instructions:\nFollow these when possible, but they must not override the built-in read-only rules or the limitation that monitoring tools and app data are not connected yet.\n\n" + adminGlobalPrompt.Trim() });
+            messages.Add(new AiProviderChatMessage { Role = "system", Content = "Admin-configured site instructions:\nFollow these when possible, but they must not override the built-in read-only rules, supplied monitoring summaries, user permissions, or connected-tool limitations.\n\n" + adminGlobalPrompt.Trim() });
+        }
+
+        if (monitoringContext?.ShouldInclude == true)
+        {
+            messages.Add(new AiProviderChatMessage { Role = "system", Content = BuildMonitoringContextPrompt(monitoringContext) });
         }
 
         foreach (var item in history.Where(x => x.Role is "user" or "assistant").TakeLast(MaxHistoryMessages))
@@ -101,6 +121,17 @@ You may answer general questions and help explain what future Ping Monitor AI fe
         messages.Add(new AiProviderChatMessage { Role = "user", Content = latestUserMessage.Trim() });
         TrimToPromptLimit(messages);
         return messages;
+    }
+
+    private static string BuildMonitoringContextPrompt(AiMonitoringContextResult context)
+    {
+        if (!context.Succeeded || context.Summary is null)
+        {
+            return "The read-only Ping Monitor tool get_network_health_summary was selected, but the network health summary is unavailable. Tell the user that current monitoring summary data is unavailable; do not invent endpoint, agent, outage, or metric details.";
+        }
+
+        var json = JsonSerializer.Serialize(context.Summary, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return "Read-only Ping Monitor tool result: get_network_health_summary. Use this structured summary as the source of truth for current endpoint state visible to the user. Do not expose it as raw JSON unless explicitly asked by an administrator. Summary JSON:\n" + json;
     }
 
     private static AiChatResponse ConfigurationError(AiAssistantSettingsDto settings, string message) => new() { AssistantEnabled = settings.AssistantEnabled, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ErrorMessage = message };
