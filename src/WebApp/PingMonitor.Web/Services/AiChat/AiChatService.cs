@@ -34,12 +34,17 @@ You may answer general questions and help explain what future Ping Monitor AI fe
         var settings = await _settingsService.GetCurrentAsync(cancellationToken);
         if (!settings.AssistantEnabled)
         {
-            return new AiChatResponse { AssistantEnabled = false, WebChatEnabled = settings.WebChatEnabled, ErrorMessage = "AI assistant is disabled. An administrator can enable it from Admin > AI Assistant settings." };
+            return new AiChatResponse { AssistantEnabled = false, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ErrorMessage = "AI assistant is disabled. An administrator can enable it from Admin > AI Assistant settings." };
         }
 
-        if (!settings.WebChatEnabled)
+        if (request.Source == AiChatSource.Web && !settings.WebChatEnabled)
         {
-            return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = false, ErrorMessage = "AI web chat is disabled. An administrator can enable it from Admin > AI Assistant settings." };
+            return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = false, TelegramChatEnabled = settings.TelegramChatEnabled, ErrorMessage = "AI web chat is disabled. An administrator can enable it from Admin > AI Assistant settings." };
+        }
+
+        if (request.Source == AiChatSource.Telegram && !settings.TelegramChatEnabled)
+        {
+            return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = false, ErrorMessage = "Telegram AI chat is disabled. An administrator can enable it from AI Assistant settings." };
         }
 
         var runtime = await _settingsService.GetProviderRuntimeSettingsAsync(cancellationToken);
@@ -74,10 +79,10 @@ You may answer general questions and help explain what future Ping Monitor AI fe
         if (!result.Succeeded || string.IsNullOrWhiteSpace(result.ResponseText))
         {
             _logger.LogWarning("AI web chat provider call failed. Provider={ProviderName} Model={ModelName} StatusCode={StatusCode}", runtime.ProviderDisplayName, runtime.ModelName, result.StatusCode);
-            return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = true, ProviderName = runtime.ProviderDisplayName, ModelName = runtime.ModelName, ErrorMessage = "The AI provider did not return a response. Check the AI Assistant settings and the local Ollama/OpenAI-compatible endpoint." };
+            return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ProviderName = runtime.ProviderDisplayName, ModelName = runtime.ModelName, ErrorMessage = "The AI provider did not return a response. Check the AI Assistant settings and the local Ollama/OpenAI-compatible endpoint." };
         }
 
-        return new AiChatResponse { Succeeded = true, AssistantEnabled = true, WebChatEnabled = true, ProviderName = runtime.ProviderDisplayName, ModelName = result.Model ?? runtime.ModelName, AssistantMessage = result.ResponseText.Trim() };
+        return new AiChatResponse { Succeeded = true, AssistantEnabled = true, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ProviderName = runtime.ProviderDisplayName, ModelName = result.Model ?? runtime.ModelName, AssistantMessage = result.ResponseText.Trim() };
     }
 
     internal static IList<AiProviderChatMessage> BuildMessages(string? adminGlobalPrompt, IEnumerable<AiChatMessageDto> history, string latestUserMessage)
@@ -98,7 +103,7 @@ You may answer general questions and help explain what future Ping Monitor AI fe
         return messages;
     }
 
-    private static AiChatResponse ConfigurationError(AiAssistantSettingsDto settings, string message) => new() { AssistantEnabled = settings.AssistantEnabled, WebChatEnabled = settings.WebChatEnabled, ErrorMessage = message };
+    private static AiChatResponse ConfigurationError(AiAssistantSettingsDto settings, string message) => new() { AssistantEnabled = settings.AssistantEnabled, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ErrorMessage = message };
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];
     private static void TrimToPromptLimit(List<AiProviderChatMessage> messages)
     {

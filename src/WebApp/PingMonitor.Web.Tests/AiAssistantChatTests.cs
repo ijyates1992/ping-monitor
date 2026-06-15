@@ -43,6 +43,37 @@ public sealed class AiAssistantChatTests
         Assert.Null(provider.LastRequest);
     }
 
+
+    [Fact]
+    public async Task TelegramChatDisabledDoesNotCallProviderForTelegramSource()
+    {
+        var provider = new FakeAiProviderClient();
+        var settings = EnabledSettings();
+        settings.TelegramChatEnabled = false;
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, NullLogger<AiChatService>.Instance);
+
+        var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, UserMessage = "hello" }, CancellationToken.None);
+
+        Assert.False(response.Succeeded);
+        Assert.Contains("Telegram AI chat is disabled", response.ErrorMessage);
+        Assert.Null(provider.LastRequest);
+    }
+
+    [Fact]
+    public async Task TelegramChatSourceUsesSharedSafetyPromptAndProviderPath()
+    {
+        var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "I am chat-only.", Model = "llama" } };
+        var settings = EnabledSettings(webChatEnabled: false);
+        settings.TelegramChatEnabled = true;
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, NullLogger<AiChatService>.Instance);
+
+        var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Telegram, UserMessage = "How is my network looking today?" }, CancellationToken.None);
+
+        Assert.True(response.Succeeded);
+        Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "system" && x.Content.Contains("live monitoring data", StringComparison.Ordinal));
+        Assert.Contains(provider.LastRequest.Messages, x => x.Role == "system" && x.Content.Contains("CheckResults", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -149,7 +180,8 @@ public sealed class AiAssistantChatTests
         RequestTimeoutSeconds = 180,
         MaxOutputTokens = 2048,
         Temperature = 0.2,
-        GlobalSystemPrompt = globalPrompt
+        GlobalSystemPrompt = globalPrompt,
+        TelegramChatEnabled = true
     };
 
     private sealed class FakeAiAssistantSettingsService : IAiAssistantSettingsService
@@ -181,5 +213,39 @@ public sealed class AiAssistantChatTests
             LastRequest = request;
             return Task.FromResult(Result);
         }
+    }
+}
+
+public sealed class TelegramAiConversationStoreTests
+{
+    [Fact]
+    public void TelegramConversationHistoryIsBoundedToLastTenTurns()
+    {
+        using var memoryCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var store = new PingMonitor.Web.Services.Telegram.TelegramAiConversationStore(memoryCache);
+
+        for (var i = 0; i < 12; i++)
+        {
+            store.AddTurn("chat-1", "user-1", $"user {i}", $"assistant {i}");
+        }
+
+        var history = store.GetHistory("chat-1", "user-1");
+        Assert.Equal(20, history.Count);
+        Assert.Equal("user 2", history[0].Content);
+        Assert.Equal("assistant 11", history[^1].Content);
+    }
+
+    [Fact]
+    public void ClearOnlyRemovesMatchingTelegramChatAndUserHistory()
+    {
+        using var memoryCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var store = new PingMonitor.Web.Services.Telegram.TelegramAiConversationStore(memoryCache);
+        store.AddTurn("chat-1", "user-1", "hello", "hi");
+        store.AddTurn("chat-1", "user-2", "other", "there");
+
+        store.Clear("chat-1", "user-1");
+
+        Assert.Empty(store.GetHistory("chat-1", "user-1"));
+        Assert.NotEmpty(store.GetHistory("chat-1", "user-2"));
     }
 }
