@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
@@ -48,7 +49,7 @@ internal sealed class AiMonitoringContextService : IAiMonitoringContextService
             var assignmentQuery = _dbContext.MonitorAssignments.AsNoTracking();
             if (visibleEndpointIds is not null)
             {
-                assignmentQuery = assignmentQuery.Where(x => visibleEndpointIds.Contains(x.EndpointId));
+                assignmentQuery = WhereStringEqualsAny(assignmentQuery, x => x.EndpointId, visibleEndpointIds);
             }
 
             rows = await (from assignment in assignmentQuery
@@ -73,7 +74,8 @@ internal sealed class AiMonitoringContextService : IAiMonitoringContextService
         if (agentIds.Length > 0)
         {
             staleAgents = await _dbContext.Agents.AsNoTracking()
-                .Where(x => agentIds.Contains(x.AgentId) && (x.Status == AgentHealthStatus.Stale || x.Status == AgentHealthStatus.Offline))
+                .Where(BuildStringEqualsAnyExpression<Agent>(x => x.AgentId, agentIds))
+                .Where(x => x.Status == AgentHealthStatus.Stale || x.Status == AgentHealthStatus.Offline)
                 .OrderBy(x => x.Name ?? x.InstanceId)
                 .ThenBy(x => x.InstanceId)
                 .Take(EndpointListLimit)
@@ -92,9 +94,9 @@ internal sealed class AiMonitoringContextService : IAiMonitoringContextService
         AiNetworkHealthStateChange[] recentStateChanges = [];
         if (visibleIdsFromRows.Length > 0)
         {
-            recentStateChanges = await (from transition in _dbContext.StateTransitions.AsNoTracking()
+            recentStateChanges = await (from transition in WhereStringEqualsAny(_dbContext.StateTransitions.AsNoTracking(), x => x.EndpointId, visibleIdsFromRows)
                 join endpoint in _dbContext.Endpoints.AsNoTracking() on transition.EndpointId equals endpoint.EndpointId
-                where visibleIdsFromRows.Contains(transition.EndpointId) && transition.TransitionAtUtc >= recentStart
+                where transition.TransitionAtUtc >= recentStart
                 orderby transition.TransitionAtUtc descending
                 select new AiNetworkHealthStateChange
                 {
@@ -165,6 +167,28 @@ internal sealed class AiMonitoringContextService : IAiMonitoringContextService
             where access.UserId == user.Id
             select membership.EndpointId).ToArrayAsync(cancellationToken);
         return new AccessScope(true, false, direct.Concat(grouped).ToHashSet(StringComparer.Ordinal));
+    }
+
+    private static IQueryable<T> WhereStringEqualsAny<T>(IQueryable<T> query, Expression<Func<T, string>> propertySelector, IReadOnlyCollection<string> values)
+    {
+        return query.Where(BuildStringEqualsAnyExpression(propertySelector, values));
+    }
+
+    private static Expression<Func<T, bool>> BuildStringEqualsAnyExpression<T>(Expression<Func<T, string>> propertySelector, IReadOnlyCollection<string> values)
+    {
+        if (values.Count == 0)
+        {
+            return _ => false;
+        }
+
+        Expression? body = null;
+        foreach (var value in values)
+        {
+            var equals = Expression.Equal(propertySelector.Body, Expression.Constant(value, typeof(string)));
+            body = body is null ? equals : Expression.OrElse(body, equals);
+        }
+
+        return Expression.Lambda<Func<T, bool>>(body!, propertySelector.Parameters);
     }
 
     private static IReadOnlyList<AiNetworkHealthEndpoint> SelectEndpointRows(IEnumerable<SummaryEndpointRow> rows, EndpointStateKind state) => rows
