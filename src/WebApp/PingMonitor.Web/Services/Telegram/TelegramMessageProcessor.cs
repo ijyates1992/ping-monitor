@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Services.AiChat;
@@ -90,6 +91,7 @@ internal sealed partial class TelegramMessageProcessor : ITelegramMessageProcess
         {
             Source = AiChatSource.Telegram,
             UserMessage = userMessage,
+            User = BuildLinkedUserPrincipal(account.UserId),
             ConversationHistory = _conversationStore.GetHistory(inboundMessage.ChatId, account.UserId).ToList()
         }, cancellationToken);
 
@@ -144,6 +146,14 @@ internal sealed partial class TelegramMessageProcessor : ITelegramMessageProcess
     {
         var command = text.Split(' ', 2)[0].Split('@', 2)[0];
         return command.Equals("/clearai", StringComparison.OrdinalIgnoreCase) || command.Equals("/clear_ai", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ClaimsPrincipal BuildLinkedUserPrincipal(string userId)
+    {
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, userId)],
+            authenticationType: "Telegram");
+        return new ClaimsPrincipal(identity);
     }
 
     private static TelegramMessageProcessingResult Ignored(string message) => new() { Status = TelegramMessageProcessingStatus.Ignored, Handled = false, Success = true, Message = message, ShouldReply = false };
