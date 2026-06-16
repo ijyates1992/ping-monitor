@@ -47,7 +47,9 @@ internal sealed class OpenAiCompatibleProviderClient : IAiProviderClient
             httpRequest.Content = JsonContent.Create(new ChatCompletionRequestDto
             {
                 Model = request.ModelName.Trim(),
-                Messages = request.Messages.Select(x => new ChatCompletionMessageDto { Role = x.Role, Content = x.Content }).ToArray(),
+                Messages = request.Messages.Select(x => new ChatCompletionMessageDto { Role = x.Role, Content = x.Content, ToolCallId = x.ToolCallId, ToolCalls = x.ToolCalls.Count == 0 ? null : x.ToolCalls.Select(MapToolCall).ToArray() }).ToArray(),
+                Tools = request.Tools.Count == 0 ? null : request.Tools.Select(x => new ChatCompletionToolDto { Type = x.Type, Function = new ChatCompletionFunctionDefinitionDto { Name = x.Function.Name, Description = x.Function.Description, Parameters = x.Function.Parameters } }).ToArray(),
+                ToolChoice = request.ToolChoice,
                 Temperature = request.Temperature,
                 MaxTokens = request.MaxOutputTokens,
                 Stream = false
@@ -70,12 +72,15 @@ internal sealed class OpenAiCompatibleProviderClient : IAiProviderClient
             var errorMessage = dto?.Error?.Message;
             if (!string.IsNullOrWhiteSpace(errorMessage)) return Fail(result, sw, $"Provider returned an error: {errorMessage}");
 
-            var text = dto?.Choices?.FirstOrDefault()?.Message?.Content;
-            if (string.IsNullOrWhiteSpace(text)) return Fail(result, sw, "Provider response did not include assistant message content.");
+            var message = dto?.Choices?.FirstOrDefault()?.Message;
+            var text = message?.Content;
+            var toolCalls = message?.ToolCalls?.Select(MapToolCall).Where(x => !string.IsNullOrWhiteSpace(x.Function.Name)).ToArray() ?? [];
+            if (string.IsNullOrWhiteSpace(text) && toolCalls.Length == 0) return Fail(result, sw, "Provider response did not include assistant message content or tool calls.");
 
             sw.Stop();
             result.Succeeded = true;
-            result.ResponseText = text.Trim();
+            result.ResponseText = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+            result.ToolCalls = toolCalls;
             result.Model = string.IsNullOrWhiteSpace(dto?.Model) ? request.ModelName : dto!.Model;
             result.ElapsedMilliseconds = sw.ElapsedMilliseconds;
             return result;
@@ -114,15 +119,24 @@ internal sealed class OpenAiCompatibleProviderClient : IAiProviderClient
 
     private static string Truncate(string value, int maxLength) => value.Length <= maxLength ? value : value[..maxLength] + "…";
 
+    private static ChatCompletionToolCallDto MapToolCall(AiProviderToolCall call) => new() { Id = call.Id, Type = call.Type, Function = new ChatCompletionToolCallFunctionDto { Name = call.Function.Name, Arguments = call.Function.Arguments } };
+    private static AiProviderToolCall MapToolCall(ChatCompletionToolCallDto call) => new() { Id = call.Id ?? string.Empty, Type = call.Type ?? "function", Function = new AiProviderToolCallFunction { Name = call.Function?.Name ?? string.Empty, Arguments = call.Function?.Arguments ?? "{}" } };
+
     private sealed class ChatCompletionRequestDto
     {
         [JsonPropertyName("model")] public string Model { get; set; } = string.Empty;
         [JsonPropertyName("messages")] public ChatCompletionMessageDto[] Messages { get; set; } = [];
+        [JsonPropertyName("tools")] public ChatCompletionToolDto[]? Tools { get; set; }
+        [JsonPropertyName("tool_choice")] public string? ToolChoice { get; set; }
         [JsonPropertyName("temperature")] public double Temperature { get; set; }
         [JsonPropertyName("max_tokens")] public int MaxTokens { get; set; }
         [JsonPropertyName("stream")] public bool Stream { get; set; }
     }
-    private sealed class ChatCompletionMessageDto { [JsonPropertyName("role")] public string Role { get; set; } = string.Empty; [JsonPropertyName("content")] public string Content { get; set; } = string.Empty; }
+    private sealed class ChatCompletionMessageDto { [JsonPropertyName("role")] public string Role { get; set; } = string.Empty; [JsonPropertyName("content")] public string? Content { get; set; } = string.Empty; [JsonPropertyName("tool_call_id")] public string? ToolCallId { get; set; } [JsonPropertyName("tool_calls")] public ChatCompletionToolCallDto[]? ToolCalls { get; set; } }
+    private sealed class ChatCompletionToolDto { [JsonPropertyName("type")] public string Type { get; set; } = "function"; [JsonPropertyName("function")] public ChatCompletionFunctionDefinitionDto Function { get; set; } = new(); }
+    private sealed class ChatCompletionFunctionDefinitionDto { [JsonPropertyName("name")] public string Name { get; set; } = string.Empty; [JsonPropertyName("description")] public string Description { get; set; } = string.Empty; [JsonPropertyName("parameters")] public object Parameters { get; set; } = new(); }
+    private sealed class ChatCompletionToolCallDto { [JsonPropertyName("id")] public string? Id { get; set; } [JsonPropertyName("type")] public string? Type { get; set; } [JsonPropertyName("function")] public ChatCompletionToolCallFunctionDto? Function { get; set; } }
+    private sealed class ChatCompletionToolCallFunctionDto { [JsonPropertyName("name")] public string? Name { get; set; } [JsonPropertyName("arguments")] public string? Arguments { get; set; } }
     private sealed class ChatCompletionResponseDto { [JsonPropertyName("model")] public string? Model { get; set; } [JsonPropertyName("choices")] public ChatCompletionChoiceDto[]? Choices { get; set; } [JsonPropertyName("error")] public ChatCompletionErrorDto? Error { get; set; } }
     private sealed class ChatCompletionChoiceDto { [JsonPropertyName("message")] public ChatCompletionMessageDto? Message { get; set; } }
     private sealed class ChatCompletionErrorDto { [JsonPropertyName("message")] public string? Message { get; set; } }

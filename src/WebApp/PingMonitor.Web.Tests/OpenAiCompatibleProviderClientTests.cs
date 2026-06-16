@@ -43,6 +43,44 @@ public sealed class OpenAiCompatibleProviderClientTests
         Assert.Equal("hello", result.ResponseText);
     }
 
+
+    [Fact]
+    public async Task SerializesToolsToolChoiceAndToolResultMessages()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"choices\":[{\"message\":{\"content\":\"done\"}}]}")
+        });
+        var request = BuildRequest("http://localhost:11434/v1");
+        request.ToolChoice = "auto";
+        request.Tools.Add(new AiProviderToolDefinition { Function = new AiProviderFunctionDefinition { Name = "get_network_health_summary", Description = "summary", Parameters = new System.Text.Json.Nodes.JsonObject { ["type"] = "object", ["properties"] = new System.Text.Json.Nodes.JsonObject(), ["required"] = new System.Text.Json.Nodes.JsonArray() } } });
+        request.Messages.Add(new AiProviderChatMessage { Role = "tool", ToolCallId = "call_123", Content = "{\"ok\":true}" });
+
+        var result = await CreateClient(handler).SendChatAsync(request, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        using var json = JsonDocument.Parse(handler.Body!);
+        Assert.Equal("auto", json.RootElement.GetProperty("tool_choice").GetString());
+        Assert.Equal("get_network_health_summary", json.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("name").GetString());
+        var toolMessage = json.RootElement.GetProperty("messages")[2];
+        Assert.Equal("tool", toolMessage.GetProperty("role").GetString());
+        Assert.Equal("call_123", toolMessage.GetProperty("tool_call_id").GetString());
+    }
+
+    [Fact]
+    public async Task ParsesAssistantToolCalls()
+    {
+        var client = CreateClient(new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_123\",\"type\":\"function\",\"function\":{\"name\":\"get_network_health_summary\",\"arguments\":\"{}\"}}]}}]}") }));
+
+        var result = await client.SendChatAsync(BuildRequest("http://localhost:11434/v1"), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var call = Assert.Single(result.ToolCalls);
+        Assert.Equal("call_123", call.Id);
+        Assert.Equal("get_network_health_summary", call.Function.Name);
+        Assert.Equal("{}", call.Function.Arguments);
+    }
+
     [Fact]
     public async Task HandlesNonSuccessWithConciseError()
     {
