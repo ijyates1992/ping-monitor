@@ -17,5 +17,5 @@ public sealed class AiAssistantPageViewModel
     public bool WebChatEnabled { get; set; }
     public string? StatusMessage { get; set; }
     public string? ErrorMessage { get; set; }
-    public string HelpText { get; set; } = "The assistant can use a limited read-only network health summary for broad status questions. Raw CheckResults diagnostics, endpoint diagnostic packs, diagram lookup, and memory are not connected yet.";
+    public string HelpText { get; set; } = "This is the first AI chat test interface. It can talk to the configured model, but monitoring tools, metrics, diagram lookup, Telegram routing, and memory are not connected yet.";
 }
