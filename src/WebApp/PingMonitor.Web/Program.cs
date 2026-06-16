@@ -203,8 +203,10 @@ builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsServi
 builder.Services.AddScoped<IAiAssistantSettingsService, AiAssistantSettingsService>();
 builder.Services.AddScoped<PingMonitor.Web.Services.AiMemory.IAiUserMemoryService, PingMonitor.Web.Services.AiMemory.AiUserMemoryService>();
 builder.Services.AddScoped<IAiProviderClient, OpenAiCompatibleProviderClient>();
+builder.Services.AddScoped<IAiRuntimeInfoService, AiRuntimeInfoService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAiTool, NetworkHealthSummaryAiTool>();
+builder.Services.AddScoped<IAiTool, AiRuntimeInfoTool>();
 builder.Services.AddScoped<IAiTool, SearchEndpointsAiTool>();
 builder.Services.AddScoped<IAiTool, EndpointMetricsSummaryAiTool>();
 builder.Services.AddScoped<IAiTool, ListNetworkDiagramsAiTool>();
