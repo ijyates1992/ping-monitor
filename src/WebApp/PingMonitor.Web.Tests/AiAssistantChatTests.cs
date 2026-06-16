@@ -6,6 +6,7 @@ using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.AiChat;
 using PingMonitor.Web.Services.AiProviders;
+using PingMonitor.Web.Services.AiMemory;
 using PingMonitor.Web.Services.AiTools;
 using PingMonitor.Web.ViewModels.AiAssistant;
 using Xunit;
@@ -318,7 +319,7 @@ public sealed class AiAssistantChatTests
     {
         var settingsService = new FakeAiAssistantSettingsService(settings);
         var chat = new AiChatService(settingsService, provider, new FakeAiToolRegistry(), NullLogger<AiChatService>.Instance);
-        return new AiAssistantController(settingsService, chat);
+        return new AiAssistantController(settingsService, chat, new FakeAiUserMemoryService());
     }
 
     private static AiAssistantSettingsDto EnabledSettings(bool assistantEnabled = true, bool webChatEnabled = true, string globalPrompt = "") => new()
@@ -354,6 +355,15 @@ public sealed class AiAssistantChatTests
             ToolCallingEnabled = _settings.ToolCallingEnabled
         });
         public Task<AiAssistantSettingsDto> UpdateAsync(UpdateAiAssistantSettingsCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeAiUserMemoryService : IAiUserMemoryService
+    {
+        public Task<AiUserMemoryMutationResult> CreateAsync(CreateAiUserMemoryCommand command, CancellationToken cancellationToken) => Task.FromResult(new AiUserMemoryMutationResult(false, "not implemented", null));
+        public Task<IReadOnlyList<AiUserMemoryDto>> SearchAsync(SearchAiUserMemoriesQuery query, CancellationToken cancellationToken) => Task.FromResult((IReadOnlyList<AiUserMemoryDto>)Array.Empty<AiUserMemoryDto>());
+        public Task<IReadOnlyList<AiUserMemoryDto>> ListAsync(string userId, CancellationToken cancellationToken) => Task.FromResult((IReadOnlyList<AiUserMemoryDto>)Array.Empty<AiUserMemoryDto>());
+        public Task<AiUserMemoryMutationResult> DeleteAsync(DeleteAiUserMemoryCommand command, CancellationToken cancellationToken) => Task.FromResult(new AiUserMemoryMutationResult(false, "not implemented", null));
+        public string? ResolveUserId(System.Security.Claims.ClaimsPrincipal? principal, string? applicationUserId) => applicationUserId;
     }
 
     private sealed class FakeAiProviderClient : IAiProviderClient

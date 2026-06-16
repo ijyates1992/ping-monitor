@@ -24,6 +24,8 @@ public sealed class AiToolCall
     public string ArgumentsJson { get; init; } = "{}";
     public ClaimsPrincipal? Principal { get; init; }
     public string? ApplicationUserId { get; init; }
+    public string? CurrentUserMessage { get; init; }
+    public string? ConversationSource { get; init; }
 }
 
 public sealed class AiToolExecutionResult

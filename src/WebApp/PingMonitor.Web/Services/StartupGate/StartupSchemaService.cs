@@ -50,7 +50,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "NetworkDiagramAreas",
         "NetworkDiagramNodes",
         "NetworkDiagramLinks",
-        "NetworkDiagramLinkVlans"
+        "NetworkDiagramLinkVlans",
+        "AiUserMemories"
     ];
 
     private static readonly string[] RequiredNetworkDiagramColumns =
@@ -231,6 +232,23 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SmtpNotifyAgentOnline",
         "UpdatedAtUtc",
         "UpdatedByUserId"
+    ];
+
+    private static readonly string[] RequiredAiUserMemoryColumns =
+    [
+        "AiUserMemoryId",
+        "UserId",
+        "MemoryType",
+        "Content",
+        "NormalizedContent",
+        "Source",
+        "CreatedAtUtc",
+        "UpdatedAtUtc",
+        "LastUsedAtUtc",
+        "UseCount",
+        "Enabled",
+        "DeletedAtUtc",
+        "CreatedFromConversationSource"
     ];
 
     private static readonly string[] RequiredAiAssistantSettingsColumns =
@@ -417,6 +435,14 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"AiAssistantSettings table is missing required columns: {string.Join(", ", missingAiAssistantSettingsColumns)}.");
+            return status;
+        }
+
+        var missingAiUserMemoryColumns = await GetMissingColumnsAsync(connection, "AiUserMemories", RequiredAiUserMemoryColumns, cancellationToken);
+        if (missingAiUserMemoryColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiUserMemories table is missing required columns: {string.Join(", ", missingAiUserMemoryColumns)}.");
             return status;
         }
 
@@ -720,6 +746,26 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedByUserId` varchar(255) NULL,
                 PRIMARY KEY (`AiAssistantSettingsId`)
+            );
+            """;
+        const string createAiUserMemoriesSql = """
+            CREATE TABLE IF NOT EXISTS `AiUserMemories` (
+                `AiUserMemoryId` varchar(64) NOT NULL,
+                `UserId` varchar(255) NOT NULL,
+                `MemoryType` varchar(64) NOT NULL,
+                `Content` varchar(1000) NOT NULL,
+                `NormalizedContent` varchar(1000) NOT NULL,
+                `Source` varchar(64) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                `LastUsedAtUtc` datetime(6) NULL,
+                `UseCount` int NOT NULL DEFAULT 0,
+                `Enabled` tinyint(1) NOT NULL DEFAULT 1,
+                `DeletedAtUtc` datetime(6) NULL,
+                `CreatedFromConversationSource` varchar(64) NULL,
+                PRIMARY KEY (`AiUserMemoryId`),
+                KEY `IX_AiUserMemories_UserId_Enabled_DeletedAtUtc` (`UserId`, `Enabled`, `DeletedAtUtc`),
+                KEY `IX_AiUserMemories_UserId_NormalizedContent` (`UserId`, `NormalizedContent`(255))
             );
             """;
         const string createUserNotificationSettingsSql = """
@@ -1065,6 +1111,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityIpBlocksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAiAssistantSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiUserMemoriesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createPendingTelegramLinksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createTelegramAccountsSql, cancellationToken);

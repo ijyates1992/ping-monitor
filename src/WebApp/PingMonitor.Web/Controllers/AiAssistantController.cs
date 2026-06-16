@@ -1,8 +1,10 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.AiChat;
+using PingMonitor.Web.Services.AiMemory;
 using PingMonitor.Web.ViewModels.AiAssistant;
 
 namespace PingMonitor.Web.Controllers;
@@ -16,11 +18,13 @@ public sealed class AiAssistantController : Controller
 
     private readonly IAiAssistantSettingsService _settingsService;
     private readonly IAiChatService _chatService;
+    private readonly IAiUserMemoryService _memoryService;
 
-    public AiAssistantController(IAiAssistantSettingsService settingsService, IAiChatService chatService)
+    public AiAssistantController(IAiAssistantSettingsService settingsService, IAiChatService chatService, IAiUserMemoryService memoryService)
     {
         _settingsService = settingsService;
         _chatService = chatService;
+        _memoryService = memoryService;
     }
 
     [HttpGet("")]
@@ -79,6 +83,32 @@ public sealed class AiAssistantController : Controller
 
         model.HistoryJson = SerializeHistory(model.Messages);
         return View("Index", model);
+    }
+
+
+    [HttpGet("memories")]
+    public async Task<IActionResult> Memories(CancellationToken cancellationToken)
+    {
+        var settings = await _settingsService.GetCurrentAsync(cancellationToken);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        var model = new AiMemoriesPageViewModel
+        {
+            AssistantEnabled = settings.AssistantEnabled,
+            MemoryEnabled = settings.MemoryEnabled,
+            Memories = settings.MemoryEnabled && !string.IsNullOrWhiteSpace(userId) ? await _memoryService.ListAsync(userId, cancellationToken) : []
+        };
+        if (!settings.MemoryEnabled) model.ErrorMessage = "AI memory is disabled. An administrator can enable it from Admin > AI Assistant settings.";
+        return View("Memories", model);
+    }
+
+    [HttpPost("memories/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteMemory([FromForm] string memoryId, CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        var result = await _memoryService.DeleteAsync(new DeleteAiUserMemoryCommand(userId, memoryId), cancellationToken);
+        TempData[result.Succeeded ? "StatusMessage" : "ErrorMessage"] = result.Succeeded ? "AI memory deleted." : result.ErrorMessage;
+        return RedirectToAction(nameof(Memories));
     }
 
     [HttpPost("clear")]

@@ -36,7 +36,17 @@ When summarizing endpoint metrics:
 - use RTT and jitter only if available
 - say when sample counts are low or data is incomplete
 - mention the applied time window
-Diagram lookup, switch port/VLAN answers, persistent memory, prompt history, persistent audit log, and write actions are not connected yet.
+You have access to user-specific AI memory tools if memory is enabled.
+Use search_user_memories when user wording may depend on aliases, preferences, or prior context.
+Only use remember_user_memory when the user explicitly asks you to remember something.
+Only create a memory when the user clearly asks you to remember something, such as "remember that..." or "from now on...".
+Do not store live monitoring state, current endpoint health, raw metrics, uptime, RTT, packet loss, diagram facts, passwords, API keys, or secrets as memories.
+When in doubt, ask for confirmation before creating a memory.
+Memories are user-specific. Never claim a memory applies to other users.
+Live Ping Monitor tool data overrides memory.
+Do not store current endpoint state, uptime, RTT, packet loss, CheckResults, diagram facts, passwords, API keys, secrets, or temporary incident status as memory.
+If a user asks you to forget/delete a memory, use delete_user_memory when a matching memory exists.
+Diagram lookup, switch port/VLAN answers, prompt history, persistent audit log, and non-memory write actions are not connected yet.
 """;
 
     private readonly IAiAssistantSettingsService _settingsService;
@@ -92,7 +102,7 @@ Diagram lookup, switch port/VLAN answers, persistent memory, prompt history, per
 
         var messages = BuildMessages(settings.GlobalSystemPrompt, request.ConversationHistory, request.UserMessage);
         var toolsEnabled = runtime.ToolCallingEnabled;
-        var toolDefinitions = toolsEnabled ? _toolRegistry.GetDefinitions().Select(x => x.ToProviderDefinition()).ToArray() : [];
+        var toolDefinitions = toolsEnabled ? _toolRegistry.GetDefinitions().Where(x => settings.MemoryEnabled || !x.Name.Contains("user_memor", StringComparison.Ordinal)).Select(x => x.ToProviderDefinition()).ToArray() : [];
         var totalToolResultCharacters = 0;
         AiProviderChatResult result = new();
 
@@ -130,7 +140,7 @@ Diagram lookup, switch port/VLAN answers, persistent memory, prompt history, per
             messages.Add(new AiProviderChatMessage { Role = "assistant", Content = result.ResponseText, ToolCalls = result.ToolCalls.ToList() });
             foreach (var toolCall in result.ToolCalls)
             {
-                var toolResult = await _toolRegistry.ExecuteAsync(new AiToolCall { Name = toolCall.Function.Name, ArgumentsJson = toolCall.Function.Arguments, Principal = request.Principal, ApplicationUserId = request.ApplicationUserId }, cancellationToken);
+                var toolResult = await _toolRegistry.ExecuteAsync(new AiToolCall { Name = toolCall.Function.Name, ArgumentsJson = toolCall.Function.Arguments, Principal = request.Principal, ApplicationUserId = request.ApplicationUserId, CurrentUserMessage = request.UserMessage, ConversationSource = request.Source.ToString() }, cancellationToken);
                 totalToolResultCharacters += toolResult.ContentJson.Length;
                 if (totalToolResultCharacters > MaxTotalToolResultCharacters)
                 {

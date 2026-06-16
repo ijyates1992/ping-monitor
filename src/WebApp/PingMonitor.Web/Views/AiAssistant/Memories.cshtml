@@ -1,0 +1,60 @@
+@model PingMonitor.Web.ViewModels.AiAssistant.AiMemoriesPageViewModel
+@{
+    ViewData["Title"] = "My AI memories";
+    var status = TempData["StatusMessage"] as string ?? Model.StatusMessage;
+    var error = TempData["ErrorMessage"] as string ?? Model.ErrorMessage;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My AI memories</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; background: #f3f6f8; color: #102a43; }
+        main { max-width: 920px; margin: 0 auto; padding: 1rem; }
+        .card { background: #fff; border: 1px solid #d9e2ec; border-radius: 14px; padding: 1rem; margin-bottom: 1rem; }
+        .muted { color: #52606d; }
+        .alert { border-radius: 12px; padding: .85rem; margin-bottom: 1rem; }
+        .alert-error { background: #fff3f2; color: #b42318; border: 1px solid #fecdca; }
+        .alert-ok { background: #e7f6ec; color: #137333; border: 1px solid #abefc6; }
+        .memory { display: grid; gap: .35rem; border-top: 1px solid #d9e2ec; padding: 1rem 0; }
+        .button, .button-danger { min-height: 44px; border-radius: 10px; padding: .7rem 1rem; font-weight: 700; }
+        .button { display: inline-block; background: #0f62fe; color: #fff; text-decoration: none; }
+        .button-danger { background: #b42318; color: #fff; border: 0; }
+    </style>
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main>
+    <section class="card">
+        <h1>My AI memories</h1>
+        <p class="muted">User-specific preferences, aliases, and contextual notes used by the AI assistant. Live monitoring tools always override memory.</p>
+        <a class="button" asp-controller="AiAssistant" asp-action="Index">Back to AI Assistant</a>
+    </section>
+    @if (!string.IsNullOrWhiteSpace(error)) { <div class="alert alert-error">@error</div> }
+    @if (!string.IsNullOrWhiteSpace(status)) { <div class="alert alert-ok">@status</div> }
+    <section class="card">
+        @if (!Model.MemoryEnabled) { <p class="muted">AI memory is disabled, so memories cannot be searched, created, or deleted.</p> }
+        else if (Model.Memories.Count == 0) { <p class="muted">No AI memories have been saved for your user.</p> }
+        else
+        {
+            @foreach (var memory in Model.Memories)
+            {
+                <article class="memory">
+                    <strong>@memory.MemoryType</strong>
+                    <div>@memory.Content</div>
+                    <small class="muted">Created @memory.CreatedAtUtc.UtcDateTime.ToString("u") · Last used @(memory.LastUsedAtUtc?.UtcDateTime.ToString("u") ?? "never") · Uses @memory.UseCount</small>
+                    <form asp-controller="AiAssistant" asp-action="DeleteMemory" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="memoryId" value="@memory.MemoryId" />
+                        <button class="button-danger" type="submit">Delete memory</button>
+                    </form>
+                </article>
+            }
+        }
+    </section>
+</main>
+</body>
+</html>
