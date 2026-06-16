@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -48,7 +49,7 @@ internal sealed class SearchEndpointsAiTool : IAiTool
         var visibleEndpointIds = await AiToolUserVisibility.GetVisibleEndpointIdsOrNullForAdminAsync(_dbContext, _userManager, user, cancellationToken);
 
         var endpoints = _dbContext.Endpoints.AsNoTracking();
-        if (visibleEndpointIds is not null) endpoints = visibleEndpointIds.Count == 0 ? endpoints.Where(static _ => false) : endpoints.Where(x => visibleEndpointIds.Contains(x.EndpointId));
+        if (visibleEndpointIds is not null) endpoints = ApplyEndpointFilter(endpoints, visibleEndpointIds);
         var lower = query.ToLowerInvariant();
         var candidates = await endpoints
             .Where(x => x.Name.ToLower().Contains(lower) || x.Target.ToLower().Contains(lower))
@@ -60,10 +61,10 @@ internal sealed class SearchEndpointsAiTool : IAiTool
             .OrderByDescending(x => x.Score).ThenBy(x => x.Endpoint.Name).Take(MaxMatches).ToArray();
         var matches = ranked.Select(x => x.Endpoint).ToArray();
         var endpointIds = matches.Select(x => x.EndpointId).ToArray();
-        var states = await (from assignment in _dbContext.MonitorAssignments.AsNoTracking()
+        var assignmentQuery = ApplyEndpointFilter(_dbContext.MonitorAssignments.AsNoTracking(), endpointIds);
+        var states = await (from assignment in assignmentQuery
             join state in _dbContext.EndpointStates.AsNoTracking() on assignment.AssignmentId equals state.AssignmentId into sj
             from state in sj.DefaultIfEmpty()
-            where endpointIds.Contains(assignment.EndpointId)
             select new { assignment.EndpointId, State = state != null ? state.CurrentState : EndpointStateKind.Unknown }).ToArrayAsync(cancellationToken);
         var stateByEndpoint = states.GroupBy(x => x.EndpointId).ToDictionary(x => x.Key, x => x.First().State, StringComparer.Ordinal);
 
@@ -77,6 +78,44 @@ internal sealed class SearchEndpointsAiTool : IAiTool
             message = matches.Length == 0 ? "No visible endpoint matched the query." : null
         };
         return JsonResult(result, Definition.MaxResultCharacters);
+    }
+
+    private static IQueryable<Models.Endpoint> ApplyEndpointFilter(IQueryable<Models.Endpoint> endpoints, IReadOnlyCollection<string> endpointIds)
+    {
+        if (endpointIds.Count == 0)
+        {
+            return endpoints.Where(static _ => false);
+        }
+
+        var parameter = Expression.Parameter(typeof(Models.Endpoint), "endpoint");
+        var endpointId = Expression.Property(parameter, nameof(Models.Endpoint.EndpointId));
+        Expression? predicate = null;
+        foreach (var id in endpointIds)
+        {
+            var equals = Expression.Equal(endpointId, Expression.Constant(id));
+            predicate = predicate is null ? equals : Expression.OrElse(predicate, equals);
+        }
+
+        return endpoints.Where(Expression.Lambda<Func<Models.Endpoint, bool>>(predicate!, parameter));
+    }
+
+    private static IQueryable<MonitorAssignment> ApplyEndpointFilter(IQueryable<MonitorAssignment> assignments, IReadOnlyCollection<string> endpointIds)
+    {
+        if (endpointIds.Count == 0)
+        {
+            return assignments.Where(static _ => false);
+        }
+
+        var parameter = Expression.Parameter(typeof(MonitorAssignment), "assignment");
+        var endpointId = Expression.Property(parameter, nameof(MonitorAssignment.EndpointId));
+        Expression? predicate = null;
+        foreach (var id in endpointIds)
+        {
+            var equals = Expression.Equal(endpointId, Expression.Constant(id));
+            predicate = predicate is null ? equals : Expression.OrElse(predicate, equals);
+        }
+
+        return assignments.Where(Expression.Lambda<Func<MonitorAssignment, bool>>(predicate!, parameter));
     }
 
     private static int Score(string name, string target, string query) => string.Equals(name, query, StringComparison.OrdinalIgnoreCase) || string.Equals(target, query, StringComparison.OrdinalIgnoreCase) ? 100 : (name.StartsWith(query, StringComparison.OrdinalIgnoreCase) || target.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 80 : 50);

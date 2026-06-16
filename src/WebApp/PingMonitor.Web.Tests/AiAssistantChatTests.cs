@@ -181,6 +181,19 @@ public sealed class AiAssistantChatTests
         Assert.Contains("\"7d\"", source);
     }
 
+
+    [Fact]
+    public void SearchEndpointsTool_DoesNotUseMySqlUnsafeEndpointIdArrayContainsQuery()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PingMonitor.Web", "Services", "AiTools", "EndpointMetricsAiTools.cs"));
+
+        Assert.Contains("ApplyEndpointFilter(endpoints, visibleEndpointIds)", source);
+        Assert.Contains("ApplyEndpointFilter(_dbContext.MonitorAssignments.AsNoTracking(), endpointIds)", source);
+        Assert.Contains("Expression.OrElse", source);
+        Assert.DoesNotContain("visibleEndpointIds.Contains(x.EndpointId)", source);
+        Assert.DoesNotContain("endpointIds.Contains(assignment.EndpointId)", source);
+    }
+
     [Fact]
     public void NetworkHealthSummaryTool_DoesNotUseMySqlUnsafeAgentIdArrayContainsQuery()
     {
