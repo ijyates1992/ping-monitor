@@ -40,6 +40,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<SecurityIpBlock> SecurityIpBlocks => Set<SecurityIpBlock>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<AiAssistantSettings> AiAssistantSettings => Set<AiAssistantSettings>();
+    public DbSet<AiUserMemory> AiUserMemories => Set<AiUserMemory>();
     public DbSet<UserNotificationSettings> UserNotificationSettings => Set<UserNotificationSettings>();
     public DbSet<PendingTelegramLink> PendingTelegramLinks => Set<PendingTelegramLink>();
     public DbSet<TelegramAccount> TelegramAccounts => Set<TelegramAccount>();
@@ -388,6 +389,24 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         notificationSettings.Property(x => x.SmtpNotifyAgentOnline).IsRequired();
         notificationSettings.Property(x => x.UpdatedAtUtc).IsRequired();
         notificationSettings.Property(x => x.UpdatedByUserId).HasMaxLength(255);
+
+
+        var aiUserMemory = modelBuilder.Entity<AiUserMemory>();
+        aiUserMemory.ToTable("AiUserMemories");
+        aiUserMemory.HasKey(x => x.AiUserMemoryId);
+        aiUserMemory.Property(x => x.AiUserMemoryId).HasMaxLength(AiUserMemory.MemoryIdMaxLength);
+        aiUserMemory.Property(x => x.UserId).HasMaxLength(AiUserMemory.UserIdMaxLength).IsRequired();
+        aiUserMemory.Property(x => x.MemoryType).HasConversion<string>().HasMaxLength(AiUserMemory.MemoryTypeMaxLength).IsRequired();
+        aiUserMemory.Property(x => x.Content).HasMaxLength(AiUserMemory.ContentMaxLength).IsRequired();
+        aiUserMemory.Property(x => x.NormalizedContent).HasMaxLength(AiUserMemory.NormalizedContentMaxLength).IsRequired();
+        aiUserMemory.Property(x => x.Source).HasMaxLength(AiUserMemory.SourceMaxLength).IsRequired();
+        aiUserMemory.Property(x => x.CreatedAtUtc).IsRequired();
+        aiUserMemory.Property(x => x.UpdatedAtUtc).IsRequired();
+        aiUserMemory.Property(x => x.UseCount).IsRequired();
+        aiUserMemory.Property(x => x.Enabled).HasDefaultValue(true);
+        aiUserMemory.Property(x => x.CreatedFromConversationSource).HasMaxLength(AiUserMemory.SourceMaxLength);
+        aiUserMemory.HasIndex(x => new { x.UserId, x.Enabled, x.DeletedAtUtc });
+        aiUserMemory.HasIndex(x => new { x.UserId, x.NormalizedContent });
 
         var userNotificationSettings = modelBuilder.Entity<UserNotificationSettings>();
         userNotificationSettings.ToTable("UserNotificationSettings");

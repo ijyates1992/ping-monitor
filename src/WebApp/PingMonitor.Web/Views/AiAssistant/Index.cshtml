@@ -41,6 +41,7 @@
         <section class="card">
             <h1>AI Assistant</h1>
             <p class="muted">@Model.HelpText</p>
+            <p><a asp-controller="AiAssistant" asp-action="Memories">Manage my AI memories</a></p>
         </section>
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
@@ -75,7 +76,7 @@
                 <input type="hidden" asp-for="HistoryJson" />
                 <div>
                     <label asp-for="Message"></label>
-                    <textarea asp-for="Message" maxlength="4000" disabled="@(!canSend)" placeholder="Ask a general question. Live monitoring data and tools are not connected yet."></textarea>
+                    <textarea asp-for="Message" maxlength="4000" disabled="@(!canSend)" placeholder="Ask about your monitored network, or say "remember that..." to save a user-specific preference or alias when memory is enabled."></textarea>
                     <span asp-validation-for="Message"></span>
                 </div>
                 <div class="button-row">

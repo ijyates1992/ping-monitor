@@ -201,11 +201,15 @@ builder.Services.AddScoped<IAgentTemplateVersionProvider, AgentTemplateVersionPr
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<IAiAssistantSettingsService, AiAssistantSettingsService>();
+builder.Services.AddScoped<PingMonitor.Web.Services.AiMemory.IAiUserMemoryService, PingMonitor.Web.Services.AiMemory.AiUserMemoryService>();
 builder.Services.AddScoped<IAiProviderClient, OpenAiCompatibleProviderClient>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAiTool, NetworkHealthSummaryAiTool>();
 builder.Services.AddScoped<IAiTool, SearchEndpointsAiTool>();
 builder.Services.AddScoped<IAiTool, EndpointMetricsSummaryAiTool>();
+builder.Services.AddScoped<IAiTool, SearchUserMemoriesAiTool>();
+builder.Services.AddScoped<IAiTool, RememberUserMemoryAiTool>();
+builder.Services.AddScoped<IAiTool, DeleteUserMemoryAiTool>();
 builder.Services.AddScoped<IAiToolRegistry, AiToolRegistry>();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
 builder.Services.AddSingleton<ITelegramAiConversationStore, TelegramAiConversationStore>();
