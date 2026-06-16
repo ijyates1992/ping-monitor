@@ -54,6 +54,9 @@ public sealed class AiNetworkDiagramSliceTests
         Assert.Contains("MaxConnections = 50", source);
         Assert.Contains("MaxFullNodes = 120", source);
         Assert.Contains("visibleEndpointIds", source);
+        Assert.Contains("ApplyEndpointFilter(DbContext.Endpoints.AsNoTracking(), ids)", source);
+        Assert.Contains("Expression.OrElse", source);
+        Assert.DoesNotContain("ids.Contains(x.EndpointId)", source);
         Assert.Contains("visibleNodeIds.Contains(l.SourceNodeId) && visibleNodeIds.Contains(l.TargetNodeId)", source);
         Assert.Contains("SafeMetadata", source);
         Assert.Contains("Truncate", source);
