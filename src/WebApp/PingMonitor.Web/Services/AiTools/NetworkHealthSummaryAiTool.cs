@@ -71,13 +71,16 @@ internal sealed class NetworkHealthSummaryAiTool : IAiTool
             select new SummaryRow(endpoint.EndpointId, endpoint.Name, assignment.AssignmentId, agent.AgentId, agent.InstanceId, agent.Name, state != null ? state.CurrentState : EndpointStateKind.Unknown, state != null ? state.LastCheckUtc : null, state != null ? state.LastStateChangeUtc : null))
             .ToArrayAsync(cancellationToken);
 
-        var agentIds = rows.Select(x => x.AgentId).Distinct().ToArray();
-        var agents = await _dbContext.Agents.AsNoTracking()
-            .Where(x => agentIds.Contains(x.AgentId) && (x.Status == AgentHealthStatus.Offline || x.Status == AgentHealthStatus.Stale))
+        var visibleAgentIds = rows.Select(x => x.AgentId).Distinct(StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
+        var unhealthyAgents = await _dbContext.Agents.AsNoTracking()
+            .Where(x => x.Status == AgentHealthStatus.Offline || x.Status == AgentHealthStatus.Stale)
             .OrderBy(x => x.InstanceId)
             .Select(x => new { x.AgentId, x.InstanceId, x.Name, x.Status, x.LastHeartbeatUtc, x.LastSeenUtc })
-            .Take(MaxListedItemsPerState)
             .ToArrayAsync(cancellationToken);
+        var agents = unhealthyAgents
+            .Where(x => visibleAgentIds.Contains(x.AgentId))
+            .Take(MaxListedItemsPerState)
+            .ToArray();
 
         var result = new
         {
