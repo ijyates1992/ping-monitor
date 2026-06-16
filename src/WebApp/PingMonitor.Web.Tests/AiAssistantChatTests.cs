@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using PingMonitor.Web.Controllers;
@@ -110,7 +111,7 @@ public sealed class AiAssistantChatTests
         Assert.Contains(firstModel.Messages, x => x.Role == "assistant" && x.Content == "Hello human");
 
         provider.Result = new AiProviderChatResult { Succeeded = true, ResponseText = "I remember you said Hello", Model = "llama" };
-        await controller.Send(new AiAssistantPageViewModel { Message = "What did I say?", HistoryJson = firstModel.HistoryJson }, CancellationToken.None);
+        await controller.Send(new AiAssistantPageViewModel { Message = "What did I say?" }, CancellationToken.None);
 
         Assert.Contains(provider.LastRequest!.Messages, x => x.Role == "user" && x.Content == "Hello");
         Assert.Contains(provider.LastRequest.Messages, x => x.Role == "assistant" && x.Content == "Hello human");
@@ -124,6 +125,61 @@ public sealed class AiAssistantChatTests
         var result = Assert.IsType<ViewResult>(await controller.Send(new AiAssistantPageViewModel { Message = "hello" }, CancellationToken.None));
         var model = Assert.IsType<AiAssistantPageViewModel>(result.Model);
         Assert.Contains("AI provider did not return", model.ErrorMessage);
+    }
+
+
+    [Fact]
+    public async Task IndexLoadsRetainedMessagesFromSessionAndClearRemovesThem()
+    {
+        var provider = new FakeAiProviderClient { Result = new AiProviderChatResult { Succeeded = true, ResponseText = "First reply", Model = "llama" } };
+        var controller = CreateController(provider, EnabledSettings());
+
+        var sendResult = Assert.IsType<ViewResult>(await controller.Send(new AiAssistantPageViewModel { Message = "First question" }, CancellationToken.None));
+        var sendModel = Assert.IsType<AiAssistantPageViewModel>(sendResult.Model);
+        Assert.Equal(2, sendModel.Messages.Count);
+
+        var indexResult = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        var indexModel = Assert.IsType<AiAssistantPageViewModel>(indexResult.Model);
+        Assert.Contains(indexModel.Messages, x => x.Role == "user" && x.Content == "First question");
+        Assert.Contains(indexModel.Messages, x => x.Role == "assistant" && x.Content == "First reply");
+
+        var clearResult = Assert.IsType<ViewResult>(await controller.Clear(CancellationToken.None));
+        var clearModel = Assert.IsType<AiAssistantPageViewModel>(clearResult.Model);
+        Assert.Empty(clearModel.Messages);
+
+        var afterClearResult = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        var afterClearModel = Assert.IsType<AiAssistantPageViewModel>(afterClearResult.Model);
+        Assert.Empty(afterClearModel.Messages);
+    }
+
+    [Fact]
+    public void ContextHistoryExcludesVisibleErrorMessages()
+    {
+        var history = AiAssistantController.BoundContextHistory([
+            new AiChatMessageDto { Role = "user", Content = "hello" },
+            new AiChatMessageDto { Role = "error", Content = "provider failed" },
+            new AiChatMessageDto { Role = "assistant", Content = "hi" }
+        ]);
+
+        Assert.DoesNotContain(history, x => x.Role == "error");
+        Assert.Equal(2, history.Count);
+    }
+
+    [Fact]
+    public void AssistantMarkdownIsRenderedAndUnsafeHtmlIsSanitized()
+    {
+        var renderer = new AiMarkdownRenderer();
+
+        var html = renderer.RenderAssistantMessage("### Heading\n\n**bold text**\n\n- item\n\n```bash\necho ok\n```\n\n<script>alert(1)</script><a href=\"javascript:alert(1)\" onclick=\"alert(2)\">bad</a> [safe](https://example.com)");
+
+        Assert.Contains("<h3", html);
+        Assert.Contains("<strong>bold text</strong>", html);
+        Assert.Contains("<ul>", html);
+        Assert.Contains("<pre><code", html);
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("onclick", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("javascript:", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rel=\"noopener noreferrer\"", html);
     }
 
     [Fact]
@@ -157,7 +213,7 @@ public sealed class AiAssistantChatTests
         var controller = CreateController(provider, EnabledSettings());
         var result = Assert.IsType<ViewResult>(await controller.Send(new AiAssistantPageViewModel { Message = "hello" }, CancellationToken.None));
         var model = Assert.IsType<AiAssistantPageViewModel>(result.Model);
-        Assert.DoesNotContain("runtime-secret", model.HistoryJson ?? string.Empty);
+        Assert.DoesNotContain("runtime-secret", string.Join("\n", model.Messages.Select(x => x.Content)));
         Assert.DoesNotContain(provider.LastRequest!.Messages, x => x.Content!.Contains("runtime-secret", StringComparison.Ordinal));
     }
 
@@ -319,7 +375,9 @@ public sealed class AiAssistantChatTests
     {
         var settingsService = new FakeAiAssistantSettingsService(settings);
         var chat = new AiChatService(settingsService, provider, new FakeAiToolRegistry(), NullLogger<AiChatService>.Instance);
-        return new AiAssistantController(settingsService, chat, new FakeAiUserMemoryService());
+        var controller = new AiAssistantController(settingsService, chat, new FakeAiUserMemoryService());
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { Session = new FakeSession() } };
+        return controller;
     }
 
     private static AiAssistantSettingsDto EnabledSettings(bool assistantEnabled = true, bool webChatEnabled = true, string globalPrompt = "") => new()
@@ -379,6 +437,31 @@ public sealed class AiAssistantChatTests
             return Task.FromResult(Results.Count > 0 ? Results.Dequeue() : Result);
         }
     }
+
+    private sealed class FakeSession : ISession
+    {
+        private readonly Dictionary<string, byte[]> _values = new();
+        public IEnumerable<string> Keys => _values.Keys;
+        public string Id { get; } = Guid.NewGuid().ToString("N");
+        public bool IsAvailable => true;
+        public void Clear() => _values.Clear();
+        public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task LoadAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public void Remove(string key) => _values.Remove(key);
+        public void Set(string key, byte[] value) => _values[key] = value;
+        public bool TryGetValue(string key, out byte[] value)
+        {
+            if (_values.TryGetValue(key, out var stored))
+            {
+                value = stored;
+                return true;
+            }
+
+            value = [];
+            return false;
+        }
+    }
+
     private sealed class FakeAiToolRegistry : IAiToolRegistry
     {
         public List<AiToolCall> Calls { get; } = new();

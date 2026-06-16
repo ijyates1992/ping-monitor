@@ -1,4 +1,5 @@
 @model PingMonitor.Web.ViewModels.AiAssistant.AiAssistantPageViewModel
+@inject PingMonitor.Web.Services.AiChat.IAiMarkdownRenderer MarkdownRenderer
 @{
     ViewData["Title"] = "AI Assistant";
     var canSend = Model.AssistantEnabled && Model.WebChatEnabled;
@@ -22,9 +23,17 @@
         .alert-error { background: #fff3f2; color: var(--danger); border-color: #fecdca; }
         .alert-ok { background: #e7f6ec; color: var(--ok); border-color: #abefc6; }
         .transcript { display: grid; gap: .75rem; }
-        .message { border: 1px solid var(--border); border-radius: 12px; padding: .85rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-        .message-user { background: #eef4ff; }
+        .message { border: 1px solid var(--border); border-radius: 12px; padding: .85rem; overflow-wrap: anywhere; }
+        .message-user { background: #eef4ff; white-space: pre-wrap; }
         .message-assistant { background: #fff; }
+        .message-error { background: #fff3f2; color: var(--danger); border-color: #fecdca; white-space: pre-wrap; }
+        .message-markdown > :first-child { margin-top: 0; }
+        .message-markdown > :last-child { margin-bottom: 0; }
+        .message-markdown pre { overflow-x: auto; background: #101828; color: #f8fafc; border-radius: 10px; padding: .85rem; }
+        .message-markdown code { background: rgba(15, 23, 42, .08); border-radius: 4px; padding: .1rem .25rem; }
+        .message-markdown pre code { background: transparent; padding: 0; }
+        .message-markdown blockquote { border-left: 4px solid var(--border); margin-left: 0; padding-left: .85rem; color: var(--muted); }
+        .message-markdown a { color: var(--accent); font-weight: 700; }
         .message-role { display: block; font-weight: 700; margin-bottom: .35rem; }
         label { display: block; font-weight: 700; margin-bottom: .35rem; }
         textarea { width: 100%; min-height: 120px; padding: .85rem; border: 1px solid var(--border); border-radius: 10px; font: inherit; resize: vertical; }
@@ -33,6 +42,10 @@
         .button { border: 0; background: var(--accent); color: #fff; }
         .button-secondary { border: 1px solid var(--border); background: #fff; color: var(--text); }
         .button[disabled] { opacity: .55; cursor: not-allowed; }
+        [data-theme="dark"] .message-user { background: #14213d; }
+        [data-theme="dark"] .message-assistant { background: #111827; }
+        [data-theme="dark"] .message-error { background: #3b1111; color: #fecaca; border-color: #7f1d1d; }
+        [data-theme="dark"] .message-markdown code { background: rgba(248, 250, 252, .12); }
     </style>
 </head>
 <body>
@@ -62,9 +75,18 @@
             {
                 @foreach (var message in Model.Messages)
                 {
-                    <article class="message @(message.Role == "user" ? "message-user" : "message-assistant")">
-                        <span class="message-role">@(message.Role == "user" ? "You" : "Assistant")</span>
-                        @message.Content
+                    var isUser = message.Role == "user";
+                    var isError = message.Role == "error";
+                    <article class="message @(isUser ? "message-user" : isError ? "message-error" : "message-assistant")">
+                        <span class="message-role">@(isUser ? "You" : isError ? "Error" : "Assistant")</span>
+                        @if (message.Role == "assistant")
+                        {
+                            <div class="message-markdown">@Html.Raw(MarkdownRenderer.RenderAssistantMessage(message.Content))</div>
+                        }
+                        else
+                        {
+                            @message.Content
+                        }
                     </article>
                 }
             }
@@ -73,10 +95,9 @@
         <section class="card">
             <form asp-controller="AiAssistant" asp-action="Send" method="post" class="stack">
                 @Html.AntiForgeryToken()
-                <input type="hidden" asp-for="HistoryJson" />
                 <div>
                     <label asp-for="Message"></label>
-                    <textarea asp-for="Message" maxlength="4000" disabled="@(!canSend)" placeholder="Ask about your monitored network, or say "remember that..." to save a user-specific preference or alias when memory is enabled."></textarea>
+                    <textarea asp-for="Message" maxlength="4000" disabled="@(!canSend)" placeholder="Ask about your monitored network, or say &quot;remember that...&quot; to save a user-specific preference or alias when memory is enabled."></textarea>
                     <span asp-validation-for="Message"></span>
                 </div>
                 <div class="button-row">
