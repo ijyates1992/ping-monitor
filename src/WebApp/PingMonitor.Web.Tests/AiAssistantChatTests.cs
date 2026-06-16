@@ -139,6 +139,10 @@ public sealed class AiAssistantChatTests
     {
         var messages = AiChatService.BuildMessages("Site guidance", [], "How is my network looking today?");
         Assert.Contains("Use tools when you need current monitoring state", messages[0].Content);
+        Assert.Contains("search_endpoints", messages[0].Content);
+        Assert.Contains("get_endpoint_metrics_summary", messages[0].Content);
+        Assert.Contains("UNKNOWN is not DOWN", messages[0].Content);
+        Assert.Contains("SUPPRESSED is not downtime", messages[0].Content);
         Assert.Contains("CheckResults", messages[0].Content);
         Assert.Contains("tools", messages[0].Content);
         Assert.Contains("Admin-configured site instructions", messages[1].Content);
@@ -157,6 +161,25 @@ public sealed class AiAssistantChatTests
     }
 
 
+
+    [Fact]
+    public void EndpointMetricsToolImplementationIncludesRequiredSafetyAndMetricGuards()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PingMonitor.Web", "Services", "AiTools", "EndpointMetricsAiTools.cs"));
+
+        Assert.Contains("MaxTailSamples = 120", source);
+        Assert.Contains("GetVisibleEndpointIdsOrNullForAdminAsync", source);
+        Assert.Contains("UNKNOWN is not DOWN", source);
+        Assert.Contains("SUPPRESSED is not downtime", source);
+        Assert.Contains("Full unrestricted raw CheckResults export is not available", source);
+        Assert.Contains("packetLossPercentOfReceived", source);
+        Assert.Contains("absolute difference between consecutive successful RTT samples", source);
+        Assert.Contains("NormalizeWindow", source);
+        Assert.Contains("\"1h\"", source);
+        Assert.Contains("\"6h\"", source);
+        Assert.Contains("\"24h\"", source);
+        Assert.Contains("\"7d\"", source);
+    }
 
     [Fact]
     public void NetworkHealthSummaryTool_DoesNotUseMySqlUnsafeAgentIdArrayContainsQuery()
@@ -186,6 +209,45 @@ public sealed class AiAssistantChatTests
         Assert.NotEmpty(provider.Requests[0].Tools);
         Assert.Contains(provider.Requests[1].Messages, x => x.Role == "tool" && x.ToolCallId == "call_1" && x.Content!.Contains("visibleEndpointCount", StringComparison.Ordinal));
         Assert.Single(registry.Calls);
+    }
+
+    [Fact]
+    public async Task ToolCallingExecutesEndpointSearchThenMetricsAndReturnsFinalAnswer()
+    {
+        var provider = new FakeAiProviderClient();
+        provider.Results.Enqueue(new AiProviderChatResult { Succeeded = true, ToolCalls = { new AiProviderToolCall { Id = "call_search", Function = new AiProviderToolCallFunction { Name = "search_endpoints", Arguments = "{\"query\":\"WFP WAN\"}" } } } });
+        provider.Results.Enqueue(new AiProviderChatResult { Succeeded = true, ToolCalls = { new AiProviderToolCall { Id = "call_metrics", Function = new AiProviderToolCallFunction { Name = "get_endpoint_metrics_summary", Arguments = "{\"endpointId\":\"endpoint-1\",\"window\":\"24h\"}" } } } });
+        provider.Results.Enqueue(new AiProviderChatResult { Succeeded = true, ResponseText = "WFP WAN is UP over the 24h window.", Model = "llama" });
+        var settings = EnabledSettings();
+        settings.ToolCallingEnabled = true;
+        var registry = new FakeAiToolRegistry();
+        var chat = new AiChatService(new FakeAiAssistantSettingsService(settings), provider, registry, NullLogger<AiChatService>.Instance);
+
+        var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.Web, UserMessage = "How is WFP WAN looking?" }, CancellationToken.None);
+
+        Assert.True(response.Succeeded);
+        Assert.Equal("WFP WAN is UP over the 24h window.", response.AssistantMessage);
+        Assert.Equal(3, provider.Requests.Count);
+        Assert.Collection(registry.Calls, x => Assert.Equal("search_endpoints", x.Name), x => Assert.Equal("get_endpoint_metrics_summary", x.Name));
+        Assert.Contains(provider.Requests[2].Messages, x => x.Role == "tool" && x.ToolCallId == "call_search" && x.Content!.Contains("endpoint-1", StringComparison.Ordinal));
+        Assert.Contains(provider.Requests[2].Messages, x => x.Role == "tool" && x.ToolCallId == "call_metrics" && x.Content!.Contains("packetLossPercentOfReceived", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void EndpointToolDefinitionsDoNotExposeSecretsAndDeclareBoundedReadOnlyTools()
+    {
+        var registry = new FakeAiToolRegistry();
+        var definitions = registry.GetDefinitions();
+
+        Assert.Contains(definitions, x => x.Name == "search_endpoints" && x.Description.Contains("visible", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(definitions, x => x.Name == "get_endpoint_metrics_summary" && x.Description.Contains("bounded read-only", StringComparison.OrdinalIgnoreCase));
+        foreach (var definition in definitions)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(definition.ToProviderDefinition(), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+            Assert.DoesNotContain("api", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("secret", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("token", json, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]
@@ -297,14 +359,23 @@ public sealed class AiAssistantChatTests
     private sealed class FakeAiToolRegistry : IAiToolRegistry
     {
         public List<AiToolCall> Calls { get; } = new();
-        public IReadOnlyList<AiToolDefinition> GetDefinitions() => [new AiToolDefinition { Name = "get_network_health_summary", Description = "summary", Parameters = new System.Text.Json.Nodes.JsonObject { ["type"] = "object", ["properties"] = new System.Text.Json.Nodes.JsonObject(), ["required"] = new System.Text.Json.Nodes.JsonArray() } }];
-        public bool IsRegistered(string name) => string.Equals(name, "get_network_health_summary", StringComparison.Ordinal);
+        public IReadOnlyList<AiToolDefinition> GetDefinitions() => [
+            new AiToolDefinition { Name = "get_network_health_summary", Description = "summary", Parameters = new System.Text.Json.Nodes.JsonObject { ["type"] = "object", ["properties"] = new System.Text.Json.Nodes.JsonObject(), ["required"] = new System.Text.Json.Nodes.JsonArray() } },
+            new AiToolDefinition { Name = "search_endpoints", Description = "Search Ping Monitor endpoints visible to the current user by endpoint name, target IP, or hostname.", Parameters = new System.Text.Json.Nodes.JsonObject { ["type"] = "object", ["properties"] = new System.Text.Json.Nodes.JsonObject(), ["required"] = new System.Text.Json.Nodes.JsonArray("query") } },
+            new AiToolDefinition { Name = "get_endpoint_metrics_summary", Description = "Get a bounded read-only metrics summary for a visible endpoint, including current state, uptime, RTT, jitter, packet loss, and recent check sample tail.", Parameters = new System.Text.Json.Nodes.JsonObject { ["type"] = "object", ["properties"] = new System.Text.Json.Nodes.JsonObject(), ["required"] = new System.Text.Json.Nodes.JsonArray("endpointId") } }
+        ];
+        public bool IsRegistered(string name) => name is "get_network_health_summary" or "search_endpoints" or "get_endpoint_metrics_summary";
         public Task<AiToolExecutionResult> ExecuteAsync(AiToolCall call, CancellationToken cancellationToken)
         {
             Calls.Add(call);
             if (!IsRegistered(call.Name)) return Task.FromResult(new AiToolExecutionResult { Succeeded = false, ErrorMessage = "Unknown tool requested.", ContentJson = "{\"error\":\"unknown_tool\"}" });
             if (call.ArgumentsJson == "not-json") return Task.FromResult(new AiToolExecutionResult { Succeeded = false, ErrorMessage = "Arguments must be valid JSON.", ContentJson = "{\"error\":\"invalid_arguments\"}" });
-            return Task.FromResult(new AiToolExecutionResult { Succeeded = true, ContentJson = "{\"visibleEndpointCount\":1,\"stateCounts\":{\"DOWN\":0}}" });
+            return call.Name switch
+            {
+                "search_endpoints" => Task.FromResult(new AiToolExecutionResult { Succeeded = true, ContentJson = "{\"matches\":[{\"endpointId\":\"endpoint-1\",\"name\":\"WFP WAN\",\"target\":\"51.155.102.156\",\"enabled\":true,\"currentState\":\"UP\"}],\"ambiguous\":false}" }),
+                "get_endpoint_metrics_summary" => Task.FromResult(new AiToolExecutionResult { Succeeded = true, ContentJson = "{\"dataSource\":\"endpoint_metrics_summary\",\"currentState\":{\"state\":\"UP\"},\"window\":{\"appliedWindow\":\"24h\"},\"checks\":{\"packetLossPercentOfReceived\":0},\"limitations\":[\"Full unrestricted raw CheckResults export is not available.\"]}" }),
+                _ => Task.FromResult(new AiToolExecutionResult { Succeeded = true, ContentJson = "{\"visibleEndpointCount\":1,\"stateCounts\":{\"DOWN\":0}}" })
+            };
         }
     }
 
