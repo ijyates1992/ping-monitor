@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Identity;
@@ -71,8 +72,27 @@ internal abstract class NetworkDiagramAiToolBase : IAiTool
         var ids = endpointIds.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).Cast<string>().ToArray();
         if (visibleEndpointIds is not null) ids = ids.Where(id => visibleEndpointIds.Contains(id, StringComparer.Ordinal)).ToArray();
         if (ids.Length == 0) return new Dictionary<string, EndpointBrief>(StringComparer.Ordinal);
-        var rows = await DbContext.Endpoints.AsNoTracking().Where(x => ids.Contains(x.EndpointId)).Select(x => new EndpointBrief(x.EndpointId, x.Name, x.Target)).ToArrayAsync(cancellationToken);
+        var rows = await ApplyEndpointFilter(DbContext.Endpoints.AsNoTracking(), ids).Select(x => new EndpointBrief(x.EndpointId, x.Name, x.Target)).ToArrayAsync(cancellationToken);
         return rows.ToDictionary(x => x.EndpointId, StringComparer.Ordinal);
+    }
+
+    private static IQueryable<Models.Endpoint> ApplyEndpointFilter(IQueryable<Models.Endpoint> endpoints, IReadOnlyCollection<string> endpointIds)
+    {
+        if (endpointIds.Count == 0)
+        {
+            return endpoints.Where(static _ => false);
+        }
+
+        var parameter = Expression.Parameter(typeof(Models.Endpoint), "endpoint");
+        var endpointId = Expression.Property(parameter, nameof(Models.Endpoint.EndpointId));
+        Expression? predicate = null;
+        foreach (var id in endpointIds)
+        {
+            var equals = Expression.Equal(endpointId, Expression.Constant(id));
+            predicate = predicate is null ? equals : Expression.OrElse(predicate, equals);
+        }
+
+        return endpoints.Where(Expression.Lambda<Func<Models.Endpoint, bool>>(predicate!, parameter));
     }
 
     protected static object NodePayload(NetworkDiagramNode n, IReadOnlyDictionary<string, EndpointBrief> endpoints, IReadOnlyList<NetworkDiagramArea> areas) => new
