@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.AiChat;
@@ -15,6 +16,7 @@ public sealed class AiAssistantController : Controller
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const int MaxStoredMessages = 20;
+    private const string WebChatSessionKey = "AiAssistant.WebChat.History";
 
     private readonly IAiAssistantSettingsService _settingsService;
     private readonly IAiChatService _chatService;
@@ -34,10 +36,10 @@ public sealed class AiAssistantController : Controller
         var model = new AiAssistantPageViewModel
         {
             AssistantEnabled = settings.AssistantEnabled,
-            WebChatEnabled = settings.WebChatEnabled
+            WebChatEnabled = settings.WebChatEnabled,
+            Messages = ReadSessionHistory()
         };
         ApplyDisabledMessage(model);
-        model.HistoryJson = SerializeHistory(model.Messages);
         return View("Index", model);
     }
 
@@ -45,13 +47,12 @@ public sealed class AiAssistantController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Send([FromForm] AiAssistantPageViewModel model, CancellationToken cancellationToken)
     {
-        model.Messages = ParseHistory(model.HistoryJson);
+        model.Messages = ReadSessionHistory();
 
         if (string.IsNullOrWhiteSpace(model.Message))
         {
             await PopulateFlagsAsync(model, cancellationToken);
             model.ErrorMessage = "Enter a message before sending.";
-            model.HistoryJson = SerializeHistory(model.Messages);
             return View("Index", model);
         }
 
@@ -59,12 +60,12 @@ public sealed class AiAssistantController : Controller
         {
             await PopulateFlagsAsync(model, cancellationToken);
             model.ErrorMessage = "Message must be 4000 characters or fewer.";
-            model.HistoryJson = SerializeHistory(model.Messages);
             return View("Index", model);
         }
 
         var userMessage = model.Message.Trim();
-        var response = await _chatService.SendAsync(new AiChatRequest { Source = AiChatSource.Web, ConversationHistory = model.Messages, UserMessage = userMessage, Principal = User }, cancellationToken);
+        var contextHistory = BoundContextHistory(model.Messages);
+        var response = await _chatService.SendAsync(new AiChatRequest { Source = AiChatSource.Web, ConversationHistory = contextHistory, UserMessage = userMessage, Principal = User }, cancellationToken);
         model.AssistantEnabled = response.AssistantEnabled;
         model.WebChatEnabled = response.WebChatEnabled;
         model.Message = string.Empty;
@@ -74,14 +75,18 @@ public sealed class AiAssistantController : Controller
             model.Messages.Add(new AiChatMessageDto { Role = "user", Content = userMessage });
             model.Messages.Add(new AiChatMessageDto { Role = "assistant", Content = response.AssistantMessage });
             model.Messages = BoundHistory(model.Messages);
+            WriteSessionHistory(model.Messages);
             model.StatusMessage = "AI assistant response received.";
         }
         else
         {
             model.ErrorMessage = response.ErrorMessage ?? "The AI provider did not return a response. Check the AI Assistant settings and the local Ollama/OpenAI-compatible endpoint.";
+            model.Messages.Add(new AiChatMessageDto { Role = "user", Content = userMessage });
+            model.Messages.Add(new AiChatMessageDto { Role = "error", Content = model.ErrorMessage });
+            model.Messages = BoundHistory(model.Messages);
+            WriteSessionHistory(model.Messages);
         }
 
-        model.HistoryJson = SerializeHistory(model.Messages);
         return View("Index", model);
     }
 
@@ -116,14 +121,14 @@ public sealed class AiAssistantController : Controller
     public async Task<IActionResult> Clear(CancellationToken cancellationToken)
     {
         var settings = await _settingsService.GetCurrentAsync(cancellationToken);
+        ClearSessionHistory();
         var model = new AiAssistantPageViewModel { AssistantEnabled = settings.AssistantEnabled, WebChatEnabled = settings.WebChatEnabled, StatusMessage = "Conversation cleared." };
         ApplyDisabledMessage(model);
-        model.HistoryJson = SerializeHistory(model.Messages);
         return View("Index", model);
     }
 
     internal static IList<AiChatMessageDto> BoundHistory(IEnumerable<AiChatMessageDto> messages) => messages
-        .Where(x => x.Role is "user" or "assistant" && !string.IsNullOrWhiteSpace(x.Content))
+        .Where(x => (x.Role is "user" or "assistant" or "error") && !string.IsNullOrWhiteSpace(x.Content))
         .Select(x => new AiChatMessageDto { Role = x.Role, Content = x.Content.Length <= AiAssistantPageViewModel.MaxUserMessageLength ? x.Content : x.Content[..AiAssistantPageViewModel.MaxUserMessageLength] })
         .TakeLast(MaxStoredMessages)
         .ToList();
@@ -136,14 +141,22 @@ public sealed class AiAssistantController : Controller
         ApplyDisabledMessage(model);
     }
 
-    private static IList<AiChatMessageDto> ParseHistory(string? json)
+    internal static IList<AiChatMessageDto> BoundContextHistory(IEnumerable<AiChatMessageDto> messages) => BoundHistory(messages)
+        .Where(x => x.Role is "user" or "assistant")
+        .ToList();
+
+    private IList<AiChatMessageDto> ReadSessionHistory()
     {
+        var json = HttpContext.Session.GetString(WebChatSessionKey);
         if (string.IsNullOrWhiteSpace(json)) return new List<AiChatMessageDto>();
         try { return BoundHistory(JsonSerializer.Deserialize<List<AiChatMessageDto>>(json, JsonOptions) ?? []); }
         catch (JsonException) { return new List<AiChatMessageDto>(); }
     }
 
-    private static string SerializeHistory(IEnumerable<AiChatMessageDto> messages) => JsonSerializer.Serialize(BoundHistory(messages), JsonOptions);
+    private void WriteSessionHistory(IEnumerable<AiChatMessageDto> messages) =>
+        HttpContext.Session.SetString(WebChatSessionKey, JsonSerializer.Serialize(BoundHistory(messages), JsonOptions));
+
+    private void ClearSessionHistory() => HttpContext.Session.Remove(WebChatSessionKey);
 
     private static void ApplyDisabledMessage(AiAssistantPageViewModel model)
     {

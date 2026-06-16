@@ -118,6 +118,14 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 
 builder.Services.AddHealthChecks();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.Cookie.Name = ".PingMonitor.AiAssistant.Session";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.IdleTimeout = TimeSpan.FromHours(8);
+});
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -218,6 +226,7 @@ builder.Services.AddScoped<IAiTool, RememberUserMemoryAiTool>();
 builder.Services.AddScoped<IAiTool, DeleteUserMemoryAiTool>();
 builder.Services.AddScoped<IAiToolRegistry, AiToolRegistry>();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
+builder.Services.AddSingleton<IAiMarkdownRenderer, AiMarkdownRenderer>();
 builder.Services.AddSingleton<ITelegramAiConversationStore, TelegramAiConversationStore>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
 builder.Services.AddHttpClient(nameof(OpenAiCompatibleProviderClient));
@@ -352,6 +361,7 @@ app.Use(async (context, next) =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseSession();
 
 app.MapControllers();
 app.MapControllerRoute(
