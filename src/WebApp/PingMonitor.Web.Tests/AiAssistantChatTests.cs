@@ -157,6 +157,15 @@ public sealed class AiAssistantChatTests
     }
 
 
+
+    [Fact]
+    public void NetworkHealthSummaryTool_DoesNotUseMySqlUnsafeAgentIdArrayContainsQuery()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PingMonitor.Web", "Services", "AiTools", "NetworkHealthSummaryAiTool.cs"));
+
+        Assert.DoesNotContain("agentIds.Contains(x.AgentId)", source);
+    }
+
     [Fact]
     public async Task ToolCallingExecutesToolAndReturnsFinalAnswer()
     {
