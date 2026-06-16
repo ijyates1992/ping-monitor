@@ -1,5 +1,3 @@
-using System.Security.Claims;
-
 namespace PingMonitor.Web.Services.AiChat;
 
 public enum AiChatSource
@@ -11,7 +9,6 @@ public enum AiChatSource
 public sealed class AiChatRequest
 {
     public AiChatSource Source { get; set; } = AiChatSource.Web;
-    public ClaimsPrincipal? User { get; set; }
     public IList<AiChatMessageDto> ConversationHistory { get; set; } = new List<AiChatMessageDto>();
     public string UserMessage { get; set; } = string.Empty;
 }

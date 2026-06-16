@@ -60,7 +60,7 @@ public sealed class AiAssistantController : Controller
         }
 
         var userMessage = model.Message.Trim();
-        var response = await _chatService.SendAsync(new AiChatRequest { ConversationHistory = model.Messages, UserMessage = userMessage, User = User }, cancellationToken);
+        var response = await _chatService.SendAsync(new AiChatRequest { ConversationHistory = model.Messages, UserMessage = userMessage }, cancellationToken);
         model.AssistantEnabled = response.AssistantEnabled;
         model.WebChatEnabled = response.WebChatEnabled;
         model.Message = string.Empty;
