@@ -239,6 +239,21 @@ public sealed class AiAssistantChatTests
     }
 
 
+
+    [Fact]
+    public void EndpointMetricsTool_UsesBoundedMySqlQueriesForCheckResults()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PingMonitor.Web", "Services", "AiTools", "EndpointMetricsAiTools.cs"));
+
+        Assert.Contains("var checkScope = _dbContext.CheckResults.AsNoTracking()", source);
+        Assert.Contains("GroupBy(_ => 1).Select(g => new { Received = g.Count()", source);
+        Assert.Contains("Take(MaxRttStatisticSamples)", source);
+        Assert.Contains("Take(MaxFailureClusterSamples)", source);
+        Assert.Contains("Take(call.Limits.MaxEndpointMetricsSampleTailPoints)", source);
+        Assert.Contains("Median, p95, jitter, and failure clusters are bounded", source);
+        Assert.DoesNotContain("OrderBy(x => x.CheckedAtUtc).Select(x => new { x.CheckedAtUtc, x.Success, x.RoundTripMs, x.ErrorCode, x.ErrorMessage }).ToArrayAsync", source);
+    }
+
     [Fact]
     public void SearchEndpointsTool_DoesNotUseMySqlUnsafeEndpointIdArrayContainsQuery()
     {
