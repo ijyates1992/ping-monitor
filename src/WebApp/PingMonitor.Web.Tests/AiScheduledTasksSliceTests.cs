@@ -35,6 +35,16 @@ public sealed class AiScheduledTasksSliceTests
         Assert.Contains("Minutes, seconds, cron expressions, free-text parsing, and AI-generated schedules are not supported", source);
     }
 
+    [Fact]
+    public void ScheduledTaskOverview_UsesDisplayTimeFormatterForRunTimestamps()
+    {
+        var source = ReadWebFile("Views", "AiScheduledTasks", "Index.cshtml");
+
+        Assert.Contains("DisplayTimeFormatter.FormatForCurrentUserAsync(t.NextRunAtUtc, \"none\")", source);
+        Assert.Contains("DisplayTimeFormatter.FormatForCurrentUserAsync(t.LastRunAtUtc, \"never\")", source);
+        Assert.DoesNotContain("NextRunAtUtc?.ToString(\"u\")", source);
+        Assert.DoesNotContain("LastRunAtUtc?.ToString(\"u\")", source);
+    }
 
     [Fact]
     public void LocalFirstRunConversion_UsesEuropeLondonSummerOffset()
