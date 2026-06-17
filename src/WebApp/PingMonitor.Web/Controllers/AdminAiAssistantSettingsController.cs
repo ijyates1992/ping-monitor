@@ -178,7 +178,11 @@ public sealed class AdminAiAssistantSettingsController : Controller
         MaxDiagramItemMetadataCharacters = model.MaxDiagramItemMetadataCharacters,
         MaxMemorySearchResults = model.MaxMemorySearchResults,
         MaxMemoryContentCharacters = model.MaxMemoryContentCharacters,
-        MaxRuntimeLargestTablesReturned = model.MaxRuntimeLargestTablesReturned
+        MaxRuntimeLargestTablesReturned = model.MaxRuntimeLargestTablesReturned,
+        MaxDependencyEndpointsReturned = model.MaxDependencyEndpointsReturned,
+        MaxDependencyPathsReturned = model.MaxDependencyPathsReturned,
+        MaxDependencyTraversalDepth = model.MaxDependencyTraversalDepth,
+        MaxTopDependedOnEndpoints = model.MaxTopDependedOnEndpoints
     };
 
     private static AiAssistantSettingsPageViewModel ToViewModel(AiAssistantSettingsDto settings, bool saved)
@@ -220,6 +224,10 @@ public sealed class AdminAiAssistantSettingsController : Controller
             MaxMemorySearchResults = settings.ToolLimits.MaxMemorySearchResults,
             MaxMemoryContentCharacters = settings.ToolLimits.MaxMemoryContentCharacters,
             MaxRuntimeLargestTablesReturned = settings.ToolLimits.MaxRuntimeLargestTablesReturned,
+            MaxDependencyEndpointsReturned = settings.ToolLimits.MaxDependencyEndpointsReturned,
+            MaxDependencyPathsReturned = settings.ToolLimits.MaxDependencyPathsReturned,
+            MaxDependencyTraversalDepth = settings.ToolLimits.MaxDependencyTraversalDepth,
+            MaxTopDependedOnEndpoints = settings.ToolLimits.MaxTopDependedOnEndpoints,
             GlobalSystemPrompt = settings.GlobalSystemPrompt,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             UpdatedByUserId = settings.UpdatedByUserId,

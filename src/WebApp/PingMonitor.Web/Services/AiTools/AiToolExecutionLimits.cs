@@ -22,6 +22,10 @@ public sealed class AiToolExecutionLimits
     public const int DefaultMaxMemorySearchResults = 10;
     public const int DefaultMaxMemoryContentCharacters = 1000;
     public const int DefaultMaxRuntimeLargestTablesReturned = 10;
+    public const int DefaultMaxDependencyEndpointsReturned = 100;
+    public const int DefaultMaxDependencyPathsReturned = 100;
+    public const int DefaultMaxDependencyTraversalDepth = 5;
+    public const int DefaultMaxTopDependedOnEndpoints = 20;
 
     public int MaxToolRounds { get; set; } = DefaultMaxToolRounds;
     public int MaxToolCallsPerRound { get; set; } = DefaultMaxToolCallsPerRound;
@@ -43,4 +47,8 @@ public sealed class AiToolExecutionLimits
     public int MaxMemorySearchResults { get; set; } = DefaultMaxMemorySearchResults;
     public int MaxMemoryContentCharacters { get; set; } = DefaultMaxMemoryContentCharacters;
     public int MaxRuntimeLargestTablesReturned { get; set; } = DefaultMaxRuntimeLargestTablesReturned;
+    public int MaxDependencyEndpointsReturned { get; set; } = DefaultMaxDependencyEndpointsReturned;
+    public int MaxDependencyPathsReturned { get; set; } = DefaultMaxDependencyPathsReturned;
+    public int MaxDependencyTraversalDepth { get; set; } = DefaultMaxDependencyTraversalDepth;
+    public int MaxTopDependedOnEndpoints { get; set; } = DefaultMaxTopDependedOnEndpoints;
 }
