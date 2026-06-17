@@ -5,6 +5,7 @@ using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.Metrics;
 using PingMonitor.Web.Services.Diagnostics;
 using PingMonitor.Web.Services.State;
+using PingMonitor.Web.Services.AiEventTasks;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -21,6 +22,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
     private readonly IAssignmentCurrentStateCache _currentStateCache;
     private readonly IRollingAssignmentWindowStore _rollingAssignmentWindowStore;
     private readonly IDbActivityScope _dbActivityScope;
+    private readonly IAiEventTriggeredTaskService _aiEventTasks;
     private DegradedEndpointEvaluationSettings? _degradedSettings;
 
     public StateEvaluationService(
@@ -31,7 +33,8 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         IAssignmentTopologyCache topologyCache,
         IAssignmentCurrentStateCache currentStateCache,
         IRollingAssignmentWindowStore rollingAssignmentWindowStore,
-        IDbActivityScope dbActivityScope)
+        IDbActivityScope dbActivityScope,
+        IAiEventTriggeredTaskService aiEventTasks)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -41,6 +44,7 @@ internal sealed class StateEvaluationService : IStateEvaluationService
         _currentStateCache = currentStateCache;
         _rollingAssignmentWindowStore = rollingAssignmentWindowStore;
         _dbActivityScope = dbActivityScope;
+        _aiEventTasks = aiEventTasks;
     }
 
     public async Task EvaluateAssignmentsAsync(IEnumerable<string> assignmentIds, CancellationToken cancellationToken)
@@ -247,6 +251,10 @@ internal sealed class StateEvaluationService : IStateEvaluationService
                         }
                     })
                 },
+                cancellationToken);
+
+            await _aiEventTasks.RecordEndpointStateChangedAsync(
+                new EndpointStateChangedAiEvent(assignmentContext.AssignmentId, assignmentContext.AgentId, assignmentContext.EndpointId, assignmentContext.EndpointName, string.Empty, previousState, nextState, transitionAtUtc.Value),
                 cancellationToken);
         }
 

@@ -9,7 +9,7 @@ using PingMonitor.Web.Services.StartupGate;
 
 namespace PingMonitor.Web.Services.BufferedResults;
 
-internal sealed class BufferedResultFlushBackgroundService : BackgroundService
+internal class BufferedResultFlushBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IBufferedResultIngestionService _buffer;
@@ -81,27 +81,37 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        await base.StopAsync(CancellationToken.None);
+
         if (!_startupGateRuntimeState.IsOperationalMode)
         {
             _logger.LogInformation("Startup Gate is active during shutdown. Skipping buffered result flush drain.");
-            await base.StopAsync(cancellationToken);
             return;
         }
 
-        _logger.LogInformation("Application shutdown requested. Attempting best-effort flush of buffered raw check results.");
+        using var shutdownFlushCancellation = CreateShutdownFlushCancellationTokenSource(_options.ResultBufferShutdownFlushTimeoutSeconds);
+        _logger.LogInformation(
+            "Application shutdown requested. Attempting best-effort flush of buffered raw check results with a {TimeoutSeconds}-second flush timeout.",
+            _options.ResultBufferShutdownFlushTimeoutSeconds);
+
         try
         {
-            await FlushAvailableBatchesAsync(flushAllPending: true, cancellationToken);
+            await FlushAvailableBatchesAsync(flushAllPending: true, shutdownFlushCancellation.Token);
+        }
+        catch (OperationCanceledException ex) when (shutdownFlushCancellation.IsCancellationRequested)
+        {
+            _logger.LogError(
+                ex,
+                "Best-effort shutdown flush timed out after {TimeoutSeconds} seconds for buffered raw check results.",
+                _options.ResultBufferShutdownFlushTimeoutSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Best-effort shutdown flush failed for buffered raw check results.");
         }
-
-        await base.StopAsync(cancellationToken);
     }
 
-    private async Task FlushAvailableBatchesAsync(bool flushAllPending, CancellationToken cancellationToken)
+    internal async Task FlushAvailableBatchesAsync(bool flushAllPending, CancellationToken cancellationToken)
     {
         while (_buffer.HasPendingItems())
         {
@@ -143,7 +153,13 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
         }
     }
 
-    private async Task<FlushResult> PersistAndEnqueueAssignmentsAsync(IReadOnlyList<BufferedCheckResult> batch, CancellationToken cancellationToken)
+    internal static CancellationTokenSource CreateShutdownFlushCancellationTokenSource(int timeoutSeconds)
+    {
+        var boundedTimeoutSeconds = Math.Max(1, timeoutSeconds);
+        return new CancellationTokenSource(TimeSpan.FromSeconds(boundedTimeoutSeconds));
+    }
+
+    protected virtual async Task<FlushResult> PersistAndEnqueueAssignmentsAsync(IReadOnlyList<BufferedCheckResult> batch, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PingMonitorDbContext>();
@@ -192,5 +208,5 @@ internal sealed class BufferedResultFlushBackgroundService : BackgroundService
             AssignmentEnqueuedCount: enqueueResult.EnqueuedCount,
             LastAssignmentsEnqueuedAtUtc: enqueueResult.EnqueuedCount > 0 ? enqueueTimeUtc : null);
     }
-    private sealed record FlushResult(int PersistedCount, long PersistDurationMs, int AssignmentEnqueuedCount, DateTimeOffset? LastAssignmentsEnqueuedAtUtc);
+    protected internal sealed record FlushResult(int PersistedCount, long PersistDurationMs, int AssignmentEnqueuedCount, DateTimeOffset? LastAssignmentsEnqueuedAtUtc);
 }

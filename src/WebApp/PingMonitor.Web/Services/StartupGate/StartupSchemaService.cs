@@ -42,6 +42,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "SecuritySettings",
         "SecurityIpBlocks",
         "NotificationSettings",
+        "AiAssistantSettings",
         "UserNotificationSettings",
         "PendingTelegramLinks",
         "TelegramAccounts",
@@ -49,7 +50,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "NetworkDiagramAreas",
         "NetworkDiagramNodes",
         "NetworkDiagramLinks",
-        "NetworkDiagramLinkVlans"
+        "NetworkDiagramLinkVlans",
+        "AiUserMemories",
+        "AiScheduledTasks",
+        "AiEventTriggeredTasks",
+        "AiEventTriggeredTaskRuns"
     ];
 
     private static readonly string[] RequiredNetworkDiagramColumns =
@@ -231,6 +236,61 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "UpdatedAtUtc",
         "UpdatedByUserId"
     ];
+
+    private static readonly string[] RequiredAiUserMemoryColumns =
+    [
+        "AiUserMemoryId",
+        "UserId",
+        "MemoryType",
+        "Content",
+        "NormalizedContent",
+        "Source",
+        "CreatedAtUtc",
+        "UpdatedAtUtc",
+        "LastUsedAtUtc",
+        "UseCount",
+        "Enabled",
+        "DeletedAtUtc",
+        "CreatedFromConversationSource"
+    ];
+
+    private static readonly string[] RequiredAiScheduledTaskColumns =
+    [
+        "AiScheduledTaskId", "OwnerUserId", "Name", "Prompt", "Enabled", "ScheduleKind", "RunOnceAtUtc", "TimeOfDayLocal", "DayOfWeek", "DayOfMonth", "FirstRunAtUtc", "RepeatEnabled", "RepeatEvery", "RepeatUnit", "MissedRunPolicy", "TimeZoneId", "DeliveryTarget", "NextRunAtUtc", "LastRunAtUtc", "LastSucceededAtUtc", "LastFailedAtUtc", "LastStatus", "LastError", "LastResponsePreview", "CreatedAtUtc", "UpdatedAtUtc"
+    ];
+
+    private static readonly string[] RequiredAiEventTriggeredTaskColumns =
+    [
+        "AiEventTriggeredTaskId", "OwnerUserId", "Name", "Prompt", "Enabled", "TriggerType", "EndpointTargetStatesJson", "AgentTargetStatesJson", "ScopeMode", "ScopeSelectionJson", "RateLimitValue", "RateLimitUnit", "DeliveryTarget", "LastTriggeredAtUtc", "LastRunAtUtc", "LastSucceededAtUtc", "LastFailedAtUtc", "LastRateLimitedAtUtc", "RateLimitedCount", "LastStatus", "LastError", "LastResponsePreview", "CreatedAtUtc", "UpdatedAtUtc"
+    ];
+
+    private static readonly string[] RequiredAiEventTriggeredTaskRunColumns =
+    [
+        "AiEventTriggeredTaskRunId", "TaskId", "TriggerType", "TriggerContextJson", "Status", "CreatedAtUtc", "StartedAtUtc", "CompletedAtUtc", "Error"
+    ];
+
+    private static readonly string[] RequiredAiAssistantSettingsColumns =
+    [
+        "AiAssistantSettingsId",
+        "AssistantEnabled",
+        "WebChatEnabled",
+        "TelegramChatEnabled",
+        "MemoryEnabled",
+        "DebugLoggingEnabled",
+        "ProviderDisplayName",
+        "ProviderType",
+        "BaseUrl",
+        "ModelName",
+        "ApiKeyProtected",
+        "RequestTimeoutSeconds",
+        "MaxOutputTokens",
+        "Temperature",
+        "ToolCallingEnabled",
+        "GlobalSystemPrompt",
+        "ToolExecutionLimitsJson",
+        "UpdatedAtUtc",
+        "UpdatedByUserId"
+    ];
     private static readonly string[] RequiredUserNotificationSettingsColumns =
     [
         "UserId",
@@ -389,6 +449,46 @@ internal sealed class StartupSchemaService : IStartupSchemaService
             status.Diagnostics.Add($"NotificationSettings table is missing required columns: {string.Join(", ", missingNotificationSettingsColumns)}.");
             return status;
         }
+        var missingAiAssistantSettingsColumns = await GetMissingColumnsAsync(connection, "AiAssistantSettings", RequiredAiAssistantSettingsColumns, cancellationToken);
+        if (missingAiAssistantSettingsColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiAssistantSettings table is missing required columns: {string.Join(", ", missingAiAssistantSettingsColumns)}.");
+            return status;
+        }
+
+        var missingAiScheduledTaskColumns = await GetMissingColumnsAsync(connection, "AiScheduledTasks", RequiredAiScheduledTaskColumns, cancellationToken);
+        if (missingAiScheduledTaskColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiScheduledTasks table is missing required columns: {string.Join(", ", missingAiScheduledTaskColumns)}.");
+            return status;
+        }
+
+        var missingAiEventTaskColumns = await GetMissingColumnsAsync(connection, "AiEventTriggeredTasks", RequiredAiEventTriggeredTaskColumns, cancellationToken);
+        if (missingAiEventTaskColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiEventTriggeredTasks table is missing required columns: {string.Join(", ", missingAiEventTaskColumns)}.");
+            return status;
+        }
+
+        var missingAiEventTaskRunColumns = await GetMissingColumnsAsync(connection, "AiEventTriggeredTaskRuns", RequiredAiEventTriggeredTaskRunColumns, cancellationToken);
+        if (missingAiEventTaskRunColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiEventTriggeredTaskRuns table is missing required columns: {string.Join(", ", missingAiEventTaskRunColumns)}.");
+            return status;
+        }
+
+        var missingAiUserMemoryColumns = await GetMissingColumnsAsync(connection, "AiUserMemories", RequiredAiUserMemoryColumns, cancellationToken);
+        if (missingAiUserMemoryColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiUserMemories table is missing required columns: {string.Join(", ", missingAiUserMemoryColumns)}.");
+            return status;
+        }
+
         var missingUserNotificationSettingsColumns = await GetMissingUserNotificationSettingsColumnsAsync(connection, cancellationToken);
         if (missingUserNotificationSettingsColumns.Length > 0)
         {
@@ -665,6 +765,132 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedByUserId` varchar(255) NULL,
                 PRIMARY KEY (`NotificationSettingsId`)
+            );
+            """;
+
+        const string createAiAssistantSettingsSql = """
+            CREATE TABLE IF NOT EXISTS `AiAssistantSettings` (
+                `AiAssistantSettingsId` int NOT NULL,
+                `AssistantEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `WebChatEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `TelegramChatEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `MemoryEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `DebugLoggingEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `ProviderDisplayName` varchar(128) NOT NULL DEFAULT 'Local Ollama',
+                `ProviderType` varchar(64) NOT NULL DEFAULT 'OpenAICompatible',
+                `BaseUrl` varchar(2048) NOT NULL DEFAULT 'http://localhost:11434/v1',
+                `ModelName` varchar(255) NOT NULL DEFAULT '',
+                `ApiKeyProtected` varchar(4096) NULL,
+                `RequestTimeoutSeconds` int NOT NULL DEFAULT 180,
+                `MaxOutputTokens` int NOT NULL DEFAULT 2048,
+                `Temperature` double NOT NULL DEFAULT 0.2,
+                `ToolCallingEnabled` tinyint(1) NOT NULL DEFAULT 1,
+                `GlobalSystemPrompt` longtext NOT NULL,
+                `ToolExecutionLimitsJson` longtext NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedByUserId` varchar(255) NULL,
+                PRIMARY KEY (`AiAssistantSettingsId`)
+            );
+            """;
+
+        const string createAiScheduledTasksSql = """
+            CREATE TABLE IF NOT EXISTS `AiScheduledTasks` (
+                `AiScheduledTaskId` varchar(64) NOT NULL,
+                `OwnerUserId` varchar(255) NOT NULL,
+                `Name` varchar(128) NOT NULL,
+                `Prompt` varchar(4000) NOT NULL,
+                `Enabled` tinyint(1) NOT NULL DEFAULT 0,
+                `ScheduleKind` varchar(16) NOT NULL,
+                `RunOnceAtUtc` datetime(6) NULL,
+                `TimeOfDayLocal` varchar(16) NULL,
+                `DayOfWeek` varchar(16) NULL,
+                `DayOfMonth` int NULL,
+                `FirstRunAtUtc` datetime(6) NULL,
+                `RepeatEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `RepeatEvery` int NULL,
+                `RepeatUnit` varchar(16) NULL,
+                `MissedRunPolicy` varchar(16) NOT NULL DEFAULT 'Skip',
+                `TimeZoneId` varchar(128) NOT NULL,
+                `DeliveryTarget` varchar(32) NOT NULL,
+                `NextRunAtUtc` datetime(6) NULL,
+                `LastRunAtUtc` datetime(6) NULL,
+                `LastSucceededAtUtc` datetime(6) NULL,
+                `LastFailedAtUtc` datetime(6) NULL,
+                `LastStatus` varchar(16) NOT NULL,
+                `LastError` varchar(512) NULL,
+                `LastResponsePreview` varchar(1000) NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AiScheduledTaskId`),
+                KEY `IX_AiScheduledTasks_OwnerUserId_Enabled_NextRunAtUtc` (`OwnerUserId`, `Enabled`, `NextRunAtUtc`)
+            );
+            """;
+
+        const string createAiEventTriggeredTasksSql = """
+            CREATE TABLE IF NOT EXISTS `AiEventTriggeredTasks` (
+                `AiEventTriggeredTaskId` varchar(64) NOT NULL,
+                `OwnerUserId` varchar(255) NOT NULL,
+                `Name` varchar(128) NOT NULL,
+                `Prompt` varchar(4000) NOT NULL,
+                `Enabled` tinyint(1) NOT NULL DEFAULT 0,
+                `TriggerType` varchar(32) NOT NULL,
+                `EndpointTargetStatesJson` varchar(512) NOT NULL,
+                `AgentTargetStatesJson` varchar(512) NOT NULL,
+                `ScopeMode` varchar(64) NOT NULL,
+                `ScopeSelectionJson` varchar(4096) NOT NULL,
+                `RateLimitValue` int NOT NULL DEFAULT 30,
+                `RateLimitUnit` varchar(16) NOT NULL DEFAULT 'Minutes',
+                `DeliveryTarget` varchar(32) NOT NULL DEFAULT 'TelegramOwner',
+                `LastTriggeredAtUtc` datetime(6) NULL,
+                `LastRunAtUtc` datetime(6) NULL,
+                `LastSucceededAtUtc` datetime(6) NULL,
+                `LastFailedAtUtc` datetime(6) NULL,
+                `LastRateLimitedAtUtc` datetime(6) NULL,
+                `RateLimitedCount` int NOT NULL DEFAULT 0,
+                `LastStatus` varchar(16) NOT NULL DEFAULT 'Pending',
+                `LastError` varchar(512) NULL,
+                `LastResponsePreview` varchar(1000) NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AiEventTriggeredTaskId`),
+                KEY `IX_AiEventTriggeredTasks_OwnerUserId_Enabled_TriggerType` (`OwnerUserId`, `Enabled`, `TriggerType`)
+            );
+            """;
+
+        const string createAiEventTriggeredTaskRunsSql = """
+            CREATE TABLE IF NOT EXISTS `AiEventTriggeredTaskRuns` (
+                `AiEventTriggeredTaskRunId` varchar(64) NOT NULL,
+                `TaskId` varchar(64) NOT NULL,
+                `TriggerType` varchar(32) NOT NULL,
+                `TriggerContextJson` varchar(8192) NOT NULL,
+                `Status` varchar(16) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `StartedAtUtc` datetime(6) NULL,
+                `CompletedAtUtc` datetime(6) NULL,
+                `Error` varchar(512) NULL,
+                PRIMARY KEY (`AiEventTriggeredTaskRunId`),
+                KEY `IX_AiEventTriggeredTaskRuns_Status_CreatedAtUtc` (`Status`, `CreatedAtUtc`),
+                KEY `IX_AiEventTriggeredTaskRuns_TaskId` (`TaskId`)
+            );
+            """;
+        const string createAiUserMemoriesSql = """
+            CREATE TABLE IF NOT EXISTS `AiUserMemories` (
+                `AiUserMemoryId` varchar(64) NOT NULL,
+                `UserId` varchar(255) NOT NULL,
+                `MemoryType` varchar(64) NOT NULL,
+                `Content` varchar(1000) NOT NULL,
+                `NormalizedContent` varchar(1000) NOT NULL,
+                `Source` varchar(64) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                `LastUsedAtUtc` datetime(6) NULL,
+                `UseCount` int NOT NULL DEFAULT 0,
+                `Enabled` tinyint(1) NOT NULL DEFAULT 1,
+                `DeletedAtUtc` datetime(6) NULL,
+                `CreatedFromConversationSource` varchar(64) NULL,
+                PRIMARY KEY (`AiUserMemoryId`),
+                KEY `IX_AiUserMemories_UserId_Enabled_DeletedAtUtc` (`UserId`, `Enabled`, `DeletedAtUtc`),
+                KEY `IX_AiUserMemories_UserId_NormalizedContent` (`UserId`, `NormalizedContent`(255))
             );
             """;
         const string createUserNotificationSettingsSql = """
@@ -1009,6 +1235,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createSecuritySettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createSecurityIpBlocksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createNotificationSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiAssistantSettingsSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiUserMemoriesSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiScheduledTasksSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiEventTriggeredTasksSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiEventTriggeredTaskRunsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createPendingTelegramLinksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createTelegramAccountsSql, cancellationToken);
@@ -1028,6 +1259,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureSecuritySettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureApplicationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
+        await EnsureAiAssistantSettingsSchemaAsync(dbContext, cancellationToken);
+        await EnsureAiScheduledTaskRepeatColumnsAsync(dbContext, cancellationToken);
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
@@ -1043,6 +1276,50 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
 
 
+
+
+    private static async Task EnsureAiScheduledTaskRepeatColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        var missingColumns = await GetMissingColumnsAsync(connection, "AiScheduledTasks", RequiredAiScheduledTaskColumns, cancellationToken);
+        foreach (var column in missingColumns)
+        {
+            var alterSql = column switch
+            {
+                "FirstRunAtUtc" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `FirstRunAtUtc` datetime(6) NULL;",
+                "RepeatEnabled" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `RepeatEnabled` tinyint(1) NOT NULL DEFAULT 0;",
+                "RepeatEvery" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `RepeatEvery` int NULL;",
+                "RepeatUnit" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `RepeatUnit` varchar(16) NULL;",
+                "MissedRunPolicy" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `MissedRunPolicy` varchar(16) NOT NULL DEFAULT 'Skip';",
+                _ => null
+            };
+            if (alterSql is not null)
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(alterSql, cancellationToken);
+            }
+        }
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            UPDATE `AiScheduledTasks`
+            SET
+                `FirstRunAtUtc` = COALESCE(`FirstRunAtUtc`, `RunOnceAtUtc`, `NextRunAtUtc`, UTC_TIMESTAMP(6)),
+                `RepeatEnabled` = CASE WHEN `ScheduleKind` IN ('Daily', 'Weekly', 'Monthly') THEN 1 ELSE `RepeatEnabled` END,
+                `RepeatEvery` = CASE WHEN `ScheduleKind` IN ('Daily', 'Weekly', 'Monthly') THEN COALESCE(`RepeatEvery`, 1) ELSE `RepeatEvery` END,
+                `RepeatUnit` = CASE
+                    WHEN `ScheduleKind` = 'Daily' THEN COALESCE(`RepeatUnit`, 'Days')
+                    WHEN `ScheduleKind` = 'Weekly' THEN COALESCE(`RepeatUnit`, 'Weeks')
+                    WHEN `ScheduleKind` = 'Monthly' THEN COALESCE(`RepeatUnit`, 'Months')
+                    ELSE `RepeatUnit`
+                END,
+                `MissedRunPolicy` = COALESCE(`MissedRunPolicy`, 'Skip')
+            WHERE `FirstRunAtUtc` IS NULL OR `RepeatUnit` IS NULL OR `RepeatEvery` IS NULL;
+            """, cancellationToken);
+    }
 
     private static async Task EnsureNetworkDiagramAreaTableAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
@@ -2170,6 +2447,38 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         }
     }
 
+
+    private static async Task EnsureAiAssistantSettingsSchemaAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        if (!await IsColumnLongTextAsync(connection, "AiAssistantSettings", "GlobalSystemPrompt", cancellationToken))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE `AiAssistantSettings`
+                MODIFY COLUMN `GlobalSystemPrompt` longtext NOT NULL;
+                """,
+                cancellationToken);
+        }
+
+        if ((await GetMissingColumnsAsync(connection, "AiAssistantSettings", RequiredAiAssistantSettingsColumns, cancellationToken)).Contains("ToolExecutionLimitsJson", StringComparer.Ordinal))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `AiAssistantSettings` ADD COLUMN `ToolExecutionLimitsJson` longtext NOT NULL;", cancellationToken);
+        }
+
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE `AiAssistantSettings`
+            MODIFY COLUMN `RequestTimeoutSeconds` int NOT NULL DEFAULT 180;
+            """,
+            cancellationToken);
+    }
+
     private static async Task EnsureUserNotificationSettingsColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {
         await using var connection = dbContext.Database.GetDbConnection();
@@ -2418,6 +2727,30 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
         var value = await command.ExecuteScalarAsync(cancellationToken);
         return value is string dataType && string.Equals(dataType, "double", StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private static async Task<bool> IsColumnLongTextAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, CancellationToken cancellationToken)
+    {
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = @tableName
+              AND column_name = @columnName
+            LIMIT 1;
+            """;
+        AddParameter(command, "@tableName", tableName);
+        AddParameter(command, "@columnName", columnName);
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is string dataType && string.Equals(dataType, "longtext", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<bool> HasCheckResultsColumnAsync(System.Data.Common.DbConnection connection, string columnName, CancellationToken cancellationToken)

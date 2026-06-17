@@ -12,6 +12,11 @@ using PingMonitor.Web.Models.Identity;
 using PingMonitor.Web.Options;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Agents;
+using PingMonitor.Web.Services.AiProviders;
+using PingMonitor.Web.Services.AiChat;
+using PingMonitor.Web.Services.AiTools;
+using PingMonitor.Web.Services.AiScheduledTasks;
+using PingMonitor.Web.Services.AiEventTasks;
 using PingMonitor.Web.Services.Backups;
 using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.Endpoints;
@@ -115,6 +120,14 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 
 builder.Services.AddHealthChecks();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.Cookie.Name = ".PingMonitor.AiAssistant.Session";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.IdleTimeout = TimeSpan.FromHours(8);
+});
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -197,7 +210,34 @@ builder.Services.AddScoped<IAgentPackageBuilder, AgentPackageBuilder>();
 builder.Services.AddScoped<IAgentTemplateVersionProvider, AgentTemplateVersionProvider>();
 builder.Services.AddScoped<IAgentProvisioningService, AgentProvisioningService>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
+builder.Services.AddScoped<IAiAssistantSettingsService, AiAssistantSettingsService>();
+builder.Services.AddScoped<PingMonitor.Web.Services.AiMemory.IAiUserMemoryService, PingMonitor.Web.Services.AiMemory.AiUserMemoryService>();
+builder.Services.AddScoped<IAiProviderClient, OpenAiCompatibleProviderClient>();
+builder.Services.AddScoped<IAiRuntimeInfoService, AiRuntimeInfoService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IAiTool, NetworkHealthSummaryAiTool>();
+builder.Services.AddScoped<IAiTool, AiRuntimeInfoTool>();
+builder.Services.AddScoped<IAiTool, SearchEndpointsAiTool>();
+builder.Services.AddScoped<IAiTool, EndpointMetricsSummaryAiTool>();
+builder.Services.AddScoped<IAiTool, GetEndpointDependenciesAiTool>();
+builder.Services.AddScoped<IAiTool, GetDependencyImpactAiTool>();
+builder.Services.AddScoped<IAiTool, GetDependencySummaryAiTool>();
+builder.Services.AddScoped<IAiTool, ExplainEndpointSuppressionAiTool>();
+builder.Services.AddScoped<IAiTool, ListNetworkDiagramsAiTool>();
+builder.Services.AddScoped<IAiTool, SearchDiagramNodesAiTool>();
+builder.Services.AddScoped<IAiTool, GetNetworkDiagramAiTool>();
+builder.Services.AddScoped<IAiTool, FindDiagramConnectionsAiTool>();
+builder.Services.AddScoped<IAiTool, SearchUserMemoriesAiTool>();
+builder.Services.AddScoped<IAiTool, RememberUserMemoryAiTool>();
+builder.Services.AddScoped<IAiTool, DeleteUserMemoryAiTool>();
+builder.Services.AddScoped<IAiToolRegistry, AiToolRegistry>();
+builder.Services.AddScoped<IAiChatService, AiChatService>();
+builder.Services.AddScoped<IAiScheduledTaskService, AiScheduledTaskService>();
+builder.Services.AddScoped<IAiEventTriggeredTaskService, AiEventTriggeredTaskService>();
+builder.Services.AddSingleton<IAiMarkdownRenderer, AiMarkdownRenderer>();
+builder.Services.AddSingleton<ITelegramAiConversationStore, TelegramAiConversationStore>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
+builder.Services.AddHttpClient(nameof(OpenAiCompatibleProviderClient));
 builder.Services.AddHttpClient(nameof(GitHubReleaseLookupService));
 builder.Services.AddHttpClient(nameof(ApplicationUpdateStagingService));
 builder.Services.AddHttpClient(nameof(ReleaseSchemaMetadataService));
@@ -227,6 +267,8 @@ builder.Services.AddScoped<ITelegramBotIdentityResolver, TelegramBotIdentityReso
 builder.Services.AddScoped<ITelegramMessageProcessor, TelegramMessageProcessor>();
 builder.Services.AddScoped<ITelegramPollingService, TelegramPollingService>();
 builder.Services.AddScoped<ITelegramNotificationSender, TelegramNotificationSender>();
+builder.Services.AddScoped<ITelegramDirectMessageSender, TelegramDirectMessageSender>();
+builder.Services.AddHttpClient(nameof(TelegramDirectMessageSender));
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
 builder.Services.AddScoped<PingMonitor.Web.Services.NetworkDiagrams.INetworkDiagramService, PingMonitor.Web.Services.NetworkDiagrams.NetworkDiagramService>();
@@ -262,6 +304,8 @@ builder.Services.AddHostedService<RollingWindowHydrationBackgroundService>();
 builder.Services.AddHostedService<BufferedResultFlushBackgroundService>();
 builder.Services.AddHostedService<AssignmentProcessingBackgroundService>();
 builder.Services.AddHostedService<TelegramPollingBackgroundService>();
+builder.Services.AddHostedService<AiScheduledTaskWorker>();
+builder.Services.AddHostedService<AiEventTriggeredTaskWorker>();
 
 var app = builder.Build();
 
@@ -329,6 +373,7 @@ app.Use(async (context, next) =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseSession();
 
 app.MapControllers();
 app.MapControllerRoute(

@@ -1,14 +1,18 @@
 @using PingMonitor.Web.Services.Identity
 @inject PingMonitor.Web.Services.IApplicationSettingsService ApplicationSettingsService
+@inject PingMonitor.Web.Services.IAiAssistantSettingsService AiAssistantSettingsService
 @{
     var path = Context?.Request?.Path.Value ?? string.Empty;
     var isAdmin = User.IsInRole(ApplicationRoles.Admin);
     var networkDiagramsEnabled = false;
+    var aiWebChatEnabled = false;
     if (User.Identity?.IsAuthenticated == true)
     {
         var cancellationToken = Context?.RequestAborted ?? CancellationToken.None;
         var applicationSettings = await ApplicationSettingsService.GetCurrentAsync(cancellationToken);
         networkDiagramsEnabled = applicationSettings.NetworkDiagramsEnabled;
+        var aiSettings = await AiAssistantSettingsService.GetCurrentAsync(cancellationToken);
+        aiWebChatEnabled = aiSettings.AssistantEnabled && aiSettings.WebChatEnabled;
     }
 
     static bool IsCurrent(string path, params string[] prefixes)
@@ -29,6 +33,7 @@
     var eventsOpen = IsCurrent(path, "/admin/security");
     var adminOpen = IsCurrent(path, "/admin", "/users", "/settings/notifications");
     var profileOpen = IsCurrent(path, "/profile");
+    var aiOpen = IsCurrent(path, "/ai-assistant");
     var infoOpen = IsCurrent(path, "/about");
 }
 <style>
@@ -132,6 +137,8 @@
         border: 1px solid var(--border);
         background: var(--surface-1);
         min-width: 110px;
+        width: auto;
+        flex: 0 0 auto;
         justify-content: center;
         font-weight: 700;
     }
@@ -270,6 +277,11 @@
                     <a class="site-nav-link" data-current="@IsCurrent(path, "/users")" href="/users">User management</a>
                 </div>
             </details>
+        }
+
+        @if (aiWebChatEnabled)
+        {
+            <a class="site-nav-shortcut" data-current="@aiOpen" href="/ai-assistant">AI Assistant</a>
         }
 
 

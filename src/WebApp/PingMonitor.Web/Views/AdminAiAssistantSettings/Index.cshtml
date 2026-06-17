@@ -1,0 +1,165 @@
+@model PingMonitor.Web.ViewModels.Admin.AiAssistantSettingsPageViewModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    @await Html.PartialAsync("_ThemeHead")
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI assistant settings</title>
+    <style>
+        :root { color-scheme: light; --bg:#f3f6f8; --card:#ffffff; --text:#102a43; --muted:#52606d; --border:#d9e2ec; --accent:#0f62fe; --success:#137333; --success-bg:#ebffee; --success-border:#c2f0c2; --warning-bg:#fff7ed; --warning-border:#fed7aa; --error-bg:#fee4e2; --error-text:#b42318; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+        main { max-width: 860px; margin: 0 auto; padding: 1rem; }
+        .stack { display: grid; gap: 1rem; }
+        .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.08); padding: 1rem; }
+        .grid { display: grid; gap: .85rem; }
+        .button-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+        .button, .button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: .8rem 1rem; border-radius: 10px; font-weight: 600; text-decoration: none; }
+        .button { border: 0; color: #fff; background: var(--accent); cursor: pointer; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: white; }
+        label { font-weight: 700; display: block; margin-bottom: .25rem; }
+        input, select, textarea { width: 100%; min-height: 48px; border: 1px solid var(--border); border-radius: 10px; padding: .75rem; font: inherit; }
+        textarea { min-height: 220px; resize: vertical; }
+        .checkbox-row { display: flex; align-items: center; min-height: 48px; gap: .6rem; }
+        input[type="checkbox"] { width: auto; min-height: 0; transform: scale(1.2); }
+        .field-help, .muted { color: var(--muted); }
+        .field-help { font-size: .9rem; margin: .25rem 0 0; }
+        .saved { border: 1px solid var(--success-border); background: var(--success-bg); color: var(--success); border-radius: 10px; padding: .8rem; }
+        .errors { border: 1px solid #fda29b; background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: .8rem; }
+        .warning { border: 1px solid var(--warning-border); background: var(--warning-bg); border-radius: 10px; padding: .8rem; }
+        .validation { color: var(--error-text); font-size: .9rem; }
+        @@media (min-width: 720px) { .two { grid-template-columns: 1fr 1fr; } }
+    </style>
+</head>
+<body>
+@await Html.PartialAsync("_AuthenticatedNav")
+<main>
+    <form method="post" action="/admin/ai-assistant-settings" class="stack">
+        @Html.AntiForgeryToken()
+        <section class="card">
+            <h1>AI assistant settings</h1>
+            <p class="muted">Configure the future AI Operations Assistant. This slice only stores configuration; it does not enable chat, provider calls, Telegram AI routing, tools, memories, diagnostics, or runtime assistant behaviour.</p>
+            <div class="button-row">
+                <a class="button-secondary" href="/admin">Back to admin settings</a>
+            </div>
+        </section>
+
+        @if (Model.Saved) { <div class="saved" role="status">AI assistant settings saved successfully.</div> }
+        @if (!ViewData.ModelState.IsValid) { <div class="errors" asp-validation-summary="All"></div> }
+
+        <section class="card grid">
+            <h2>Feature enablement</h2>
+            <div class="checkbox-row"><input asp-for="AssistantEnabled" type="checkbox" /><input name="AssistantEnabled" type="hidden" value="false" /><label asp-for="AssistantEnabled"></label></div>
+            <div class="checkbox-row"><input asp-for="WebChatEnabled" type="checkbox" /><input name="WebChatEnabled" type="hidden" value="false" /><label asp-for="WebChatEnabled"></label></div>
+            <div class="checkbox-row"><input asp-for="TelegramChatEnabled" type="checkbox" /><input name="TelegramChatEnabled" type="hidden" value="false" /><label asp-for="TelegramChatEnabled"></label></div>
+            <div class="checkbox-row"><input asp-for="MemoryEnabled" type="checkbox" /><input name="MemoryEnabled" type="hidden" value="false" /><label asp-for="MemoryEnabled"></label></div>
+            <div class="checkbox-row"><input asp-for="DebugLoggingEnabled" type="checkbox" /><input name="DebugLoggingEnabled" type="hidden" value="false" /><label asp-for="DebugLoggingEnabled"></label></div>
+            <p class="field-help">Enabling these flags records operator intent only. Chat surfaces and runtime execution are implemented in later slices.</p>
+        </section>
+
+        <section class="card grid">
+            <h2>Provider/API configuration</h2>
+            <div class="grid two">
+                <div><label asp-for="ProviderDisplayName"></label><input asp-for="ProviderDisplayName" /><span class="validation" asp-validation-for="ProviderDisplayName"></span></div>
+                <div><label asp-for="ProviderType"></label><select asp-for="ProviderType"><option value="OpenAICompatible">OpenAI-compatible</option></select><span class="validation" asp-validation-for="ProviderType"></span></div>
+                <div><label asp-for="BaseUrl"></label><input asp-for="BaseUrl" inputmode="url" /><p class="field-help">For example: local Ollama <code>http://localhost:11434/v1</code> or a hosted OpenAI-compatible endpoint.</p><span class="validation" asp-validation-for="BaseUrl"></span></div>
+                <div><label asp-for="ModelName"></label><input asp-for="ModelName" /><span class="validation" asp-validation-for="ModelName"></span></div>
+            </div>
+            <div>
+                <label asp-for="ApiKey"></label>
+                <input asp-for="ApiKey" type="password" autocomplete="new-password" value="" />
+                <p class="field-help">Saved key configured: <strong>@(Model.ApiKeyConfigured ? "Yes" : "No")</strong>. Leave blank to keep the saved key. API key is optional for local providers.</p>
+            </div>
+            <div class="checkbox-row"><input asp-for="ClearApiKey" type="checkbox" /><input name="ClearApiKey" type="hidden" value="false" /><label asp-for="ClearApiKey"></label></div>
+        </section>
+
+        <section class="card grid">
+            <h2>Model behaviour</h2>
+            <div class="grid two">
+                <div><label asp-for="RequestTimeoutSeconds"></label><input asp-for="RequestTimeoutSeconds" type="number" min="1" max="600" /><p class="field-help">Default: 180 seconds. Maximum: 600 seconds.</p><span class="validation" asp-validation-for="RequestTimeoutSeconds"></span></div>
+                <div><label asp-for="MaxOutputTokens"></label><input asp-for="MaxOutputTokens" type="number" min="64" max="32768" /><span class="validation" asp-validation-for="MaxOutputTokens"></span></div>
+                <div><label asp-for="Temperature"></label><input asp-for="Temperature" type="number" min="0" max="2" step="0.1" /><span class="validation" asp-validation-for="Temperature"></span></div>
+                <div class="checkbox-row"><input asp-for="ToolCallingEnabled" type="checkbox" /><input name="ToolCallingEnabled" type="hidden" value="false" /><label asp-for="ToolCallingEnabled"></label></div>
+            </div>
+        </section>
+
+
+        <section class="card grid">
+            <h2>Tool/context limits</h2>
+            <p class="field-help">These limits control how much context AI tools may return to the model. Higher values can improve rich reports but increase token usage, latency, and the chance of oversized responses. Lower values reduce token usage and are better for smaller local models.</p>
+            <p class="field-help"><strong>Recommended defaults:</strong> 3 tool rounds, 5 tool calls per round, 24,000 total tool-result characters, and 12,000 characters per single tool result. Setting maximum tool rounds to 0 safely disables tool execution for AI requests even when tool calling is enabled.</p>
+            <h3>General tool loop limits</h3>
+            <div class="grid two">
+                <div><label asp-for="MaxToolRounds"></label><input asp-for="MaxToolRounds" type="number" min="0" max="10" /><span class="validation" asp-validation-for="MaxToolRounds"></span></div>
+                <div><label asp-for="MaxToolCallsPerRound"></label><input asp-for="MaxToolCallsPerRound" type="number" min="0" max="20" /><span class="validation" asp-validation-for="MaxToolCallsPerRound"></span></div>
+                <div><label asp-for="MaxTotalToolResultCharacters"></label><input asp-for="MaxTotalToolResultCharacters" type="number" min="1000" max="200000" /><span class="validation" asp-validation-for="MaxTotalToolResultCharacters"></span></div>
+                <div><label asp-for="MaxSingleToolResultCharacters"></label><input asp-for="MaxSingleToolResultCharacters" type="number" min="1000" max="100000" /><span class="validation" asp-validation-for="MaxSingleToolResultCharacters"></span></div>
+            </div>
+            <h3>Endpoint/metrics tool limits</h3>
+            <div class="grid two">
+                <div><label asp-for="MaxEndpointSearchResults"></label><input asp-for="MaxEndpointSearchResults" type="number" /><span class="validation" asp-validation-for="MaxEndpointSearchResults"></span></div>
+                <div><label asp-for="MaxEndpointMetricsSampleTailPoints"></label><input asp-for="MaxEndpointMetricsSampleTailPoints" type="number" /><span class="validation" asp-validation-for="MaxEndpointMetricsSampleTailPoints"></span></div>
+                <div><label asp-for="MaxEndpointTransitionItems"></label><input asp-for="MaxEndpointTransitionItems" type="number" /><span class="validation" asp-validation-for="MaxEndpointTransitionItems"></span></div>
+                <div><label asp-for="MaxEndpointFailureClusters"></label><input asp-for="MaxEndpointFailureClusters" type="number" /><span class="validation" asp-validation-for="MaxEndpointFailureClusters"></span></div>
+                <div><label asp-for="DefaultEndpointMetricsWindow"></label><select asp-for="DefaultEndpointMetricsWindow"><option>1h</option><option>6h</option><option>24h</option><option>7d</option></select><span class="validation" asp-validation-for="DefaultEndpointMetricsWindow"></span></div>
+                <div><label asp-for="MaximumEndpointMetricsWindow"></label><select asp-for="MaximumEndpointMetricsWindow"><option>1h</option><option>6h</option><option>24h</option><option>7d</option></select><span class="validation" asp-validation-for="MaximumEndpointMetricsWindow"></span></div>
+            </div>
+            <h3>Diagram/runtime/memory limits</h3>
+            <div class="grid two">
+                <div><label asp-for="MaxDiagramListResults"></label><input asp-for="MaxDiagramListResults" type="number" /></div>
+                <div><label asp-for="MaxDiagramNodeSearchResults"></label><input asp-for="MaxDiagramNodeSearchResults" type="number" /></div>
+                <div><label asp-for="MaxDiagramConnectionResults"></label><input asp-for="MaxDiagramConnectionResults" type="number" /></div>
+                <div><label asp-for="MaxFullDiagramNodesReturned"></label><input asp-for="MaxFullDiagramNodesReturned" type="number" /></div>
+                <div><label asp-for="MaxFullDiagramLinksReturned"></label><input asp-for="MaxFullDiagramLinksReturned" type="number" /></div>
+                <div><label asp-for="MaxDiagramToolResultCharacters"></label><input asp-for="MaxDiagramToolResultCharacters" type="number" /></div>
+                <div><label asp-for="MaxDiagramItemMetadataCharacters"></label><input asp-for="MaxDiagramItemMetadataCharacters" type="number" /></div>
+                <div><label asp-for="MaxMemorySearchResults"></label><input asp-for="MaxMemorySearchResults" type="number" /></div>
+                <div><label asp-for="MaxMemoryContentCharacters"></label><input asp-for="MaxMemoryContentCharacters" type="number" /></div>
+                <div><label asp-for="MaxRuntimeLargestTablesReturned"></label><input asp-for="MaxRuntimeLargestTablesReturned" type="number" /></div>
+                <div><label asp-for="MaxDependencyEndpointsReturned"></label><input asp-for="MaxDependencyEndpointsReturned" type="number" /></div>
+                <div><label asp-for="MaxDependencyPathsReturned"></label><input asp-for="MaxDependencyPathsReturned" type="number" /></div>
+                <div><label asp-for="MaxDependencyTraversalDepth"></label><input asp-for="MaxDependencyTraversalDepth" type="number" /></div>
+                <div><label asp-for="MaxTopDependedOnEndpoints"></label><input asp-for="MaxTopDependedOnEndpoints" type="number" /></div>
+            </div>
+        </section>
+
+        <section class="card grid">
+            <h2>Admin global prompt</h2>
+            <textarea asp-for="GlobalSystemPrompt" maxlength="20000"></textarea>
+            <p class="field-help">Use this for site-specific guidance only. Admin instructions cannot override read-only mode, permissions, application safety rules, or tool-result truthfulness.</p>
+            <span class="validation" asp-validation-for="GlobalSystemPrompt"></span>
+        </section>
+
+        <section class="card grid">
+            <h2>Test AI provider connection</h2>
+            <p class="field-help">Save changes before testing. This sends a small test prompt to the configured OpenAI-compatible endpoint and does not send monitoring data, endpoint data, tools, prompt history, memories, or secrets.</p>
+            @if (Model.TestResult is not null)
+            {
+                <div class="@(Model.TestResult.Succeeded ? "saved" : "errors")" role="status">
+                    <strong>@(Model.TestResult.Succeeded ? "AI provider connection succeeded." : "AI provider connection failed.")</strong>
+                    <div>Elapsed: @Model.TestResult.ElapsedMilliseconds ms</div>
+                    @if (Model.TestResult.StatusCode.HasValue) { <div>HTTP status: @Model.TestResult.StatusCode.Value</div> }
+                    @if (Model.TestResult.Succeeded) { <div>Returned text: <code>@Model.TestResult.ResponseText</code></div> }
+                    else { <div>Error: @Model.TestResult.ErrorMessage</div> }
+                </div>
+            }
+            <div class="button-row"><button class="button-secondary" type="submit" formaction="/admin/ai-assistant-settings/test" formmethod="post">Test saved provider settings</button></div>
+        </section>
+
+        <section class="card warning">
+            <h2>Safety notes</h2>
+            <ul>
+                <li>The assistant is planned as read-only and must not modify monitoring configuration, agents, dependencies, alerts, or diagram data.</li>
+                <li>These settings only configure the future assistant; enabling flags here does not make chat available until later runtime slices are implemented.</li>
+                <li>The built-in non-editable safety prompt will be added in the runtime layer and takes precedence over the admin prompt.</li>
+                <li>Diagram/topology answers must remain based on saved documentation only, not live link-state.</li>
+            </ul>
+            <p class="muted">Last updated: @await DisplayTimeFormatter.FormatForCurrentUserAsync(Model.UpdatedAtUtc)</p>
+        </section>
+
+        <div class="button-row"><button class="button" type="submit">Save AI assistant settings</button><a class="button-secondary" href="/admin">Cancel</a></div>
+    </form>
+</main>
+</body>
+</html>

@@ -132,6 +132,13 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             sectionResults.Add(section);
         }
 
+        if (selectedSections.Contains(ConfigurationBackupSections.AiAssistantSettings, StringComparer.Ordinal))
+        {
+            var section = await RestoreAiAssistantSettingsAsync(backup, cancellationToken);
+            section.DeletedCount = GetDeletedCount(deletedCounts, section.Section);
+            sectionResults.Add(section);
+        }
+
         if (selectedSections.Contains(ConfigurationBackupSections.Identity, StringComparer.Ordinal))
         {
             var section = await RestoreIdentityAsync(backup, cancellationToken);
@@ -321,6 +328,7 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
                 ConfigurationBackupSections.SecuritySettings => backup.Sections.SecuritySettings is not null,
                 ConfigurationBackupSections.NotificationSettings => backup.Sections.NotificationSettings is not null,
                 ConfigurationBackupSections.UserNotificationSettings => backup.Sections.UserNotificationSettings is not null,
+                ConfigurationBackupSections.AiAssistantSettings => backup.Sections.AiAssistantSettings is not null,
                 ConfigurationBackupSections.Identity => backup.Sections.Identity is not null,
                 ConfigurationBackupSections.NetworkDiagrams => backup.Sections.NetworkDiagrams is not null,
                 _ => false
@@ -822,6 +830,53 @@ public sealed class ConfigurationRestoreService : IConfigurationRestoreService
             result.UpdatedCount,
             result.SkippedCount,
             result.ErrorCount);
+        return result;
+    }
+
+
+    private async Task<RestoreSectionResult> RestoreAiAssistantSettingsAsync(ConfigurationBackupDocument backup, CancellationToken cancellationToken)
+    {
+        var result = new RestoreSectionResult { Section = ConfigurationBackupSections.AiAssistantSettings };
+        var source = backup.Sections.AiAssistantSettings;
+        if (source is null)
+        {
+            result.SkippedCount++;
+            result.Warnings.Add("Backup does not include AI assistant settings.");
+            return result;
+        }
+
+        var target = await _dbContext.AiAssistantSettings
+            .SingleOrDefaultAsync(x => x.AiAssistantSettingsId == AiAssistantSettings.SingletonId, cancellationToken);
+        if (target is null)
+        {
+            target = new AiAssistantSettings { AiAssistantSettingsId = AiAssistantSettings.SingletonId };
+            _dbContext.AiAssistantSettings.Add(target);
+            result.InsertedCount++;
+        }
+        else
+        {
+            result.UpdatedCount++;
+        }
+
+        target.AssistantEnabled = source.AssistantEnabled;
+        target.WebChatEnabled = source.WebChatEnabled;
+        target.TelegramChatEnabled = source.TelegramChatEnabled;
+        target.MemoryEnabled = source.MemoryEnabled;
+        target.DebugLoggingEnabled = source.DebugLoggingEnabled;
+        target.ProviderDisplayName = string.IsNullOrWhiteSpace(source.ProviderDisplayName) ? "Local Ollama" : source.ProviderDisplayName;
+        target.ProviderType = source.ProviderType == AiAssistantSettings.OpenAICompatibleProviderType ? source.ProviderType : AiAssistantSettings.OpenAICompatibleProviderType;
+        target.BaseUrl = source.BaseUrl ?? string.Empty;
+        target.ModelName = source.ModelName ?? string.Empty;
+        target.ApiKeyProtected = source.ApiKeyProtected;
+        target.RequestTimeoutSeconds = source.RequestTimeoutSeconds <= 0 ? 180 : source.RequestTimeoutSeconds;
+        target.MaxOutputTokens = source.MaxOutputTokens <= 0 ? 2048 : source.MaxOutputTokens;
+        target.Temperature = source.Temperature;
+        target.ToolCallingEnabled = source.ToolCallingEnabled;
+        target.GlobalSystemPrompt = source.GlobalSystemPrompt ?? string.Empty;
+        target.UpdatedAtUtc = source.UpdatedAtUtc == default ? DateTimeOffset.UtcNow : source.UpdatedAtUtc;
+        target.UpdatedByUserId = source.UpdatedByUserId;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return result;
     }
 

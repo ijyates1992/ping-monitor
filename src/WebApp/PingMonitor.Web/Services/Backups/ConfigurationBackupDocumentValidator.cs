@@ -46,6 +46,7 @@ public sealed class ConfigurationBackupDocumentValidator : IConfigurationBackupD
             || document.Sections.SecuritySettings is not null
             || document.Sections.NotificationSettings is not null
             || document.Sections.UserNotificationSettings is not null
+            || document.Sections.AiAssistantSettings is not null
             || document.Sections.Identity is not null
             || document.Sections.NetworkDiagrams is not null;
 
