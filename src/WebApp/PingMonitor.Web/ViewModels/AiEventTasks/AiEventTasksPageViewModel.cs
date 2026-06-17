@@ -1,0 +1,7 @@
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using PingMonitor.Web.Models;
+using PingMonitor.Web.Services.AiEventTasks;
+namespace PingMonitor.Web.ViewModels.AiEventTasks;
+public sealed class AiEventTasksPageViewModel { public IReadOnlyList<AiEventTriggeredTaskDto> Tasks {get;set;}=[]; public bool HasLinkedTelegramAccount {get;set;} public string? StatusMessage {get;set;} public string? ErrorMessage {get;set;} public AiEventTaskFormViewModel Form {get;set;}=new(); public IReadOnlyList<SelectListItem> Endpoints {get;set;}=[]; public IReadOnlyList<SelectListItem> Groups {get;set;}=[]; public IReadOnlyList<SelectListItem> Agents {get;set;}=[]; }
+public sealed class AiEventTaskFormViewModel { public string? AiEventTriggeredTaskId {get;set;} [Required,StringLength(128)] public string Name {get;set;}=""; [Required,StringLength(4000)] public string Prompt {get;set;}=""; public bool Enabled {get;set;}=true; public AiEventTriggerType TriggerType {get;set;} public List<string> EndpointTargetStates {get;set;}=["Down"]; public List<string> AgentTargetStates {get;set;}=["Offline"]; public AiEventTriggerScopeMode ScopeMode {get;set;}=AiEventTriggerScopeMode.AllVisibleEndpoints; public List<string> ScopeSelectionIds {get;set;}=[]; [Range(1,int.MaxValue)] public int RateLimitValue {get;set;}=30; public AiEventTriggerRateLimitUnit RateLimitUnit {get;set;}=AiEventTriggerRateLimitUnit.Minutes; public AiEventTriggeredTaskDeliveryTarget DeliveryTarget {get;set;}=AiEventTriggeredTaskDeliveryTarget.TelegramOwner; }

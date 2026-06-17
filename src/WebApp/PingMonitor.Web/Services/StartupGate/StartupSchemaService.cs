@@ -52,7 +52,9 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "NetworkDiagramLinks",
         "NetworkDiagramLinkVlans",
         "AiUserMemories",
-        "AiScheduledTasks"
+        "AiScheduledTasks",
+        "AiEventTriggeredTasks",
+        "AiEventTriggeredTaskRuns"
     ];
 
     private static readonly string[] RequiredNetworkDiagramColumns =
@@ -257,6 +259,16 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "AiScheduledTaskId", "OwnerUserId", "Name", "Prompt", "Enabled", "ScheduleKind", "RunOnceAtUtc", "TimeOfDayLocal", "DayOfWeek", "DayOfMonth", "FirstRunAtUtc", "RepeatEnabled", "RepeatEvery", "RepeatUnit", "MissedRunPolicy", "TimeZoneId", "DeliveryTarget", "NextRunAtUtc", "LastRunAtUtc", "LastSucceededAtUtc", "LastFailedAtUtc", "LastStatus", "LastError", "LastResponsePreview", "CreatedAtUtc", "UpdatedAtUtc"
     ];
 
+    private static readonly string[] RequiredAiEventTriggeredTaskColumns =
+    [
+        "AiEventTriggeredTaskId", "OwnerUserId", "Name", "Prompt", "Enabled", "TriggerType", "EndpointTargetStatesJson", "AgentTargetStatesJson", "ScopeMode", "ScopeSelectionJson", "RateLimitValue", "RateLimitUnit", "DeliveryTarget", "LastTriggeredAtUtc", "LastRunAtUtc", "LastSucceededAtUtc", "LastFailedAtUtc", "LastRateLimitedAtUtc", "RateLimitedCount", "LastStatus", "LastError", "LastResponsePreview", "CreatedAtUtc", "UpdatedAtUtc"
+    ];
+
+    private static readonly string[] RequiredAiEventTriggeredTaskRunColumns =
+    [
+        "AiEventTriggeredTaskRunId", "TaskId", "TriggerType", "TriggerContextJson", "Status", "CreatedAtUtc", "StartedAtUtc", "CompletedAtUtc", "Error"
+    ];
+
     private static readonly string[] RequiredAiAssistantSettingsColumns =
     [
         "AiAssistantSettingsId",
@@ -449,6 +461,22 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"AiScheduledTasks table is missing required columns: {string.Join(", ", missingAiScheduledTaskColumns)}.");
+            return status;
+        }
+
+        var missingAiEventTaskColumns = await GetMissingColumnsAsync(connection, "AiEventTriggeredTasks", RequiredAiEventTriggeredTaskColumns, cancellationToken);
+        if (missingAiEventTaskColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiEventTriggeredTasks table is missing required columns: {string.Join(", ", missingAiEventTaskColumns)}.");
+            return status;
+        }
+
+        var missingAiEventTaskRunColumns = await GetMissingColumnsAsync(connection, "AiEventTriggeredTaskRuns", RequiredAiEventTriggeredTaskRunColumns, cancellationToken);
+        if (missingAiEventTaskRunColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiEventTriggeredTaskRuns table is missing required columns: {string.Join(", ", missingAiEventTaskRunColumns)}.");
             return status;
         }
 
@@ -793,6 +821,54 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 PRIMARY KEY (`AiScheduledTaskId`),
                 KEY `IX_AiScheduledTasks_OwnerUserId_Enabled_NextRunAtUtc` (`OwnerUserId`, `Enabled`, `NextRunAtUtc`)
+            );
+            """;
+
+        const string createAiEventTriggeredTasksSql = """
+            CREATE TABLE IF NOT EXISTS `AiEventTriggeredTasks` (
+                `AiEventTriggeredTaskId` varchar(64) NOT NULL,
+                `OwnerUserId` varchar(255) NOT NULL,
+                `Name` varchar(128) NOT NULL,
+                `Prompt` varchar(4000) NOT NULL,
+                `Enabled` tinyint(1) NOT NULL DEFAULT 0,
+                `TriggerType` varchar(32) NOT NULL,
+                `EndpointTargetStatesJson` varchar(512) NOT NULL,
+                `AgentTargetStatesJson` varchar(512) NOT NULL,
+                `ScopeMode` varchar(64) NOT NULL,
+                `ScopeSelectionJson` varchar(4096) NOT NULL,
+                `RateLimitValue` int NOT NULL DEFAULT 30,
+                `RateLimitUnit` varchar(16) NOT NULL DEFAULT 'Minutes',
+                `DeliveryTarget` varchar(32) NOT NULL DEFAULT 'TelegramOwner',
+                `LastTriggeredAtUtc` datetime(6) NULL,
+                `LastRunAtUtc` datetime(6) NULL,
+                `LastSucceededAtUtc` datetime(6) NULL,
+                `LastFailedAtUtc` datetime(6) NULL,
+                `LastRateLimitedAtUtc` datetime(6) NULL,
+                `RateLimitedCount` int NOT NULL DEFAULT 0,
+                `LastStatus` varchar(16) NOT NULL DEFAULT 'Pending',
+                `LastError` varchar(512) NULL,
+                `LastResponsePreview` varchar(1000) NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AiEventTriggeredTaskId`),
+                KEY `IX_AiEventTriggeredTasks_OwnerUserId_Enabled_TriggerType` (`OwnerUserId`, `Enabled`, `TriggerType`)
+            );
+            """;
+
+        const string createAiEventTriggeredTaskRunsSql = """
+            CREATE TABLE IF NOT EXISTS `AiEventTriggeredTaskRuns` (
+                `AiEventTriggeredTaskRunId` varchar(64) NOT NULL,
+                `TaskId` varchar(64) NOT NULL,
+                `TriggerType` varchar(32) NOT NULL,
+                `TriggerContextJson` varchar(8192) NOT NULL,
+                `Status` varchar(16) NOT NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `StartedAtUtc` datetime(6) NULL,
+                `CompletedAtUtc` datetime(6) NULL,
+                `Error` varchar(512) NULL,
+                PRIMARY KEY (`AiEventTriggeredTaskRunId`),
+                KEY `IX_AiEventTriggeredTaskRuns_Status_CreatedAtUtc` (`Status`, `CreatedAtUtc`),
+                KEY `IX_AiEventTriggeredTaskRuns_TaskId` (`TaskId`)
             );
             """;
         const string createAiUserMemoriesSql = """
@@ -1160,6 +1236,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createAiAssistantSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAiUserMemoriesSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAiScheduledTasksSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiEventTriggeredTasksSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiEventTriggeredTaskRunsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createPendingTelegramLinksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createTelegramAccountsSql, cancellationToken);
