@@ -6,7 +6,8 @@ public enum AiChatSource
 {
     Web = 0,
     Telegram = 1,
-    ScheduledTask = 2
+    ScheduledTask = 2,
+    EventTriggeredTask = 3
 }
 
 public sealed class AiChatRequest

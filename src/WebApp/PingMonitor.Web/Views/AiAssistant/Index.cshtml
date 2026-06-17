@@ -55,7 +55,7 @@
             <h1>AI Assistant</h1>
             <p class="muted">@Model.HelpText</p>
             <p><a asp-controller="AiAssistant" asp-action="Memories">Manage my AI memories</a></p>
-            <p><a asp-controller="AiScheduledTasks" asp-action="Index">Manage scheduled AI tasks</a></p>
+            <p><a asp-controller="AiScheduledTasks" asp-action="Index">Scheduled AI tasks</a> · <a asp-controller="AiEventTasks" asp-action="Index">Event-triggered AI tasks</a></p>
         </section>
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))

@@ -42,6 +42,8 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<AiAssistantSettings> AiAssistantSettings => Set<AiAssistantSettings>();
     public DbSet<AiUserMemory> AiUserMemories => Set<AiUserMemory>();
     public DbSet<AiScheduledTask> AiScheduledTasks => Set<AiScheduledTask>();
+    public DbSet<AiEventTriggeredTask> AiEventTriggeredTasks => Set<AiEventTriggeredTask>();
+    public DbSet<AiEventTriggeredTaskRun> AiEventTriggeredTaskRuns => Set<AiEventTriggeredTaskRun>();
     public DbSet<UserNotificationSettings> UserNotificationSettings => Set<UserNotificationSettings>();
     public DbSet<PendingTelegramLink> PendingTelegramLinks => Set<PendingTelegramLink>();
     public DbSet<TelegramAccount> TelegramAccounts => Set<TelegramAccount>();
@@ -430,6 +432,42 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         aiScheduledTask.Property(x => x.CreatedAtUtc).IsRequired();
         aiScheduledTask.Property(x => x.UpdatedAtUtc).IsRequired();
         aiScheduledTask.HasIndex(x => new { x.OwnerUserId, x.Enabled, x.NextRunAtUtc });
+
+
+
+        var aiEventTask = modelBuilder.Entity<AiEventTriggeredTask>();
+        aiEventTask.ToTable("AiEventTriggeredTasks");
+        aiEventTask.HasKey(x => x.AiEventTriggeredTaskId);
+        aiEventTask.Property(x => x.AiEventTriggeredTaskId).HasMaxLength(AiEventTriggeredTask.IdMaxLength);
+        aiEventTask.Property(x => x.OwnerUserId).HasMaxLength(AiEventTriggeredTask.OwnerUserIdMaxLength).IsRequired();
+        aiEventTask.Property(x => x.Name).HasMaxLength(AiEventTriggeredTask.NameMaxLength).IsRequired();
+        aiEventTask.Property(x => x.Prompt).HasMaxLength(AiEventTriggeredTask.PromptMaxLength).IsRequired();
+        aiEventTask.Property(x => x.TriggerType).HasConversion<string>().HasMaxLength(32).IsRequired();
+        aiEventTask.Property(x => x.EndpointTargetStatesJson).HasMaxLength(AiEventTriggeredTask.TargetStatesJsonMaxLength).IsRequired();
+        aiEventTask.Property(x => x.AgentTargetStatesJson).HasMaxLength(AiEventTriggeredTask.TargetStatesJsonMaxLength).IsRequired();
+        aiEventTask.Property(x => x.ScopeMode).HasConversion<string>().HasMaxLength(64).IsRequired();
+        aiEventTask.Property(x => x.ScopeSelectionJson).HasMaxLength(AiEventTriggeredTask.ScopeSelectionJsonMaxLength).IsRequired();
+        aiEventTask.Property(x => x.RateLimitUnit).HasConversion<string>().HasMaxLength(16).IsRequired();
+        aiEventTask.Property(x => x.DeliveryTarget).HasConversion<string>().HasMaxLength(32).IsRequired();
+        aiEventTask.Property(x => x.LastStatus).HasConversion<string>().HasMaxLength(16).IsRequired();
+        aiEventTask.Property(x => x.LastError).HasMaxLength(AiEventTriggeredTask.LastErrorMaxLength);
+        aiEventTask.Property(x => x.LastResponsePreview).HasMaxLength(AiEventTriggeredTask.LastResponsePreviewMaxLength);
+        aiEventTask.Property(x => x.CreatedAtUtc).IsRequired();
+        aiEventTask.Property(x => x.UpdatedAtUtc).IsRequired();
+        aiEventTask.HasIndex(x => new { x.OwnerUserId, x.Enabled, x.TriggerType });
+
+        var aiEventRun = modelBuilder.Entity<AiEventTriggeredTaskRun>();
+        aiEventRun.ToTable("AiEventTriggeredTaskRuns");
+        aiEventRun.HasKey(x => x.AiEventTriggeredTaskRunId);
+        aiEventRun.Property(x => x.AiEventTriggeredTaskRunId).HasMaxLength(AiEventTriggeredTaskRun.IdMaxLength);
+        aiEventRun.Property(x => x.TaskId).HasMaxLength(AiEventTriggeredTaskRun.TaskIdMaxLength).IsRequired();
+        aiEventRun.Property(x => x.TriggerType).HasConversion<string>().HasMaxLength(32).IsRequired();
+        aiEventRun.Property(x => x.TriggerContextJson).HasMaxLength(AiEventTriggeredTaskRun.TriggerContextJsonMaxLength).IsRequired();
+        aiEventRun.Property(x => x.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
+        aiEventRun.Property(x => x.CreatedAtUtc).IsRequired();
+        aiEventRun.Property(x => x.Error).HasMaxLength(AiEventTriggeredTaskRun.ErrorMaxLength);
+        aiEventRun.HasIndex(x => new { x.Status, x.CreatedAtUtc });
+        aiEventRun.HasIndex(x => x.TaskId);
 
         var userNotificationSettings = modelBuilder.Entity<UserNotificationSettings>();
         userNotificationSettings.ToTable("UserNotificationSettings");

@@ -16,6 +16,7 @@ using PingMonitor.Web.Services.AiProviders;
 using PingMonitor.Web.Services.AiChat;
 using PingMonitor.Web.Services.AiTools;
 using PingMonitor.Web.Services.AiScheduledTasks;
+using PingMonitor.Web.Services.AiEventTasks;
 using PingMonitor.Web.Services.Backups;
 using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.Endpoints;
@@ -228,6 +229,7 @@ builder.Services.AddScoped<IAiTool, DeleteUserMemoryAiTool>();
 builder.Services.AddScoped<IAiToolRegistry, AiToolRegistry>();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
 builder.Services.AddScoped<IAiScheduledTaskService, AiScheduledTaskService>();
+builder.Services.AddScoped<IAiEventTriggeredTaskService, AiEventTriggeredTaskService>();
 builder.Services.AddSingleton<IAiMarkdownRenderer, AiMarkdownRenderer>();
 builder.Services.AddSingleton<ITelegramAiConversationStore, TelegramAiConversationStore>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
@@ -299,6 +301,7 @@ builder.Services.AddHostedService<BufferedResultFlushBackgroundService>();
 builder.Services.AddHostedService<AssignmentProcessingBackgroundService>();
 builder.Services.AddHostedService<TelegramPollingBackgroundService>();
 builder.Services.AddHostedService<AiScheduledTaskWorker>();
+builder.Services.AddHostedService<AiEventTriggeredTaskWorker>();
 
 var app = builder.Build();
 

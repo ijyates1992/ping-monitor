@@ -4,6 +4,7 @@ using PingMonitor.Web.Models;
 using PingMonitor.Web.Services.EventLogs;
 using PingMonitor.Web.Services.State;
 using PingMonitor.Web.Services.StartupGate;
+using PingMonitor.Web.Services.AiEventTasks;
 using System.Text.Json;
 
 namespace PingMonitor.Web.Services;
@@ -73,6 +74,7 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PingMonitorDbContext>();
         var eventLogService = scope.ServiceProvider.GetRequiredService<IEventLogService>();
+        var aiEventTasks = scope.ServiceProvider.GetRequiredService<IAiEventTriggeredTaskService>();
         var now = DateTimeOffset.UtcNow;
 
         var agents = await dbContext.Agents
@@ -119,6 +121,10 @@ internal sealed class AgentStatusTransitionBackgroundService : BackgroundService
                         ? $"Agent \"{agent.Name ?? agent.InstanceId}\" became stale."
                         : $"Agent \"{agent.Name ?? agent.InstanceId}\" became offline."
                 },
+                cancellationToken);
+
+            await aiEventTasks.RecordAgentStateChangedAsync(
+                new AgentStateChangedAiEvent(agent.AgentId, agent.Name ?? agent.InstanceId, agent.InstanceId, previousStatus, nextStatus, now),
                 cancellationToken);
 
             if (nextStatus == AgentHealthStatus.Offline)
