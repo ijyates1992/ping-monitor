@@ -129,6 +129,8 @@ internal sealed class EndpointMetricsSummaryAiTool : IAiTool
     private const int MaxTailSamples = 120;
     private const int MaxTransitions = 20;
     private const int MaxFailureClusters = 20;
+    private const int MaxRttStatisticSamples = 1000;
+    private const int MaxFailureClusterSamples = 1000;
     private readonly PingMonitorDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
 
@@ -175,12 +177,18 @@ internal sealed class EndpointMetricsSummaryAiTool : IAiTool
         var unknown = SumIntervals(intervals, EndpointStateKind.Unknown, fromUtc, toUtc);
         var suppressed = SumIntervals(intervals, EndpointStateKind.Suppressed, fromUtc, toUtc);
         var transitions = await _dbContext.StateTransitions.AsNoTracking().Where(x => x.AssignmentId == assignment.AssignmentId && x.TransitionAtUtc >= fromUtc && x.TransitionAtUtc <= toUtc).OrderByDescending(x => x.TransitionAtUtc).Take(call.Limits.MaxEndpointTransitionItems).ToArrayAsync(cancellationToken);
-        var checks = await _dbContext.CheckResults.AsNoTracking().Where(x => x.AssignmentId == assignment.AssignmentId && x.CheckedAtUtc >= fromUtc && x.CheckedAtUtc <= toUtc).OrderBy(x => x.CheckedAtUtc).Select(x => new { x.CheckedAtUtc, x.Success, x.RoundTripMs, x.ErrorCode, x.ErrorMessage }).ToArrayAsync(cancellationToken);
-        var rtts = checks.Where(x => x.Success && x.RoundTripMs.HasValue).Select(x => (double)x.RoundTripMs!.Value).OrderBy(x => x).ToArray();
-        var jitterDeltas = checks.Where(x => x.Success && x.RoundTripMs.HasValue).OrderBy(x => x.CheckedAtUtc).Select(x => (double)x.RoundTripMs!.Value).PairwiseDeltas().ToArray();
-        var successful = checks.Count(x => x.Success); var failed = checks.Length - successful; var expected = assignment.PingIntervalSeconds > 0 ? (int)Math.Ceiling(duration.TotalSeconds / assignment.PingIntervalSeconds) : (int?)null;
-        var failures = BuildFailureClusters(checks.Where(x => !x.Success).Select(x => x.CheckedAtUtc).ToArray());
-        var tail = checks.TakeLast(call.Limits.MaxEndpointMetricsSampleTailPoints).Select(x => new { checkedAtUtc = x.CheckedAtUtc, success = x.Success, rttMs = x.RoundTripMs, errorCode = Truncate(x.ErrorCode, 40), errorMessage = Truncate(x.ErrorMessage, 120) }).ToArray();
+        var checkScope = _dbContext.CheckResults.AsNoTracking().Where(x => x.AssignmentId == assignment.AssignmentId && x.CheckedAtUtc >= fromUtc && x.CheckedAtUtc <= toUtc);
+        var checkCounts = await checkScope.GroupBy(_ => 1).Select(g => new { Received = g.Count(), Successful = g.Count(x => x.Success), Failed = g.Count(x => !x.Success) }).SingleOrDefaultAsync(cancellationToken) ?? new { Received = 0, Successful = 0, Failed = 0 };
+        var rttAggregate = await checkScope.Where(x => x.Success && x.RoundTripMs.HasValue).GroupBy(_ => 1).Select(g => new { SampleCount = g.Count(), Min = g.Min(x => x.RoundTripMs), Avg = g.Average(x => x.RoundTripMs), Max = g.Max(x => x.RoundTripMs) }).SingleOrDefaultAsync(cancellationToken);
+        var rttSamples = await checkScope.Where(x => x.Success && x.RoundTripMs.HasValue).OrderByDescending(x => x.CheckedAtUtc).Take(MaxRttStatisticSamples).Select(x => new { x.CheckedAtUtc, x.RoundTripMs }).ToArrayAsync(cancellationToken);
+        var rtts = rttSamples.Select(x => (double)x.RoundTripMs!.Value).OrderBy(x => x).ToArray();
+        var jitterDeltas = rttSamples.OrderBy(x => x.CheckedAtUtc).Select(x => (double)x.RoundTripMs!.Value).PairwiseDeltas().ToArray();
+        var successful = checkCounts.Successful; var failed = checkCounts.Failed; var expected = assignment.PingIntervalSeconds > 0 ? (int)Math.Ceiling(duration.TotalSeconds / assignment.PingIntervalSeconds) : (int?)null;
+        var failureTimes = await checkScope.Where(x => !x.Success).OrderByDescending(x => x.CheckedAtUtc).Take(MaxFailureClusterSamples).Select(x => x.CheckedAtUtc).ToArrayAsync(cancellationToken);
+        var failures = BuildFailureClusters(failureTimes);
+        var tail = (await checkScope.OrderByDescending(x => x.CheckedAtUtc).Take(call.Limits.MaxEndpointMetricsSampleTailPoints).Select(x => new { x.CheckedAtUtc, x.Success, x.RoundTripMs, x.ErrorCode, x.ErrorMessage }).ToArrayAsync(cancellationToken))
+            .OrderBy(x => x.CheckedAtUtc)
+            .Select(x => new { checkedAtUtc = x.CheckedAtUtc, success = x.Success, rttMs = x.RoundTripMs, errorCode = Truncate(x.ErrorCode, 40), errorMessage = Truncate(x.ErrorMessage, 120) }).ToArray();
         var denominator = up + down;
         var result = new
         {
@@ -192,13 +200,13 @@ internal sealed class EndpointMetricsSummaryAiTool : IAiTool
             currentState = new { state = (state?.CurrentState ?? EndpointStateKind.Unknown).ToString().ToUpperInvariant(), lastChangedUtc = state?.LastStateChangeUtc, lastCheckUtc = state?.LastCheckUtc, unknownReason = state is null ? "No current endpoint state row is available." : null },
             window = new { requestedWindow, appliedWindow, clamped, fromUtc, toUtc },
             uptime = new { uptimeSeconds = up, downtimeSeconds = down, unknownSeconds = unknown, suppressedSeconds = suppressed, uptimePercentExcludingUnknownSuppressed = denominator > 0 ? Math.Round(up * 100d / denominator, 2) : (double?)null, downTransitions = transitions.Count(x => x.NewState == EndpointStateKind.Down), recoveryTransitions = transitions.Count(x => x.PreviousState == EndpointStateKind.Down && x.NewState != EndpointStateKind.Down), intervalDataComplete = intervals.Length > 0 },
-            checks = new { expectedSamples = expected, receivedSamples = checks.Length, successfulSamples = successful, failedSamples = failed, missingSamplesEstimate = expected.HasValue ? Math.Max(0, expected.Value - checks.Length) : (int?)null, packetLossPercentOfReceived = checks.Length > 0 ? Math.Round(failed * 100d / checks.Length, 2) : (double?)null },
-            rtt = rtts.Length > 0 ? new { available = true, sampleCount = rtts.Length, minMs = (double?)Round(rtts.First()), avgMs = (double?)Round(rtts.Average()), medianMs = (double?)Round(Percentile(rtts, 50)), p95Ms = (double?)Round(Percentile(rtts, 95)), maxMs = (double?)Round(rtts.Last()), reason = (string?)null } : new { available = false, sampleCount = 0, minMs = (double?)null, avgMs = (double?)null, medianMs = (double?)null, p95Ms = (double?)null, maxMs = (double?)null, reason = (string?)"No successful RTT samples in the selected window." },
+            checks = new { expectedSamples = expected, receivedSamples = checkCounts.Received, successfulSamples = successful, failedSamples = failed, missingSamplesEstimate = expected.HasValue ? Math.Max(0, expected.Value - checkCounts.Received) : (int?)null, packetLossPercentOfReceived = checkCounts.Received > 0 ? Math.Round(failed * 100d / checkCounts.Received, 2) : (double?)null },
+            rtt = rttAggregate is not null ? new { available = true, sampleCount = rttAggregate.SampleCount, minMs = (double?)Round((double)rttAggregate.Min!.Value), avgMs = (double?)Round((double)rttAggregate.Avg!.Value), medianMs = rtts.Length > 0 ? (double?)Round(Percentile(rtts, 50)) : null, p95Ms = rtts.Length > 0 ? (double?)Round(Percentile(rtts, 95)) : null, maxMs = (double?)Round((double)rttAggregate.Max!.Value), reason = rttAggregate.SampleCount > MaxRttStatisticSamples ? $"Median, p95, and jitter are based on the latest {MaxRttStatisticSamples} successful RTT samples; min, avg, max, and sampleCount cover the full selected window." : (string?)null } : new { available = false, sampleCount = 0, minMs = (double?)null, avgMs = (double?)null, medianMs = (double?)null, p95Ms = (double?)null, maxMs = (double?)null, reason = (string?)"No successful RTT samples in the selected window." },
             jitter = jitterDeltas.Length > 0 ? new { available = true, sampleCount = jitterDeltas.Length, avgDeltaMs = (double?)Round(jitterDeltas.Average()), p95DeltaMs = (double?)Round(Percentile(jitterDeltas.OrderBy(x => x).ToArray(), 95)), maxDeltaMs = (double?)Round(jitterDeltas.Max()), method = "absolute difference between consecutive successful RTT samples", reason = (string?)null } : new { available = false, sampleCount = jitterDeltas.Length, avgDeltaMs = (double?)null, p95DeltaMs = (double?)null, maxDeltaMs = (double?)null, method = "absolute difference between consecutive successful RTT samples", reason = (string?)"Not enough successful RTT samples in the selected window." },
             recentTransitions = transitions.Select(x => new { transitionAtUtc = x.TransitionAtUtc, previousState = x.PreviousState.ToString().ToUpperInvariant(), newState = x.NewState.ToString().ToUpperInvariant(), reasonCode = Truncate(x.ReasonCode, 80) }).ToArray(),
             recentFailureClusters = failures.Take(call.Limits.MaxEndpointFailureClusters).Select(x => new { fromUtc = x.Start, toUtc = x.End, failedSamples = x.Count }).ToArray(),
             recentSampleTail = tail,
-            limitations = new[] { "This result is bounded.", "UNKNOWN is not DOWN.", "SUPPRESSED is not downtime.", "Recent sample tail may not represent the whole window.", "Full unrestricted raw CheckResults export is not available." }
+            limitations = new[] { "This result is bounded.", "UNKNOWN is not DOWN.", "SUPPRESSED is not downtime.", "Recent sample tail may not represent the whole window.", "Median, p95, jitter, and failure clusters are bounded to protect live MySQL request latency on large result sets.", "Full unrestricted raw CheckResults export is not available." }
         };
         return JsonResult(result, call.Limits.MaxSingleToolResultCharacters);
     }
