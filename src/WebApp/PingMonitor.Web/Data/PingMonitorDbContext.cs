@@ -351,6 +351,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         aiAssistantSettings.Property(x => x.Temperature).IsRequired();
         aiAssistantSettings.Property(x => x.ToolCallingEnabled).IsRequired();
         aiAssistantSettings.Property(x => x.GlobalSystemPrompt).HasColumnType("longtext").IsRequired();
+        aiAssistantSettings.Property(x => x.ToolExecutionLimitsJson).HasColumnType("longtext").IsRequired();
         aiAssistantSettings.Property(x => x.UpdatedAtUtc).IsRequired();
         aiAssistantSettings.Property(x => x.UpdatedByUserId).HasMaxLength(255);
 

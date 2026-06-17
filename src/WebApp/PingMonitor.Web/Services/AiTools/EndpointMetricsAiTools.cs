@@ -54,11 +54,11 @@ internal sealed class SearchEndpointsAiTool : IAiTool
         var candidates = await endpoints
             .Where(x => x.Name.ToLower().Contains(lower) || x.Target.ToLower().Contains(lower))
             .Select(x => new { x.EndpointId, x.Name, x.Target, x.Enabled })
-            .Take(50)
+            .Take(call.Limits.MaxEndpointSearchResults * 5)
             .ToArrayAsync(cancellationToken);
 
         var ranked = candidates.Select(x => new { Endpoint = x, Score = Score(x.Name, x.Target, query) })
-            .OrderByDescending(x => x.Score).ThenBy(x => x.Endpoint.Name).Take(MaxMatches).ToArray();
+            .OrderByDescending(x => x.Score).ThenBy(x => x.Endpoint.Name).Take(call.Limits.MaxEndpointSearchResults).ToArray();
         var matches = ranked.Select(x => x.Endpoint).ToArray();
         var endpointIds = matches.Select(x => x.EndpointId).ToArray();
         var assignmentQuery = ApplyEndpointFilter(_dbContext.MonitorAssignments.AsNoTracking(), endpointIds);
@@ -77,7 +77,7 @@ internal sealed class SearchEndpointsAiTool : IAiTool
             ambiguous = matches.Length > 1 && !(ranked.Length > 0 && ranked[0].Score >= 100 && (ranked.Length == 1 || ranked[1].Score < 100)),
             message = matches.Length == 0 ? "No visible endpoint matched the query." : null
         };
-        return JsonResult(result, Definition.MaxResultCharacters);
+        return JsonResult(result, call.Limits.MaxSingleToolResultCharacters);
     }
 
     private static IQueryable<Models.Endpoint> ApplyEndpointFilter(IQueryable<Models.Endpoint> endpoints, IReadOnlyCollection<string> endpointIds)
@@ -120,7 +120,7 @@ internal sealed class SearchEndpointsAiTool : IAiTool
 
     private static int Score(string name, string target, string query) => string.Equals(name, query, StringComparison.OrdinalIgnoreCase) || string.Equals(target, query, StringComparison.OrdinalIgnoreCase) ? 100 : (name.StartsWith(query, StringComparison.OrdinalIgnoreCase) || target.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 80 : 50);
     private static bool TryReadObject(string json, out JsonElement root, out AiToolExecutionResult? error) { try { using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json); if (doc.RootElement.ValueKind != JsonValueKind.Object) { root = default; error = Error("invalid_arguments", "Arguments must be a JSON object."); return false; } root = doc.RootElement.Clone(); error = null; return true; } catch (JsonException) { root = default; error = Error("invalid_arguments", "Arguments must be valid JSON."); return false; } }
-    private static AiToolExecutionResult JsonResult(object result, int max) { var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web)); return new AiToolExecutionResult { Succeeded = true, ContentJson = json.Length <= max ? json : json[..max] }; }
+    private static AiToolExecutionResult JsonResult(object result, int max) { var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web)); return new AiToolExecutionResult { Succeeded = true, ContentJson = json.Length <= max ? json : JsonSerializer.Serialize(new { truncated = true, reason = "Result exceeded configured AI tool limit.", originalCharacterCount = json.Length, maxCharacters = max }, new JsonSerializerOptions(JsonSerializerDefaults.Web)) }; }
     private static AiToolExecutionResult Error(string code, string message) => new() { Succeeded = false, ErrorMessage = message, ContentJson = JsonSerializer.Serialize(new { error = code, message }) };
 }
 
@@ -129,6 +129,8 @@ internal sealed class EndpointMetricsSummaryAiTool : IAiTool
     private const int MaxTailSamples = 120;
     private const int MaxTransitions = 20;
     private const int MaxFailureClusters = 20;
+    private const int MaxRttStatisticSamples = 1000;
+    private const int MaxFailureClusterSamples = 1000;
     private readonly PingMonitorDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
 
@@ -152,7 +154,7 @@ internal sealed class EndpointMetricsSummaryAiTool : IAiTool
     {
         if (!TryReadObject(call.ArgumentsJson, out var root, out var error)) return error!;
         var endpointId = root.TryGetProperty("endpointId", out var id) && id.ValueKind == JsonValueKind.String ? (id.GetString() ?? string.Empty).Trim() : string.Empty;
-        var requestedWindow = root.TryGetProperty("window", out var w) && w.ValueKind == JsonValueKind.String ? (w.GetString() ?? "24h").Trim() : "24h";
+        var requestedWindow = root.TryGetProperty("window", out var w) && w.ValueKind == JsonValueKind.String ? (w.GetString() ?? call.Limits.DefaultEndpointMetricsWindow).Trim() : call.Limits.DefaultEndpointMetricsWindow;
         foreach (var prop in root.EnumerateObject()) if (prop.Name is not ("endpointId" or "window")) return Error("invalid_arguments", "Unsupported argument.");
         if (string.IsNullOrWhiteSpace(endpointId)) return Error("invalid_arguments", "endpointId is required.");
 
@@ -174,13 +176,19 @@ internal sealed class EndpointMetricsSummaryAiTool : IAiTool
         var down = SumIntervals(intervals, EndpointStateKind.Down, fromUtc, toUtc);
         var unknown = SumIntervals(intervals, EndpointStateKind.Unknown, fromUtc, toUtc);
         var suppressed = SumIntervals(intervals, EndpointStateKind.Suppressed, fromUtc, toUtc);
-        var transitions = await _dbContext.StateTransitions.AsNoTracking().Where(x => x.AssignmentId == assignment.AssignmentId && x.TransitionAtUtc >= fromUtc && x.TransitionAtUtc <= toUtc).OrderByDescending(x => x.TransitionAtUtc).Take(MaxTransitions).ToArrayAsync(cancellationToken);
-        var checks = await _dbContext.CheckResults.AsNoTracking().Where(x => x.AssignmentId == assignment.AssignmentId && x.CheckedAtUtc >= fromUtc && x.CheckedAtUtc <= toUtc).OrderBy(x => x.CheckedAtUtc).Select(x => new { x.CheckedAtUtc, x.Success, x.RoundTripMs, x.ErrorCode, x.ErrorMessage }).ToArrayAsync(cancellationToken);
-        var rtts = checks.Where(x => x.Success && x.RoundTripMs.HasValue).Select(x => (double)x.RoundTripMs!.Value).OrderBy(x => x).ToArray();
-        var jitterDeltas = checks.Where(x => x.Success && x.RoundTripMs.HasValue).OrderBy(x => x.CheckedAtUtc).Select(x => (double)x.RoundTripMs!.Value).PairwiseDeltas().ToArray();
-        var successful = checks.Count(x => x.Success); var failed = checks.Length - successful; var expected = assignment.PingIntervalSeconds > 0 ? (int)Math.Ceiling(duration.TotalSeconds / assignment.PingIntervalSeconds) : (int?)null;
-        var failures = BuildFailureClusters(checks.Where(x => !x.Success).Select(x => x.CheckedAtUtc).ToArray());
-        var tail = checks.TakeLast(MaxTailSamples).Select(x => new { checkedAtUtc = x.CheckedAtUtc, success = x.Success, rttMs = x.RoundTripMs, errorCode = Truncate(x.ErrorCode, 40), errorMessage = Truncate(x.ErrorMessage, 120) }).ToArray();
+        var transitions = await _dbContext.StateTransitions.AsNoTracking().Where(x => x.AssignmentId == assignment.AssignmentId && x.TransitionAtUtc >= fromUtc && x.TransitionAtUtc <= toUtc).OrderByDescending(x => x.TransitionAtUtc).Take(call.Limits.MaxEndpointTransitionItems).ToArrayAsync(cancellationToken);
+        var checkScope = _dbContext.CheckResults.AsNoTracking().Where(x => x.AssignmentId == assignment.AssignmentId && x.CheckedAtUtc >= fromUtc && x.CheckedAtUtc <= toUtc);
+        var checkCounts = await checkScope.GroupBy(_ => 1).Select(g => new { Received = g.Count(), Successful = g.Count(x => x.Success), Failed = g.Count(x => !x.Success) }).SingleOrDefaultAsync(cancellationToken) ?? new { Received = 0, Successful = 0, Failed = 0 };
+        var rttAggregate = await checkScope.Where(x => x.Success && x.RoundTripMs.HasValue).GroupBy(_ => 1).Select(g => new { SampleCount = g.Count(), Min = g.Min(x => x.RoundTripMs), Avg = g.Average(x => x.RoundTripMs), Max = g.Max(x => x.RoundTripMs) }).SingleOrDefaultAsync(cancellationToken);
+        var rttSamples = await checkScope.Where(x => x.Success && x.RoundTripMs.HasValue).OrderByDescending(x => x.CheckedAtUtc).Take(MaxRttStatisticSamples).Select(x => new { x.CheckedAtUtc, x.RoundTripMs }).ToArrayAsync(cancellationToken);
+        var rtts = rttSamples.Select(x => (double)x.RoundTripMs!.Value).OrderBy(x => x).ToArray();
+        var jitterDeltas = rttSamples.OrderBy(x => x.CheckedAtUtc).Select(x => (double)x.RoundTripMs!.Value).PairwiseDeltas().ToArray();
+        var successful = checkCounts.Successful; var failed = checkCounts.Failed; var expected = assignment.PingIntervalSeconds > 0 ? (int)Math.Ceiling(duration.TotalSeconds / assignment.PingIntervalSeconds) : (int?)null;
+        var failureTimes = await checkScope.Where(x => !x.Success).OrderByDescending(x => x.CheckedAtUtc).Take(MaxFailureClusterSamples).Select(x => x.CheckedAtUtc).ToArrayAsync(cancellationToken);
+        var failures = BuildFailureClusters(failureTimes);
+        var tail = (await checkScope.OrderByDescending(x => x.CheckedAtUtc).Take(call.Limits.MaxEndpointMetricsSampleTailPoints).Select(x => new { x.CheckedAtUtc, x.Success, x.RoundTripMs, x.ErrorCode, x.ErrorMessage }).ToArrayAsync(cancellationToken))
+            .OrderBy(x => x.CheckedAtUtc)
+            .Select(x => new { checkedAtUtc = x.CheckedAtUtc, success = x.Success, rttMs = x.RoundTripMs, errorCode = Truncate(x.ErrorCode, 40), errorMessage = Truncate(x.ErrorMessage, 120) }).ToArray();
         var denominator = up + down;
         var result = new
         {
@@ -192,15 +200,15 @@ internal sealed class EndpointMetricsSummaryAiTool : IAiTool
             currentState = new { state = (state?.CurrentState ?? EndpointStateKind.Unknown).ToString().ToUpperInvariant(), lastChangedUtc = state?.LastStateChangeUtc, lastCheckUtc = state?.LastCheckUtc, unknownReason = state is null ? "No current endpoint state row is available." : null },
             window = new { requestedWindow, appliedWindow, clamped, fromUtc, toUtc },
             uptime = new { uptimeSeconds = up, downtimeSeconds = down, unknownSeconds = unknown, suppressedSeconds = suppressed, uptimePercentExcludingUnknownSuppressed = denominator > 0 ? Math.Round(up * 100d / denominator, 2) : (double?)null, downTransitions = transitions.Count(x => x.NewState == EndpointStateKind.Down), recoveryTransitions = transitions.Count(x => x.PreviousState == EndpointStateKind.Down && x.NewState != EndpointStateKind.Down), intervalDataComplete = intervals.Length > 0 },
-            checks = new { expectedSamples = expected, receivedSamples = checks.Length, successfulSamples = successful, failedSamples = failed, missingSamplesEstimate = expected.HasValue ? Math.Max(0, expected.Value - checks.Length) : (int?)null, packetLossPercentOfReceived = checks.Length > 0 ? Math.Round(failed * 100d / checks.Length, 2) : (double?)null },
-            rtt = rtts.Length > 0 ? new { available = true, sampleCount = rtts.Length, minMs = (double?)Round(rtts.First()), avgMs = (double?)Round(rtts.Average()), medianMs = (double?)Round(Percentile(rtts, 50)), p95Ms = (double?)Round(Percentile(rtts, 95)), maxMs = (double?)Round(rtts.Last()), reason = (string?)null } : new { available = false, sampleCount = 0, minMs = (double?)null, avgMs = (double?)null, medianMs = (double?)null, p95Ms = (double?)null, maxMs = (double?)null, reason = (string?)"No successful RTT samples in the selected window." },
+            checks = new { expectedSamples = expected, receivedSamples = checkCounts.Received, successfulSamples = successful, failedSamples = failed, missingSamplesEstimate = expected.HasValue ? Math.Max(0, expected.Value - checkCounts.Received) : (int?)null, packetLossPercentOfReceived = checkCounts.Received > 0 ? Math.Round(failed * 100d / checkCounts.Received, 2) : (double?)null },
+            rtt = rttAggregate is not null ? new { available = true, sampleCount = rttAggregate.SampleCount, minMs = (double?)Round((double)rttAggregate.Min!.Value), avgMs = (double?)Round((double)rttAggregate.Avg!.Value), medianMs = rtts.Length > 0 ? (double?)Round(Percentile(rtts, 50)) : null, p95Ms = rtts.Length > 0 ? (double?)Round(Percentile(rtts, 95)) : null, maxMs = (double?)Round((double)rttAggregate.Max!.Value), reason = rttAggregate.SampleCount > MaxRttStatisticSamples ? $"Median, p95, and jitter are based on the latest {MaxRttStatisticSamples} successful RTT samples; min, avg, max, and sampleCount cover the full selected window." : (string?)null } : new { available = false, sampleCount = 0, minMs = (double?)null, avgMs = (double?)null, medianMs = (double?)null, p95Ms = (double?)null, maxMs = (double?)null, reason = (string?)"No successful RTT samples in the selected window." },
             jitter = jitterDeltas.Length > 0 ? new { available = true, sampleCount = jitterDeltas.Length, avgDeltaMs = (double?)Round(jitterDeltas.Average()), p95DeltaMs = (double?)Round(Percentile(jitterDeltas.OrderBy(x => x).ToArray(), 95)), maxDeltaMs = (double?)Round(jitterDeltas.Max()), method = "absolute difference between consecutive successful RTT samples", reason = (string?)null } : new { available = false, sampleCount = jitterDeltas.Length, avgDeltaMs = (double?)null, p95DeltaMs = (double?)null, maxDeltaMs = (double?)null, method = "absolute difference between consecutive successful RTT samples", reason = (string?)"Not enough successful RTT samples in the selected window." },
             recentTransitions = transitions.Select(x => new { transitionAtUtc = x.TransitionAtUtc, previousState = x.PreviousState.ToString().ToUpperInvariant(), newState = x.NewState.ToString().ToUpperInvariant(), reasonCode = Truncate(x.ReasonCode, 80) }).ToArray(),
-            recentFailureClusters = failures.Take(MaxFailureClusters).Select(x => new { fromUtc = x.Start, toUtc = x.End, failedSamples = x.Count }).ToArray(),
+            recentFailureClusters = failures.Take(call.Limits.MaxEndpointFailureClusters).Select(x => new { fromUtc = x.Start, toUtc = x.End, failedSamples = x.Count }).ToArray(),
             recentSampleTail = tail,
-            limitations = new[] { "This result is bounded.", "UNKNOWN is not DOWN.", "SUPPRESSED is not downtime.", "Recent sample tail may not represent the whole window.", "Full unrestricted raw CheckResults export is not available." }
+            limitations = new[] { "This result is bounded.", "UNKNOWN is not DOWN.", "SUPPRESSED is not downtime.", "Recent sample tail may not represent the whole window.", "Median, p95, jitter, and failure clusters are bounded to protect live MySQL request latency on large result sets.", "Full unrestricted raw CheckResults export is not available." }
         };
-        return JsonResult(result, Definition.MaxResultCharacters);
+        return JsonResult(result, call.Limits.MaxSingleToolResultCharacters);
     }
 
     private static (string Applied, TimeSpan Duration, bool Clamped) NormalizeWindow(string requested) => requested switch { "1h" => ("1h", TimeSpan.FromHours(1), false), "6h" => ("6h", TimeSpan.FromHours(6), false), "24h" or "" => ("24h", TimeSpan.FromHours(24), requested is not "24h" and not ""), "7d" => ("7d", TimeSpan.FromDays(7), false), _ => ("24h", TimeSpan.FromHours(24), true) };
@@ -210,7 +218,7 @@ internal sealed class EndpointMetricsSummaryAiTool : IAiTool
     private static string? Truncate(string? value, int max) => string.IsNullOrEmpty(value) ? value : value.Length <= max ? value : value[..max];
     private static List<(DateTimeOffset Start, DateTimeOffset End, int Count)> BuildFailureClusters(DateTimeOffset[] failedAt) { var clusters = new List<(DateTimeOffset, DateTimeOffset, int)>(); foreach (var t in failedAt.OrderBy(x => x)) { if (clusters.Count == 0 || (t - clusters[^1].Item2).TotalMinutes > 5) clusters.Add((t, t, 1)); else { var c = clusters[^1]; clusters[^1] = (c.Item1, t, c.Item3 + 1); } } return clusters.OrderByDescending(x => x.Item2).ToList(); }
     private static bool TryReadObject(string json, out JsonElement root, out AiToolExecutionResult? error) { try { using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json); if (doc.RootElement.ValueKind != JsonValueKind.Object) { root = default; error = Error("invalid_arguments", "Arguments must be a JSON object."); return false; } root = doc.RootElement.Clone(); error = null; return true; } catch (JsonException) { root = default; error = Error("invalid_arguments", "Arguments must be valid JSON."); return false; } }
-    private static AiToolExecutionResult JsonResult(object result, int max) { var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web)); return new AiToolExecutionResult { Succeeded = true, ContentJson = json.Length <= max ? json : json[..max] }; }
+    private static AiToolExecutionResult JsonResult(object result, int max) { var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web)); return new AiToolExecutionResult { Succeeded = true, ContentJson = json.Length <= max ? json : JsonSerializer.Serialize(new { truncated = true, reason = "Result exceeded configured AI tool limit.", originalCharacterCount = json.Length, maxCharacters = max }, new JsonSerializerOptions(JsonSerializerDefaults.Web)) }; }
     private static AiToolExecutionResult Error(string code, string message) => new() { Succeeded = false, ErrorMessage = message, ContentJson = JsonSerializer.Serialize(new { error = code, message }) };
 }
 

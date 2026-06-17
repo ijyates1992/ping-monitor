@@ -5,6 +5,7 @@ using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.AiProviders;
+using PingMonitor.Web.Services.AiTools;
 using PingMonitor.Web.ViewModels.Admin;
 using Xunit;
 
@@ -45,7 +46,17 @@ public sealed class AiAssistantSettingsTests
             RequestTimeoutSeconds = 600,
             MaxOutputTokens = 2048,
             Temperature = 0.2,
-            ToolCallingEnabled = true
+            ToolCallingEnabled = true,
+            MaxToolRounds = 4,
+            MaxToolCallsPerRound = 6,
+            MaxTotalToolResultCharacters = 30000,
+            MaxSingleToolResultCharacters = 15000,
+            MaxEndpointSearchResults = 12,
+            MaxEndpointMetricsSampleTailPoints = 200,
+            MaxEndpointTransitionItems = 25,
+            MaxEndpointFailureClusters = 11,
+            DefaultEndpointMetricsWindow = "6h",
+            MaximumEndpointMetricsWindow = "7d"
         }, CancellationToken.None));
 
         var model = Assert.IsType<AiAssistantSettingsPageViewModel>(result.Model);
@@ -53,6 +64,13 @@ public sealed class AiAssistantSettingsTests
         Assert.Null(model.ApiKey);
         Assert.Equal("secret", service.LastCommand?.ApiKey);
         Assert.Equal(600, service.LastCommand?.RequestTimeoutSeconds);
+        Assert.Equal(4, service.LastCommand?.ToolLimits.MaxToolRounds);
+        Assert.Equal(6, service.LastCommand?.ToolLimits.MaxToolCallsPerRound);
+        Assert.Equal(30000, service.LastCommand?.ToolLimits.MaxTotalToolResultCharacters);
+        Assert.Equal(15000, service.LastCommand?.ToolLimits.MaxSingleToolResultCharacters);
+        Assert.Equal(12, service.LastCommand?.ToolLimits.MaxEndpointSearchResults);
+        Assert.Equal(200, service.LastCommand?.ToolLimits.MaxEndpointMetricsSampleTailPoints);
+        Assert.Equal("6h", service.LastCommand?.ToolLimits.DefaultEndpointMetricsWindow);
     }
 
     [Theory]
@@ -167,6 +185,9 @@ public sealed class AiAssistantSettingsTests
         Assert.Equal(2048, settings.MaxOutputTokens);
         Assert.Equal(0.2, settings.Temperature);
         Assert.True(settings.ToolCallingEnabled);
+        Assert.Equal(3, new AiToolExecutionLimits().MaxToolRounds);
+        Assert.Equal(5, new AiToolExecutionLimits().MaxToolCallsPerRound);
+        Assert.Equal(24000, new AiToolExecutionLimits().MaxTotalToolResultCharacters);
 
         var repoRoot = FindRepositoryRoot();
         var source = File.ReadAllText(Path.Combine(repoRoot, "src", "WebApp", "PingMonitor.Web", "Services", "StartupGate", "StartupSchemaService.cs"));
@@ -174,6 +195,7 @@ public sealed class AiAssistantSettingsTests
         Assert.Contains("ApiKeyProtected", source);
         Assert.Contains("GlobalSystemPrompt", source);
         Assert.Contains("`GlobalSystemPrompt` longtext NOT NULL", source);
+        Assert.Contains("ToolExecutionLimitsJson", source);
     }
 
     private sealed class FakeAiAssistantSettingsService : IAiAssistantSettingsService
@@ -209,7 +231,8 @@ public sealed class AiAssistantSettingsTests
                 RequestTimeoutSeconds = command.RequestTimeoutSeconds,
                 MaxOutputTokens = command.MaxOutputTokens,
                 Temperature = command.Temperature,
-                ToolCallingEnabled = command.ToolCallingEnabled
+                ToolCallingEnabled = command.ToolCallingEnabled,
+                ToolLimits = command.ToolLimits
             };
             return Task.FromResult(_current);
         }

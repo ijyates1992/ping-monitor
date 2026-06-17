@@ -287,6 +287,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "Temperature",
         "ToolCallingEnabled",
         "GlobalSystemPrompt",
+        "ToolExecutionLimitsJson",
         "UpdatedAtUtc",
         "UpdatedByUserId"
     ];
@@ -785,6 +786,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `Temperature` double NOT NULL DEFAULT 0.2,
                 `ToolCallingEnabled` tinyint(1) NOT NULL DEFAULT 1,
                 `GlobalSystemPrompt` longtext NOT NULL,
+                `ToolExecutionLimitsJson` longtext NOT NULL,
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedByUserId` varchar(255) NULL,
                 PRIMARY KEY (`AiAssistantSettingsId`)
@@ -2462,6 +2464,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 MODIFY COLUMN `GlobalSystemPrompt` longtext NOT NULL;
                 """,
                 cancellationToken);
+        }
+
+        if ((await GetMissingColumnsAsync(connection, "AiAssistantSettings", RequiredAiAssistantSettingsColumns, cancellationToken)).Contains("ToolExecutionLimitsJson", StringComparer.Ordinal))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `AiAssistantSettings` ADD COLUMN `ToolExecutionLimitsJson` longtext NOT NULL;", cancellationToken);
         }
 
         await dbContext.Database.ExecuteSqlRawAsync(

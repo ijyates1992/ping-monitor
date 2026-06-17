@@ -26,6 +26,7 @@ public sealed class AiToolCall
     public string? ApplicationUserId { get; init; }
     public string? CurrentUserMessage { get; init; }
     public string? ConversationSource { get; init; }
+    public AiToolExecutionLimits Limits { get; init; } = new();
 }
 
 public sealed class AiToolExecutionResult

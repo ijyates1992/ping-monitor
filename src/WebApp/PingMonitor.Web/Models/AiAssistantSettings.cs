@@ -21,6 +21,7 @@ public sealed class AiAssistantSettings
     public double Temperature { get; set; } = 0.2;
     public bool ToolCallingEnabled { get; set; } = true;
     public string GlobalSystemPrompt { get; set; } = string.Empty;
+    public string ToolExecutionLimitsJson { get; set; } = string.Empty;
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public string? UpdatedByUserId { get; set; }
 }

@@ -1,3 +1,5 @@
+using PingMonitor.Web.Services.AiTools;
+
 namespace PingMonitor.Web.Services;
 
 public sealed class UpdateAiAssistantSettingsCommand
@@ -18,5 +20,6 @@ public sealed class UpdateAiAssistantSettingsCommand
     public double Temperature { get; set; }
     public bool ToolCallingEnabled { get; set; }
     public string? GlobalSystemPrompt { get; set; }
+    public AiToolExecutionLimits ToolLimits { get; set; } = new();
     public string? UpdatedByUserId { get; set; }
 }
