@@ -8,4 +8,5 @@ public sealed class ResultBufferOptions
     public int ResultBufferMaxBatchSize { get; set; } = 500;
     public int ResultBufferFlushIntervalSeconds { get; set; } = 60;
     public int ResultBufferMaxQueueSize { get; set; } = 5000;
+    public int ResultBufferShutdownFlushTimeoutSeconds { get; set; } = 30;
 }
