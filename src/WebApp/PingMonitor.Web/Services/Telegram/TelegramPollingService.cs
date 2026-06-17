@@ -138,7 +138,7 @@ internal sealed class TelegramPollingService : ITelegramPollingService
 
             if (processingResult.ShouldReply && !string.IsNullOrWhiteSpace(processingResult.ReplyText))
             {
-                await SendReplyAsync(botToken, chatId, updateId, processingResult.ReplyText, cancellationToken);
+                await SendReplyAsync(botToken, chatId, updateId, processingResult.ReplyText, processingResult.ReplyFormat, cancellationToken);
             }
 
             return true;
@@ -150,31 +150,40 @@ internal sealed class TelegramPollingService : ITelegramPollingService
         }
     }
 
-    private async Task SendReplyAsync(string botToken, string chatId, long updateId, string text, CancellationToken cancellationToken)
+    private async Task SendReplyAsync(string botToken, string chatId, long updateId, string text, TelegramMessageFormat format, CancellationToken cancellationToken)
     {
-        var content = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["chat_id"] = chatId,
-            ["text"] = text
-        });
-
         var url = $"https://api.telegram.org/bot{botToken}/sendMessage";
 
         try
         {
-            var response = await _httpClient.PostAsync(url, content, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            foreach (var part in TelegramAiMarkdownFormatter.BuildMessages(text, format))
             {
-                _logger.LogWarning(
-                    "Telegram verification reply failed for update {UpdateId} chat {ChatId} with status {StatusCode}.",
-                    updateId,
-                    chatId,
-                    (int)response.StatusCode);
+                var response = await _httpClient.PostAsync(url, BuildReplyContent(chatId, part), cancellationToken);
+                if (!response.IsSuccessStatusCode && part.Format == TelegramMessageFormat.Html)
+                {
+                    _logger.LogWarning("Telegram formatted AI reply failed for update {UpdateId} chat {ChatId} with status {StatusCode}; retrying as plain text.", updateId, chatId, (int)response.StatusCode);
+                    response = await _httpClient.PostAsync(url, BuildReplyContent(chatId, new TelegramOutgoingMessage(part.Text, TelegramMessageFormat.PlainText)), cancellationToken);
+                }
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning(
+                        "Telegram reply failed for update {UpdateId} chat {ChatId} with status {StatusCode}.",
+                        updateId,
+                        chatId,
+                        (int)response.StatusCode);
+                }
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Telegram verification reply request failed for update {UpdateId} chat {ChatId}.", updateId, chatId);
         }
+    }
+
+    private static FormUrlEncodedContent BuildReplyContent(string chatId, TelegramOutgoingMessage part)
+    {
+        var values = new Dictionary<string, string> { ["chat_id"] = chatId, ["text"] = part.Text };
+        if (part.Format == TelegramMessageFormat.Html) values["parse_mode"] = "HTML";
+        return new FormUrlEncodedContent(values);
     }
 }

@@ -7,7 +7,6 @@ namespace PingMonitor.Web.Services.Telegram;
 
 internal sealed partial class TelegramMessageProcessor : ITelegramMessageProcessor
 {
-    private const int TelegramMessageLimit = 4096;
     private const int MaxInboundAiMessageCharacters = 4000;
     private const string UnlinkedMessage = "Your Telegram account is not linked to a Ping Monitor user yet.";
     private readonly ITelegramLinkService _telegramLinkService;
@@ -99,9 +98,9 @@ internal sealed partial class TelegramMessageProcessor : ITelegramMessageProcess
             return Reply(TelegramMessageProcessingStatus.Ignored, ToTelegramSafeError(response.ErrorMessage));
         }
 
-        var replyText = FitTelegramMessage(response.AssistantMessage.Trim());
+        var replyText = response.AssistantMessage.Trim();
         _conversationStore.AddTurn(inboundMessage.ChatId, account.UserId, userMessage, replyText);
-        return Reply(TelegramMessageProcessingStatus.Ignored, replyText);
+        return Reply(TelegramMessageProcessingStatus.Ignored, replyText, TelegramMessageFormat.AiMarkdown);
     }
 
     private async Task<TelegramMessageProcessingResult> ConsumeLinkCodeAsync(TelegramInboundMessage inboundMessage, string code, CancellationToken cancellationToken)
@@ -148,7 +147,7 @@ internal sealed partial class TelegramMessageProcessor : ITelegramMessageProcess
     }
 
     private static TelegramMessageProcessingResult Ignored(string message) => new() { Status = TelegramMessageProcessingStatus.Ignored, Handled = false, Success = true, Message = message, ShouldReply = false };
-    private static TelegramMessageProcessingResult Reply(TelegramMessageProcessingStatus status, string text) => new() { Status = status, Handled = true, Success = true, Message = "Telegram message processed.", ShouldReply = true, ReplyText = text };
+    private static TelegramMessageProcessingResult Reply(TelegramMessageProcessingStatus status, string text, TelegramMessageFormat format = TelegramMessageFormat.PlainText) => new() { Status = status, Handled = true, Success = true, Message = "Telegram message processed.", ShouldReply = true, ReplyText = text, ReplyFormat = format };
 
     private static string ToTelegramSafeError(string? errorMessage)
     {
@@ -163,12 +162,6 @@ internal sealed partial class TelegramMessageProcessor : ITelegramMessageProcess
         }
 
         return "The AI assistant could not respond right now. Please try again later.";
-    }
-
-    private static string FitTelegramMessage(string value)
-    {
-        const string note = "\n\n[Response truncated for Telegram.]";
-        return value.Length <= TelegramMessageLimit ? value : value[..(TelegramMessageLimit - note.Length)] + note;
     }
 
     private static TelegramMessageProcessingStatus MapStatus(TelegramLinkConsumeStatus status)
