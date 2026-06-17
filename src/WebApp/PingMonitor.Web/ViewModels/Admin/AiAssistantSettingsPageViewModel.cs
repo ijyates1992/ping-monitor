@@ -85,6 +85,14 @@ public sealed class AiAssistantSettingsPageViewModel
     [Range(100, 10000)] public int MaxMemoryContentCharacters { get; set; } = 1000;
     [Display(Name = "Maximum runtime largest tables returned (items)")]
     [Range(1, 100)] public int MaxRuntimeLargestTablesReturned { get; set; } = 10;
+    [Display(Name = "Maximum dependency endpoints returned (items)")]
+    [Range(1, 1000)] public int MaxDependencyEndpointsReturned { get; set; } = 100;
+    [Display(Name = "Maximum dependency paths returned (items)")]
+    [Range(1, 1000)] public int MaxDependencyPathsReturned { get; set; } = 100;
+    [Display(Name = "Maximum dependency traversal depth")]
+    [Range(1, 5)] public int MaxDependencyTraversalDepth { get; set; } = 5;
+    [Display(Name = "Maximum top depended-on endpoints (items)")]
+    [Range(1, 100)] public int MaxTopDependedOnEndpoints { get; set; } = 20;
 
     [Display(Name = "Global assistant prompt / custom instructions")]
     [StringLength(20000)]
