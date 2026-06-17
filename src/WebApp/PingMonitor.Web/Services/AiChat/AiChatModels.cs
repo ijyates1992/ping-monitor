@@ -5,7 +5,8 @@ namespace PingMonitor.Web.Services.AiChat;
 public enum AiChatSource
 {
     Web = 0,
-    Telegram = 1
+    Telegram = 1,
+    ScheduledTask = 2
 }
 
 public sealed class AiChatRequest

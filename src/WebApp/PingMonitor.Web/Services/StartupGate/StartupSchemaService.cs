@@ -51,7 +51,8 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "NetworkDiagramNodes",
         "NetworkDiagramLinks",
         "NetworkDiagramLinkVlans",
-        "AiUserMemories"
+        "AiUserMemories",
+        "AiScheduledTasks"
     ];
 
     private static readonly string[] RequiredNetworkDiagramColumns =
@@ -251,6 +252,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         "CreatedFromConversationSource"
     ];
 
+    private static readonly string[] RequiredAiScheduledTaskColumns =
+    [
+        "AiScheduledTaskId", "OwnerUserId", "Name", "Prompt", "Enabled", "ScheduleKind", "RunOnceAtUtc", "TimeOfDayLocal", "DayOfWeek", "DayOfMonth", "TimeZoneId", "DeliveryTarget", "NextRunAtUtc", "LastRunAtUtc", "LastSucceededAtUtc", "LastFailedAtUtc", "LastStatus", "LastError", "LastResponsePreview", "CreatedAtUtc", "UpdatedAtUtc"
+    ];
+
     private static readonly string[] RequiredAiAssistantSettingsColumns =
     [
         "AiAssistantSettingsId",
@@ -435,6 +441,14 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         {
             var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
             status.Diagnostics.Add($"AiAssistantSettings table is missing required columns: {string.Join(", ", missingAiAssistantSettingsColumns)}.");
+            return status;
+        }
+
+        var missingAiScheduledTaskColumns = await GetMissingColumnsAsync(connection, "AiScheduledTasks", RequiredAiScheduledTaskColumns, cancellationToken);
+        if (missingAiScheduledTaskColumns.Length > 0)
+        {
+            var status = new StartupSchemaStatus { State = StartupGateSchemaState.Incompatible };
+            status.Diagnostics.Add($"AiScheduledTasks table is missing required columns: {string.Join(", ", missingAiScheduledTaskColumns)}.");
             return status;
         }
 
@@ -746,6 +760,34 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `UpdatedAtUtc` datetime(6) NOT NULL,
                 `UpdatedByUserId` varchar(255) NULL,
                 PRIMARY KEY (`AiAssistantSettingsId`)
+            );
+            """;
+
+        const string createAiScheduledTasksSql = """
+            CREATE TABLE IF NOT EXISTS `AiScheduledTasks` (
+                `AiScheduledTaskId` varchar(64) NOT NULL,
+                `OwnerUserId` varchar(255) NOT NULL,
+                `Name` varchar(128) NOT NULL,
+                `Prompt` varchar(4000) NOT NULL,
+                `Enabled` tinyint(1) NOT NULL DEFAULT 0,
+                `ScheduleKind` varchar(16) NOT NULL,
+                `RunOnceAtUtc` datetime(6) NULL,
+                `TimeOfDayLocal` varchar(16) NULL,
+                `DayOfWeek` varchar(16) NULL,
+                `DayOfMonth` int NULL,
+                `TimeZoneId` varchar(128) NOT NULL,
+                `DeliveryTarget` varchar(32) NOT NULL,
+                `NextRunAtUtc` datetime(6) NULL,
+                `LastRunAtUtc` datetime(6) NULL,
+                `LastSucceededAtUtc` datetime(6) NULL,
+                `LastFailedAtUtc` datetime(6) NULL,
+                `LastStatus` varchar(16) NOT NULL,
+                `LastError` varchar(512) NULL,
+                `LastResponsePreview` varchar(1000) NULL,
+                `CreatedAtUtc` datetime(6) NOT NULL,
+                `UpdatedAtUtc` datetime(6) NOT NULL,
+                PRIMARY KEY (`AiScheduledTaskId`),
+                KEY `IX_AiScheduledTasks_OwnerUserId_Enabled_NextRunAtUtc` (`OwnerUserId`, `Enabled`, `NextRunAtUtc`)
             );
             """;
         const string createAiUserMemoriesSql = """
@@ -1112,6 +1154,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await dbContext.Database.ExecuteSqlRawAsync(createNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAiAssistantSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createAiUserMemoriesSql, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(createAiScheduledTasksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createUserNotificationSettingsSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createPendingTelegramLinksSql, cancellationToken);
         await dbContext.Database.ExecuteSqlRawAsync(createTelegramAccountsSql, cancellationToken);
