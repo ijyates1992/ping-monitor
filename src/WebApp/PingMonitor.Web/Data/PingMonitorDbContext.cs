@@ -41,6 +41,7 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<AiAssistantSettings> AiAssistantSettings => Set<AiAssistantSettings>();
     public DbSet<AiUserMemory> AiUserMemories => Set<AiUserMemory>();
+    public DbSet<AiScheduledTask> AiScheduledTasks => Set<AiScheduledTask>();
     public DbSet<UserNotificationSettings> UserNotificationSettings => Set<UserNotificationSettings>();
     public DbSet<PendingTelegramLink> PendingTelegramLinks => Set<PendingTelegramLink>();
     public DbSet<TelegramAccount> TelegramAccounts => Set<TelegramAccount>();
@@ -407,6 +408,28 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         aiUserMemory.Property(x => x.CreatedFromConversationSource).HasMaxLength(AiUserMemory.SourceMaxLength);
         aiUserMemory.HasIndex(x => new { x.UserId, x.Enabled, x.DeletedAtUtc });
         aiUserMemory.HasIndex(x => new { x.UserId, x.NormalizedContent });
+
+
+        var aiScheduledTask = modelBuilder.Entity<AiScheduledTask>();
+        aiScheduledTask.ToTable("AiScheduledTasks");
+        aiScheduledTask.HasKey(x => x.AiScheduledTaskId);
+        aiScheduledTask.Property(x => x.AiScheduledTaskId).HasMaxLength(AiScheduledTask.IdMaxLength);
+        aiScheduledTask.Property(x => x.OwnerUserId).HasMaxLength(AiScheduledTask.OwnerUserIdMaxLength).IsRequired();
+        aiScheduledTask.Property(x => x.Name).HasMaxLength(AiScheduledTask.NameMaxLength).IsRequired();
+        aiScheduledTask.Property(x => x.Prompt).HasMaxLength(AiScheduledTask.PromptMaxLength).IsRequired();
+        aiScheduledTask.Property(x => x.ScheduleKind).HasConversion<string>().HasMaxLength(16).IsRequired();
+        aiScheduledTask.Property(x => x.RepeatUnit).HasConversion<string>().HasMaxLength(16);
+        aiScheduledTask.Property(x => x.MissedRunPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
+        aiScheduledTask.Property(x => x.TimeOfDayLocal).HasConversion(v => v.HasValue ? v.Value.ToString("HH:mm:ss") : null, v => string.IsNullOrWhiteSpace(v) ? null : TimeOnly.Parse(v));
+        aiScheduledTask.Property(x => x.DayOfWeek).HasConversion<string>().HasMaxLength(16);
+        aiScheduledTask.Property(x => x.TimeZoneId).HasMaxLength(AiScheduledTask.TimeZoneIdMaxLength).IsRequired();
+        aiScheduledTask.Property(x => x.DeliveryTarget).HasConversion<string>().HasMaxLength(32).IsRequired();
+        aiScheduledTask.Property(x => x.LastStatus).HasConversion<string>().HasMaxLength(16).IsRequired();
+        aiScheduledTask.Property(x => x.LastError).HasMaxLength(AiScheduledTask.LastErrorMaxLength);
+        aiScheduledTask.Property(x => x.LastResponsePreview).HasMaxLength(AiScheduledTask.LastResponsePreviewMaxLength);
+        aiScheduledTask.Property(x => x.CreatedAtUtc).IsRequired();
+        aiScheduledTask.Property(x => x.UpdatedAtUtc).IsRequired();
+        aiScheduledTask.HasIndex(x => new { x.OwnerUserId, x.Enabled, x.NextRunAtUtc });
 
         var userNotificationSettings = modelBuilder.Entity<UserNotificationSettings>();
         userNotificationSettings.ToTable("UserNotificationSettings");

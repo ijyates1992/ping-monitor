@@ -15,6 +15,7 @@ using PingMonitor.Web.Services.Agents;
 using PingMonitor.Web.Services.AiProviders;
 using PingMonitor.Web.Services.AiChat;
 using PingMonitor.Web.Services.AiTools;
+using PingMonitor.Web.Services.AiScheduledTasks;
 using PingMonitor.Web.Services.Backups;
 using PingMonitor.Web.Services.BufferedResults;
 using PingMonitor.Web.Services.Endpoints;
@@ -226,6 +227,7 @@ builder.Services.AddScoped<IAiTool, RememberUserMemoryAiTool>();
 builder.Services.AddScoped<IAiTool, DeleteUserMemoryAiTool>();
 builder.Services.AddScoped<IAiToolRegistry, AiToolRegistry>();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
+builder.Services.AddScoped<IAiScheduledTaskService, AiScheduledTaskService>();
 builder.Services.AddSingleton<IAiMarkdownRenderer, AiMarkdownRenderer>();
 builder.Services.AddSingleton<ITelegramAiConversationStore, TelegramAiConversationStore>();
 builder.Services.AddSingleton<IApplicationMetadataProvider, ApplicationMetadataProvider>();
@@ -259,6 +261,8 @@ builder.Services.AddScoped<ITelegramBotIdentityResolver, TelegramBotIdentityReso
 builder.Services.AddScoped<ITelegramMessageProcessor, TelegramMessageProcessor>();
 builder.Services.AddScoped<ITelegramPollingService, TelegramPollingService>();
 builder.Services.AddScoped<ITelegramNotificationSender, TelegramNotificationSender>();
+builder.Services.AddScoped<ITelegramDirectMessageSender, TelegramDirectMessageSender>();
+builder.Services.AddHttpClient(nameof(TelegramDirectMessageSender));
 builder.Services.AddScoped<IEndpointCreationQueryService, EndpointCreationQueryService>();
 builder.Services.AddScoped<IEndpointManagementQueryService, EndpointManagementQueryService>();
 builder.Services.AddScoped<PingMonitor.Web.Services.NetworkDiagrams.INetworkDiagramService, PingMonitor.Web.Services.NetworkDiagrams.NetworkDiagramService>();
@@ -294,6 +298,7 @@ builder.Services.AddHostedService<RollingWindowHydrationBackgroundService>();
 builder.Services.AddHostedService<BufferedResultFlushBackgroundService>();
 builder.Services.AddHostedService<AssignmentProcessingBackgroundService>();
 builder.Services.AddHostedService<TelegramPollingBackgroundService>();
+builder.Services.AddHostedService<AiScheduledTaskWorker>();
 
 var app = builder.Build();
 
