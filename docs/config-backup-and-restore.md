@@ -30,6 +30,7 @@ The following entities are included in configuration backups:
 - User notification settings
 - Endpoint metadata (tags, attributes if applicable)
 - Network diagrams, including diagram canvas/viewport settings, nodes, visual links, link media/speed/LACP metadata, and link VLAN metadata
+- AI Assistant provider/settings/tool-limit configuration (`ai_assistant_settings`)
 
 ---
 
@@ -51,6 +52,9 @@ The following are **never included**:
 - Logs
 - Performance metrics
 - Any transient or runtime-only state
+- AI user memories (`AiUserMemories`) because they are user-owned assistant context rather than portable configuration
+- Scheduled AI task rows (`AiScheduledTasks`) because they are user-owned operational schedules
+- Event-triggered AI task definitions and run history (`AiEventTriggeredTasks`, `AiEventTriggeredTaskRuns`) because they are user-owned operational automation/reporting state
 
 ---
 
@@ -95,6 +99,7 @@ Example:
     "security_settings": {...},
     "notification_settings": {...},
     "user_notification_settings": [...],
+    "ai_assistant_settings": {...},
     "identity": [...],
     "network_diagrams": {
       "diagrams": [...]
@@ -121,6 +126,7 @@ Example:
   - `security_settings`
   - `notification_settings`
   - `user_notification_settings`
+  - `ai_assistant_settings`
   - `identity` (optional and explicit, sensitive)
   - `network_diagrams`
 - Network diagrams are restored as configuration/documentation data only. Diagram restore does not create endpoints, monitor assignments, endpoint dependencies, alerts, or any network-device configuration.
