@@ -36,17 +36,20 @@ internal sealed class AiScheduledTaskService : IAiScheduledTaskService
         entity.Name = command.Name.Trim();
         entity.Prompt = command.Prompt.Trim();
         entity.Enabled = command.Enabled;
-        entity.ScheduleKind = command.ScheduleKind;
-        entity.RunOnceAtUtc = command.ScheduleKind == AiScheduledTaskScheduleKind.Once ? command.RunOnceAtUtc : null;
-        entity.TimeOfDayLocal = command.ScheduleKind == AiScheduledTaskScheduleKind.Once ? null : command.TimeOfDayLocal;
-        entity.DayOfWeek = command.ScheduleKind == AiScheduledTaskScheduleKind.Weekly ? command.DayOfWeek : null;
-        entity.DayOfMonth = command.ScheduleKind == AiScheduledTaskScheduleKind.Monthly ? command.DayOfMonth : null;
+        entity.FirstRunAtUtc = command.FirstRunAtUtc!.Value.ToUniversalTime();
+        entity.RepeatEnabled = command.RepeatEnabled;
+        entity.RepeatEvery = command.RepeatEnabled ? command.RepeatEvery : null;
+        entity.RepeatUnit = command.RepeatEnabled ? command.RepeatUnit : null;
+        entity.MissedRunPolicy = command.MissedRunPolicy;
         entity.TimeZoneId = command.TimeZoneId.Trim();
         entity.DeliveryTarget = command.DeliveryTarget;
+        entity.ScheduleKind = command.RepeatEnabled ? command.RepeatUnit switch { AiScheduledTaskRepeatUnit.Days => AiScheduledTaskScheduleKind.Daily, AiScheduledTaskRepeatUnit.Weeks => AiScheduledTaskScheduleKind.Weekly, AiScheduledTaskRepeatUnit.Months => AiScheduledTaskScheduleKind.Monthly, _ => AiScheduledTaskScheduleKind.Daily } : AiScheduledTaskScheduleKind.Once;
+        entity.RunOnceAtUtc = command.RepeatEnabled ? null : entity.FirstRunAtUtc;
+        entity.TimeOfDayLocal = null; entity.DayOfWeek = null; entity.DayOfMonth = null;
         entity.UpdatedAtUtc = now;
-        entity.NextRunAtUtc = command.Enabled ? CalculateNextRunUtc(command.ScheduleKind, command.RunOnceAtUtc, command.TimeOfDayLocal, command.DayOfWeek, command.DayOfMonth, command.TimeZoneId, now) : null;
+        entity.NextRunAtUtc = command.Enabled ? CalculateNextRunUtc(entity.FirstRunAtUtc.Value, entity.RepeatEnabled, entity.RepeatEvery, entity.RepeatUnit, entity.TimeZoneId, now) : null;
         if (!command.Enabled) entity.LastStatus = AiScheduledTaskLastStatus.Disabled;
-        else if (entity.LastStatus == AiScheduledTaskLastStatus.Disabled) entity.LastStatus = AiScheduledTaskLastStatus.NeverRun;
+        else if (entity.LastStatus is AiScheduledTaskLastStatus.Disabled or AiScheduledTaskLastStatus.Completed) entity.LastStatus = AiScheduledTaskLastStatus.NeverRun;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return new(true, null, ToDto(entity));
@@ -66,42 +69,55 @@ internal sealed class AiScheduledTaskService : IAiScheduledTaskService
         if (string.IsNullOrWhiteSpace(command.OwnerUserId)) return "A signed-in user is required.";
         if (string.IsNullOrWhiteSpace(command.Name) || command.Name.Trim().Length > AiScheduledTask.NameMaxLength) return $"Name is required and must be {AiScheduledTask.NameMaxLength} characters or fewer.";
         if (string.IsNullOrWhiteSpace(command.Prompt) || command.Prompt.Trim().Length > AiScheduledTask.PromptMaxLength) return $"Prompt is required and must be {AiScheduledTask.PromptMaxLength} characters or fewer.";
-        if (!Enum.IsDefined(command.ScheduleKind)) return "Schedule kind is invalid.";
         if (!Enum.IsDefined(command.DeliveryTarget) || command.DeliveryTarget != AiScheduledTaskDeliveryTarget.TelegramOwner) return "Delivery target is invalid.";
-        if (!IsValidTimeZone(command.TimeZoneId)) return "Time zone is invalid.";
-        if (command.Enabled && !await _dbContext.TelegramAccounts.AsNoTracking().AnyAsync(x => x.UserId == command.OwnerUserId && x.Verified && x.IsActive, cancellationToken)) return "Link your Telegram account before enabling scheduled AI tasks.";
-        var now = DateTimeOffset.UtcNow;
-        return command.ScheduleKind switch
+        if (!IsValidTimeZone(command.TimeZoneId)) return "Select a valid time zone.";
+        if (!Enum.IsDefined(command.MissedRunPolicy)) return "Missed run behaviour is invalid.";
+        if (command.FirstRunAtUtc is null) return "First run is required.";
+        if (command.RepeatEnabled)
         {
-            AiScheduledTaskScheduleKind.Once when command.RunOnceAtUtc is null || command.RunOnceAtUtc <= now => "Run-once date/time must be in the future.",
-            AiScheduledTaskScheduleKind.Daily when command.TimeOfDayLocal is null => "Daily schedules require a time of day.",
-            AiScheduledTaskScheduleKind.Weekly when command.DayOfWeek is null || command.TimeOfDayLocal is null => "Weekly schedules require a day of week and time of day.",
-            AiScheduledTaskScheduleKind.Monthly when command.DayOfMonth is null or < 1 or > 28 || command.TimeOfDayLocal is null => "Monthly schedules require a day from 1 to 28 and a time of day.",
-            _ => null
-        };
+            if (command.RepeatEvery is null or < 1) return "Repeat every must be at least 1.";
+            if (command.RepeatUnit is null || !Enum.IsDefined(command.RepeatUnit.Value)) return "Repeat unit is invalid.";
+        }
+        if (command.Enabled && !await _dbContext.TelegramAccounts.AsNoTracking().AnyAsync(x => x.UserId == command.OwnerUserId && x.Verified && x.IsActive, cancellationToken)) return "Link your Telegram account before enabling scheduled AI tasks.";
+        if (command.FirstRunAtUtc <= DateTimeOffset.UtcNow && command.MissedRunPolicy != AiScheduledTaskMissedRunPolicy.RetryOnce) return "First run must be in the future unless missed runs are set to run once as soon as possible.";
+        return null;
     }
 
-    public DateTimeOffset? CalculateNextRunUtc(AiScheduledTaskScheduleKind kind, DateTimeOffset? runOnceAtUtc, TimeOnly? timeOfDayLocal, DayOfWeek? dayOfWeek, int? dayOfMonth, string timeZoneId, DateTimeOffset nowUtc)
+    public DateTimeOffset? CalculateNextRunUtc(DateTimeOffset firstRunAtUtc, bool repeatEnabled, int? repeatEvery, AiScheduledTaskRepeatUnit? repeatUnit, string timeZoneId, DateTimeOffset nowUtc)
     {
-        if (kind == AiScheduledTaskScheduleKind.Once) return runOnceAtUtc > nowUtc ? runOnceAtUtc : null;
-        if (!IsValidTimeZone(timeZoneId) || timeOfDayLocal is null) return null;
-        var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-        var localNow = TimeZoneInfo.ConvertTime(nowUtc, tz);
-        DateOnly date = DateOnly.FromDateTime(localNow.DateTime);
-        if (kind == AiScheduledTaskScheduleKind.Weekly)
-        {
-            var days = ((int)dayOfWeek!.Value - (int)localNow.DayOfWeek + 7) % 7;
-            date = date.AddDays(days);
-        }
-        if (kind == AiScheduledTaskScheduleKind.Monthly)
-        {
-            var day = dayOfMonth!.Value;
-            date = new DateOnly(localNow.Year, localNow.Month, day);
-            if (date.ToDateTime(timeOfDayLocal.Value) <= localNow.DateTime) date = new DateOnly(localNow.AddMonths(1).Year, localNow.AddMonths(1).Month, day);
-        }
-        var candidate = date.ToDateTime(timeOfDayLocal.Value);
-        if (kind != AiScheduledTaskScheduleKind.Monthly && candidate <= localNow.DateTime) candidate = kind == AiScheduledTaskScheduleKind.Daily ? candidate.AddDays(1) : candidate.AddDays(7);
-        return TimeZoneInfo.ConvertTimeToUtc(candidate, tz);
+        if (firstRunAtUtc > nowUtc) return firstRunAtUtc;
+        if (!repeatEnabled) return null;
+        if (repeatEvery is null or < 1 || repeatUnit is null || !IsValidTimeZone(timeZoneId)) return null;
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId.Trim());
+        var firstLocal = TimeZoneInfo.ConvertTime(firstRunAtUtc, tz).DateTime;
+        var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, tz).DateTime;
+        var candidate = firstLocal;
+        while (candidate <= nowLocal) candidate = AddInterval(candidate, repeatEvery.Value, repeatUnit.Value);
+        return SafeLocalToUtc(candidate, tz);
+    }
+
+    public AiScheduledTaskDueDecision EvaluateDue(DateTimeOffset firstRunAtUtc, bool repeatEnabled, int? repeatEvery, AiScheduledTaskRepeatUnit? repeatUnit, AiScheduledTaskMissedRunPolicy missedRunPolicy, string timeZoneId, DateTimeOffset nowUtc)
+    {
+        if (firstRunAtUtc > nowUtc) return new(false, firstRunAtUtc, false, null);
+        var nextFuture = CalculateNextRunUtc(firstRunAtUtc, repeatEnabled, repeatEvery, repeatUnit, timeZoneId, nowUtc);
+        if (missedRunPolicy == AiScheduledTaskMissedRunPolicy.RetryOnce) return new(true, nextFuture, false, null);
+        return repeatEnabled ? new(false, nextFuture, false, null) : new(false, null, true, AiScheduledTaskLastStatus.Completed);
+    }
+
+    internal static DateTime AddInterval(DateTime value, int every, AiScheduledTaskRepeatUnit unit) => unit switch
+    {
+        AiScheduledTaskRepeatUnit.Hours => value.AddHours(every),
+        AiScheduledTaskRepeatUnit.Days => value.AddDays(every),
+        AiScheduledTaskRepeatUnit.Weeks => value.AddDays(7 * every),
+        AiScheduledTaskRepeatUnit.Months => value.AddMonths(every),
+        _ => value
+    };
+
+    private static DateTimeOffset SafeLocalToUtc(DateTime local, TimeZoneInfo tz)
+    {
+        while (tz.IsInvalidTime(local)) local = local.AddHours(1);
+        if (tz.IsAmbiguousTime(local)) return new DateTimeOffset(local, tz.GetAmbiguousTimeOffsets(local).Min()).ToUniversalTime();
+        return TimeZoneInfo.ConvertTimeToUtc(local, tz);
     }
 
     private static bool IsValidTimeZone(string? timeZoneId)
@@ -110,5 +126,5 @@ internal sealed class AiScheduledTaskService : IAiScheduledTaskService
         try { _ = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId.Trim()); return true; } catch { return false; }
     }
 
-    private static AiScheduledTaskDto ToDto(AiScheduledTask x) => new(x.AiScheduledTaskId, x.OwnerUserId, x.Name, x.Prompt, x.Enabled, x.ScheduleKind, x.RunOnceAtUtc, x.TimeOfDayLocal, x.DayOfWeek, x.DayOfMonth, x.TimeZoneId, x.DeliveryTarget, x.NextRunAtUtc, x.LastRunAtUtc, x.LastStatus, x.LastError, x.LastResponsePreview, x.CreatedAtUtc, x.UpdatedAtUtc);
+    private static AiScheduledTaskDto ToDto(AiScheduledTask x) => new(x.AiScheduledTaskId, x.OwnerUserId, x.Name, x.Prompt, x.Enabled, x.FirstRunAtUtc ?? x.RunOnceAtUtc ?? x.NextRunAtUtc, x.RepeatEnabled || x.ScheduleKind != AiScheduledTaskScheduleKind.Once, x.RepeatEvery ?? (x.ScheduleKind == AiScheduledTaskScheduleKind.Once ? null : 1), x.RepeatUnit ?? x.ScheduleKind switch { AiScheduledTaskScheduleKind.Daily => AiScheduledTaskRepeatUnit.Days, AiScheduledTaskScheduleKind.Weekly => AiScheduledTaskRepeatUnit.Weeks, AiScheduledTaskScheduleKind.Monthly => AiScheduledTaskRepeatUnit.Months, _ => null }, x.MissedRunPolicy, x.TimeZoneId, x.DeliveryTarget, x.NextRunAtUtc, x.LastRunAtUtc, x.LastStatus, x.LastError, x.LastResponsePreview, x.CreatedAtUtc, x.UpdatedAtUtc);
 }

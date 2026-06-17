@@ -418,6 +418,8 @@ public sealed class PingMonitorDbContext : IdentityDbContext<ApplicationUser, Ap
         aiScheduledTask.Property(x => x.Name).HasMaxLength(AiScheduledTask.NameMaxLength).IsRequired();
         aiScheduledTask.Property(x => x.Prompt).HasMaxLength(AiScheduledTask.PromptMaxLength).IsRequired();
         aiScheduledTask.Property(x => x.ScheduleKind).HasConversion<string>().HasMaxLength(16).IsRequired();
+        aiScheduledTask.Property(x => x.RepeatUnit).HasConversion<string>().HasMaxLength(16);
+        aiScheduledTask.Property(x => x.MissedRunPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
         aiScheduledTask.Property(x => x.TimeOfDayLocal).HasConversion(v => v.HasValue ? v.Value.ToString("HH:mm:ss") : null, v => string.IsNullOrWhiteSpace(v) ? null : TimeOnly.Parse(v));
         aiScheduledTask.Property(x => x.DayOfWeek).HasConversion<string>().HasMaxLength(16);
         aiScheduledTask.Property(x => x.TimeZoneId).HasMaxLength(AiScheduledTask.TimeZoneIdMaxLength).IsRequired();
