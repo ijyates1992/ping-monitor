@@ -39,9 +39,31 @@ internal sealed class AiScheduledTaskWorker : BackgroundService
             var now = DateTimeOffset.UtcNow;
             var task = await db.AiScheduledTasks.Where(x => x.Enabled && x.NextRunAtUtc != null && x.NextRunAtUtc <= now && x.LastStatus != AiScheduledTaskLastStatus.Running).OrderBy(x => x.NextRunAtUtc).FirstOrDefaultAsync(cancellationToken);
             if (task is null) return;
+            var scheduler = scope.ServiceProvider.GetRequiredService<IAiScheduledTaskService>();
+            if (task.FirstRunAtUtc is null)
+            {
+                task.Enabled = false;
+                task.NextRunAtUtc = null;
+                task.LastStatus = AiScheduledTaskLastStatus.Disabled;
+                task.UpdatedAtUtc = now;
+                await db.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            var dueDecision = scheduler.EvaluateDue(task.FirstRunAtUtc.Value, task.RepeatEnabled, task.RepeatEvery, task.RepeatUnit, task.MissedRunPolicy, task.TimeZoneId, now);
+            var isStaleMissedRun = task.MissedRunPolicy == AiScheduledTaskMissedRunPolicy.Skip && task.NextRunAtUtc < now.AddMinutes(-2);
+            if (!dueDecision.ShouldRunNow && (isStaleMissedRun || dueDecision.DisableTask))
+            {
+                task.NextRunAtUtc = dueDecision.NextRunAtUtc;
+                if (dueDecision.DisableTask) task.Enabled = false;
+                if (dueDecision.FinalStatus is not null) task.LastStatus = dueDecision.FinalStatus.Value;
+                task.UpdatedAtUtc = now;
+                await db.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
             task.LastStatus = AiScheduledTaskLastStatus.Running; task.LastRunAtUtc = now; task.UpdatedAtUtc = now; await db.SaveChangesAsync(cancellationToken);
 
-            var scheduler = scope.ServiceProvider.GetRequiredService<IAiScheduledTaskService>();
             try
             {
                 var chat = scope.ServiceProvider.GetRequiredService<IAiChatService>();
@@ -51,16 +73,25 @@ internal sealed class AiScheduledTaskWorker : BackgroundService
                 var telegram = scope.ServiceProvider.GetRequiredService<ITelegramDirectMessageSender>();
                 var send = await telegram.SendToUserAsync(task.OwnerUserId, $"Ping Monitor scheduled AI task: {task.Name}\n\n{response.AssistantMessage}", cancellationToken);
                 if (!send.Succeeded) throw new InvalidOperationException(send.Message);
-                task.LastStatus = task.ScheduleKind == AiScheduledTaskScheduleKind.Once ? AiScheduledTaskLastStatus.Completed : AiScheduledTaskLastStatus.Succeeded;
+                task.LastStatus = task.RepeatEnabled ? AiScheduledTaskLastStatus.Succeeded : AiScheduledTaskLastStatus.Completed;
                 task.LastSucceededAtUtc = DateTimeOffset.UtcNow; task.LastError = null; task.LastResponsePreview = Truncate(response.AssistantMessage, AiScheduledTask.LastResponsePreviewMaxLength);
-                task.Enabled = task.ScheduleKind != AiScheduledTaskScheduleKind.Once;
+                task.Enabled = task.RepeatEnabled;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Scheduled AI task {TaskId} failed for owner {OwnerUserId}.", task.AiScheduledTaskId, task.OwnerUserId);
                 task.LastStatus = AiScheduledTaskLastStatus.Failed; task.LastFailedAtUtc = DateTimeOffset.UtcNow; task.LastError = Truncate(ex.Message, AiScheduledTask.LastErrorMaxLength);
             }
-            task.NextRunAtUtc = task.Enabled ? scheduler.CalculateNextRunUtc(task.ScheduleKind, task.RunOnceAtUtc, task.TimeOfDayLocal, task.DayOfWeek, task.DayOfMonth, task.TimeZoneId, DateTimeOffset.UtcNow) : null;
+            if (task.FirstRunAtUtc is not null)
+            {
+                var due = scheduler.EvaluateDue(task.FirstRunAtUtc.Value, task.RepeatEnabled, task.RepeatEvery, task.RepeatUnit, task.MissedRunPolicy, task.TimeZoneId, DateTimeOffset.UtcNow);
+                task.NextRunAtUtc = task.Enabled ? due.NextRunAtUtc : null;
+            }
+            else
+            {
+                task.NextRunAtUtc = null;
+                task.Enabled = false;
+            }
             task.UpdatedAtUtc = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
         }

@@ -254,7 +254,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
     private static readonly string[] RequiredAiScheduledTaskColumns =
     [
-        "AiScheduledTaskId", "OwnerUserId", "Name", "Prompt", "Enabled", "ScheduleKind", "RunOnceAtUtc", "TimeOfDayLocal", "DayOfWeek", "DayOfMonth", "TimeZoneId", "DeliveryTarget", "NextRunAtUtc", "LastRunAtUtc", "LastSucceededAtUtc", "LastFailedAtUtc", "LastStatus", "LastError", "LastResponsePreview", "CreatedAtUtc", "UpdatedAtUtc"
+        "AiScheduledTaskId", "OwnerUserId", "Name", "Prompt", "Enabled", "ScheduleKind", "RunOnceAtUtc", "TimeOfDayLocal", "DayOfWeek", "DayOfMonth", "FirstRunAtUtc", "RepeatEnabled", "RepeatEvery", "RepeatUnit", "MissedRunPolicy", "TimeZoneId", "DeliveryTarget", "NextRunAtUtc", "LastRunAtUtc", "LastSucceededAtUtc", "LastFailedAtUtc", "LastStatus", "LastError", "LastResponsePreview", "CreatedAtUtc", "UpdatedAtUtc"
     ];
 
     private static readonly string[] RequiredAiAssistantSettingsColumns =
@@ -775,6 +775,11 @@ internal sealed class StartupSchemaService : IStartupSchemaService
                 `TimeOfDayLocal` varchar(16) NULL,
                 `DayOfWeek` varchar(16) NULL,
                 `DayOfMonth` int NULL,
+                `FirstRunAtUtc` datetime(6) NULL,
+                `RepeatEnabled` tinyint(1) NOT NULL DEFAULT 0,
+                `RepeatEvery` int NULL,
+                `RepeatUnit` varchar(16) NULL,
+                `MissedRunPolicy` varchar(16) NOT NULL DEFAULT 'Skip',
                 `TimeZoneId` varchar(128) NOT NULL,
                 `DeliveryTarget` varchar(32) NOT NULL,
                 `NextRunAtUtc` datetime(6) NULL,
@@ -1175,6 +1180,7 @@ internal sealed class StartupSchemaService : IStartupSchemaService
         await EnsureApplicationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAiAssistantSettingsSchemaAsync(dbContext, cancellationToken);
+        await EnsureAiScheduledTaskRepeatColumnsAsync(dbContext, cancellationToken);
         await EnsureUserNotificationSettingsColumnsAsync(dbContext, cancellationToken);
         await EnsureAssignmentMetrics24hColumnsAsync(dbContext, cancellationToken);
         await EnsureAgentColumnsAsync(dbContext, cancellationToken);
@@ -1190,6 +1196,50 @@ internal sealed class StartupSchemaService : IStartupSchemaService
 
 
 
+
+
+    private static async Task EnsureAiScheduledTaskRepeatColumnsAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await using var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        var missingColumns = await GetMissingColumnsAsync(connection, "AiScheduledTasks", RequiredAiScheduledTaskColumns, cancellationToken);
+        foreach (var column in missingColumns)
+        {
+            var alterSql = column switch
+            {
+                "FirstRunAtUtc" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `FirstRunAtUtc` datetime(6) NULL;",
+                "RepeatEnabled" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `RepeatEnabled` tinyint(1) NOT NULL DEFAULT 0;",
+                "RepeatEvery" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `RepeatEvery` int NULL;",
+                "RepeatUnit" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `RepeatUnit` varchar(16) NULL;",
+                "MissedRunPolicy" => "ALTER TABLE `AiScheduledTasks` ADD COLUMN `MissedRunPolicy` varchar(16) NOT NULL DEFAULT 'Skip';",
+                _ => null
+            };
+            if (alterSql is not null)
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(alterSql, cancellationToken);
+            }
+        }
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            UPDATE `AiScheduledTasks`
+            SET
+                `FirstRunAtUtc` = COALESCE(`FirstRunAtUtc`, `RunOnceAtUtc`, `NextRunAtUtc`, UTC_TIMESTAMP(6)),
+                `RepeatEnabled` = CASE WHEN `ScheduleKind` IN ('Daily', 'Weekly', 'Monthly') THEN 1 ELSE `RepeatEnabled` END,
+                `RepeatEvery` = CASE WHEN `ScheduleKind` IN ('Daily', 'Weekly', 'Monthly') THEN COALESCE(`RepeatEvery`, 1) ELSE `RepeatEvery` END,
+                `RepeatUnit` = CASE
+                    WHEN `ScheduleKind` = 'Daily' THEN COALESCE(`RepeatUnit`, 'Days')
+                    WHEN `ScheduleKind` = 'Weekly' THEN COALESCE(`RepeatUnit`, 'Weeks')
+                    WHEN `ScheduleKind` = 'Monthly' THEN COALESCE(`RepeatUnit`, 'Months')
+                    ELSE `RepeatUnit`
+                END,
+                `MissedRunPolicy` = COALESCE(`MissedRunPolicy`, 'Skip')
+            WHERE `FirstRunAtUtc` IS NULL OR `RepeatUnit` IS NULL OR `RepeatEvery` IS NULL;
+            """, cancellationToken);
+    }
 
     private static async Task EnsureNetworkDiagramAreaTableAsync(PingMonitorDbContext dbContext, CancellationToken cancellationToken)
     {

@@ -1,6 +1,8 @@
 namespace PingMonitor.Web.Models;
 
 public enum AiScheduledTaskScheduleKind { Once = 0, Daily = 1, Weekly = 2, Monthly = 3 }
+public enum AiScheduledTaskRepeatUnit { Hours = 0, Days = 1, Weeks = 2, Months = 3 }
+public enum AiScheduledTaskMissedRunPolicy { Skip = 0, RetryOnce = 1 }
 public enum AiScheduledTaskDeliveryTarget { TelegramOwner = 0 }
 public enum AiScheduledTaskLastStatus { NeverRun = 0, Running = 1, Succeeded = 2, Failed = 3, Disabled = 4, Completed = 5 }
 
@@ -24,6 +26,11 @@ public sealed class AiScheduledTask
     public TimeOnly? TimeOfDayLocal { get; set; }
     public DayOfWeek? DayOfWeek { get; set; }
     public int? DayOfMonth { get; set; }
+    public DateTimeOffset? FirstRunAtUtc { get; set; }
+    public bool RepeatEnabled { get; set; }
+    public int? RepeatEvery { get; set; }
+    public AiScheduledTaskRepeatUnit? RepeatUnit { get; set; }
+    public AiScheduledTaskMissedRunPolicy MissedRunPolicy { get; set; } = AiScheduledTaskMissedRunPolicy.Skip;
     public string TimeZoneId { get; set; } = "UTC";
     public AiScheduledTaskDeliveryTarget DeliveryTarget { get; set; } = AiScheduledTaskDeliveryTarget.TelegramOwner;
     public DateTimeOffset? NextRunAtUtc { get; set; }
