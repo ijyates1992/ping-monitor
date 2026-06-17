@@ -659,12 +659,11 @@ According to the saved Home diagram, AP1 is connected to Switch 1 on port Gi1/0/
 - Add audit/debug logging.
 - No Telegram AI path until web chat is proven.
 
-### V0.2.1-preview - Telegram AI transport
+### V0.2.1-preview - AI Assistant preview release baseline
 
-- Route Telegram natural-language messages to AI conversation service.
-- Reuse same tools and prompt stack as web chat.
-- Add Telegram-specific answer formatting and error handling.
-- Ensure linked-user permission enforcement.
+V0.2.1-preview now collects the implemented AI Assistant slices for preview testing rather than only Telegram transport. The current preview baseline includes shared web/Telegram AI chat, OpenAI-compatible/Ollama provider configuration and testing, read-only monitoring/metrics/diagram/dependency/runtime tools, user-specific memories, safe Markdown rendering, GUI-only scheduled AI Telegram reports, GUI-only event-triggered AI Telegram reports, and admin-configurable tool/context limits.
+
+Preview caveats remain: AI output is an assistant summary, AI tools are read-only except explicit user-memory create/delete, and no AI remediation or monitoring-configuration write actions are included.
 
 ### V0.2.2-preview - Diagnostic packs and check-result insight
 

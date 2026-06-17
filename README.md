@@ -110,6 +110,17 @@ Agents collect facts. The server decides meaning.
 
 ## Key Features
 
+### AI Assistant preview (V0.2.1)
+
+- Admin AI Assistant settings for OpenAI-compatible providers, including local Ollama-compatible endpoints.
+- In-app AI chat and Telegram AI chat share the same conversation service and tool execution path.
+- Read-only AI tools can summarize network health, endpoint metrics, RTT/jitter/uptime/check history, Network Diagrams, dependencies, and runtime/application information.
+- User-specific AI memories can be explicitly created or deleted by the user; other AI tools remain read-only.
+- GUI-only scheduled and event-triggered AI tasks can deliver Telegram reports for configured users.
+- Web chat Markdown is sanitized before rendering, and Telegram Markdown is converted through a safe formatting path.
+
+Preview caveats: AI Assistant is a preview feature, AI output should be treated as an assistant summary rather than an authoritative replacement for stored monitoring data, and no AI remediation or monitoring configuration write actions are provided.
+
 ### Endpoint Monitoring
 
 - ICMP ping checks
