@@ -15,6 +15,19 @@ public sealed class AiEventTasksSliceTests
         Assert.DoesNotContain("AsNoTracking().Where(x=>visibleEndpointIds.Contains(x.EndpointId))", source);
     }
 
+    [Fact]
+    public void EventTasksPage_IncludesStandaloneApplicationChromeAndMobileStyles()
+    {
+        var source = ReadWebFile("Views", "AiEventTasks", "Index.cshtml");
+
+        Assert.Contains("<!DOCTYPE html>", source);
+        Assert.Contains("@await Html.PartialAsync(\"_ThemeHead\")", source);
+        Assert.Contains("@await Html.PartialAsync(\"_AuthenticatedNav\")", source);
+        Assert.Contains("<main class=\"wrap\">", source);
+        Assert.Contains("@@media(max-width:560px)", source);
+        Assert.Contains("@Html.AntiForgeryToken()", source);
+    }
+
     private static string ReadWebFile(params string[] parts) =>
         File.ReadAllText(Path.Combine([AppContext.BaseDirectory, "..", "..", "..", "..", "PingMonitor.Web", .. parts]));
 }
