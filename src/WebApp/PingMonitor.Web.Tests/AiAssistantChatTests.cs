@@ -255,6 +255,22 @@ public sealed class AiAssistantChatTests
     }
 
     [Fact]
+    public void DependencyAiTools_DoNotUseMySqlUnsafeEndpointIdArrayContainsQueries()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PingMonitor.Web", "Services", "AiTools", "DependencyAiTools.cs"));
+
+        Assert.Contains("ApplyEndpointFilter(endpointQuery, visibleIds)", source);
+        Assert.Contains("var visibleAssignments = ApplyEndpointFilter(DbContext.MonitorAssignments.AsNoTracking(), endpointIds)", source);
+        Assert.Contains("ApplyDependencyParentFilter(DbContext.EndpointDependencies.AsNoTracking(), endpointIds)", source);
+        Assert.Contains("ApplyDependencyEndpointFilter(", source);
+        Assert.Contains("Expression.OrElse", source);
+        Assert.DoesNotContain("visibleIds.Contains(x.EndpointId)", source);
+        Assert.DoesNotContain("endpointIds.Contains(assignment.EndpointId)", source);
+        Assert.DoesNotContain("endpointIds.Contains(x.EndpointId)", source);
+        Assert.DoesNotContain("endpointIds.Contains(x.DependsOnEndpointId)", source);
+    }
+
+    [Fact]
     public void SearchEndpointsTool_DoesNotUseMySqlUnsafeEndpointIdArrayContainsQuery()
     {
         var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PingMonitor.Web", "Services", "AiTools", "EndpointMetricsAiTools.cs"));

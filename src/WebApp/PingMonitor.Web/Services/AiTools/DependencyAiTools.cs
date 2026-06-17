@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Identity;
@@ -38,21 +39,88 @@ internal abstract class DependencyAiToolBase : IAiTool
         if (user is null) return (false, new Dictionary<string, EndpointInfo>(), [], Error("unauthorized", "No application user was available for tool execution."));
         var visibleIds = await AiToolUserVisibility.GetVisibleEndpointIdsOrNullForAdminAsync(DbContext, UserManager, user, cancellationToken);
         var endpointQuery = DbContext.Endpoints.AsNoTracking();
-        if (visibleIds is not null) endpointQuery = endpointQuery.Where(x => visibleIds.Contains(x.EndpointId));
+        if (visibleIds is not null) endpointQuery = ApplyEndpointFilter(endpointQuery, visibleIds);
         var endpoints = await endpointQuery.Select(x => new EndpointInfo(x.EndpointId, x.Name, x.Target, x.Enabled, "UNKNOWN")).ToArrayAsync(cancellationToken);
         var endpointIds = endpoints.Select(x => x.EndpointId).ToArray();
-        var states = await (from assignment in DbContext.MonitorAssignments.AsNoTracking()
+        var visibleAssignments = ApplyEndpointFilter(DbContext.MonitorAssignments.AsNoTracking(), endpointIds);
+        var states = await (from assignment in visibleAssignments
             join state in DbContext.EndpointStates.AsNoTracking() on assignment.AssignmentId equals state.AssignmentId into sj
             from state in sj.DefaultIfEmpty()
-            where endpointIds.Contains(assignment.EndpointId)
             select new { assignment.EndpointId, State = state != null ? state.CurrentState : EndpointStateKind.Unknown }).ToArrayAsync(cancellationToken);
         var stateByEndpoint = states.GroupBy(x => x.EndpointId).ToDictionary(x => x.Key, x => x.First().State.ToString().ToUpperInvariant(), StringComparer.Ordinal);
         var endpointMap = endpoints.Select(x => x with { CurrentState = stateByEndpoint.GetValueOrDefault(x.EndpointId, "UNKNOWN") }).ToDictionary(x => x.EndpointId, StringComparer.Ordinal);
-        var edges = await DbContext.EndpointDependencies.AsNoTracking()
-            .Where(x => endpointIds.Contains(x.EndpointId) && endpointIds.Contains(x.DependsOnEndpointId))
+        var visibleDependencies = ApplyDependencyEndpointFilter(
+            ApplyDependencyParentFilter(DbContext.EndpointDependencies.AsNoTracking(), endpointIds),
+            endpointIds);
+        var edges = await visibleDependencies
             .Select(x => new Edge(x.EndpointId, x.DependsOnEndpointId))
             .ToArrayAsync(cancellationToken);
         return (true, endpointMap, edges, null);
+    }
+
+
+    private static IQueryable<Models.Endpoint> ApplyEndpointFilter(IQueryable<Models.Endpoint> endpoints, IReadOnlyCollection<string> endpointIds)
+    {
+        if (endpointIds.Count == 0)
+        {
+            return endpoints.Where(static _ => false);
+        }
+
+        var parameter = Expression.Parameter(typeof(Models.Endpoint), "endpoint");
+        var endpointId = Expression.Property(parameter, nameof(Models.Endpoint.EndpointId));
+        var predicate = BuildStringEqualsAnyPredicate(endpointId, endpointIds);
+        return endpoints.Where(Expression.Lambda<Func<Models.Endpoint, bool>>(predicate, parameter));
+    }
+
+    private static IQueryable<MonitorAssignment> ApplyEndpointFilter(IQueryable<MonitorAssignment> assignments, IReadOnlyCollection<string> endpointIds)
+    {
+        if (endpointIds.Count == 0)
+        {
+            return assignments.Where(static _ => false);
+        }
+
+        var parameter = Expression.Parameter(typeof(MonitorAssignment), "assignment");
+        var endpointId = Expression.Property(parameter, nameof(MonitorAssignment.EndpointId));
+        var predicate = BuildStringEqualsAnyPredicate(endpointId, endpointIds);
+        return assignments.Where(Expression.Lambda<Func<MonitorAssignment, bool>>(predicate, parameter));
+    }
+
+    private static IQueryable<EndpointDependency> ApplyDependencyEndpointFilter(IQueryable<EndpointDependency> dependencies, IReadOnlyCollection<string> endpointIds)
+    {
+        if (endpointIds.Count == 0)
+        {
+            return dependencies.Where(static _ => false);
+        }
+
+        var parameter = Expression.Parameter(typeof(EndpointDependency), "dependency");
+        var endpointId = Expression.Property(parameter, nameof(EndpointDependency.EndpointId));
+        var predicate = BuildStringEqualsAnyPredicate(endpointId, endpointIds);
+        return dependencies.Where(Expression.Lambda<Func<EndpointDependency, bool>>(predicate, parameter));
+    }
+
+    private static IQueryable<EndpointDependency> ApplyDependencyParentFilter(IQueryable<EndpointDependency> dependencies, IReadOnlyCollection<string> parentEndpointIds)
+    {
+        if (parentEndpointIds.Count == 0)
+        {
+            return dependencies.Where(static _ => false);
+        }
+
+        var parameter = Expression.Parameter(typeof(EndpointDependency), "dependency");
+        var parentEndpointId = Expression.Property(parameter, nameof(EndpointDependency.DependsOnEndpointId));
+        var predicate = BuildStringEqualsAnyPredicate(parentEndpointId, parentEndpointIds);
+        return dependencies.Where(Expression.Lambda<Func<EndpointDependency, bool>>(predicate, parameter));
+    }
+
+    private static Expression BuildStringEqualsAnyPredicate(MemberExpression member, IReadOnlyCollection<string> values)
+    {
+        Expression? predicate = null;
+        foreach (var value in values)
+        {
+            var equals = Expression.Equal(member, Expression.Constant(value));
+            predicate = predicate is null ? equals : Expression.OrElse(predicate, equals);
+        }
+
+        return predicate!;
     }
 
     protected static (int Depth, bool Clamped) ReadDepth(JsonElement root, AiToolCall call, int defaultDepth)
