@@ -14,7 +14,8 @@ public sealed class SaveAiScheduledTaskCommand
     public string Name { get; set; } = string.Empty;
     public string Prompt { get; set; } = string.Empty;
     public bool Enabled { get; set; }
-    public DateTimeOffset? FirstRunAtUtc { get; set; }
+    public DateOnly? FirstRunDate { get; set; }
+    public TimeOnly? FirstRunTime { get; set; }
     public bool RepeatEnabled { get; set; }
     public int? RepeatEvery { get; set; }
     public AiScheduledTaskRepeatUnit? RepeatUnit { get; set; }
@@ -24,6 +25,7 @@ public sealed class SaveAiScheduledTaskCommand
 }
 
 public sealed record AiScheduledTaskMutationResult(bool Succeeded, string? ErrorMessage, AiScheduledTaskDto? Task);
+public sealed record AiScheduledTaskLocalTimeConversion(bool Succeeded, DateTimeOffset? UtcValue, string? ErrorMessage);
 public sealed record AiScheduledTaskDueDecision(bool ShouldRunNow, DateTimeOffset? NextRunAtUtc, bool DisableTask, AiScheduledTaskLastStatus? FinalStatus);
 
 public interface IAiScheduledTaskService

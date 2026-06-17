@@ -23,7 +23,7 @@ public sealed class AiScheduledTasksController : Controller
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var tz = await DefaultTimeZoneAsync(cancellationToken);
-        return View(await BuildPageAsync(new AiScheduledTaskFormViewModel { TimeZoneId = tz, FirstRunAtUtc = DateTimeOffset.UtcNow.AddHours(1) }, cancellationToken));
+        return View(await BuildPageAsync(CreateDefaultForm(tz), cancellationToken));
     }
 
     [HttpGet("edit/{taskId}")]
@@ -31,14 +31,15 @@ public sealed class AiScheduledTasksController : Controller
     {
         var dto = await _service.GetForUserAsync(UserId(), taskId, cancellationToken);
         if (dto is null) { TempData["ErrorMessage"] = "Scheduled AI task was not found."; return RedirectToAction(nameof(Index)); }
-        return View("Index", await BuildPageAsync(new AiScheduledTaskFormViewModel { AiScheduledTaskId = dto.AiScheduledTaskId, Name = dto.Name, Prompt = dto.Prompt, Enabled = dto.Enabled, FirstRunAtUtc = dto.FirstRunAtUtc, RepeatEnabled = dto.RepeatEnabled, RepeatEvery = dto.RepeatEvery ?? 1, RepeatUnit = dto.RepeatUnit ?? AiScheduledTaskRepeatUnit.Days, MissedRunPolicy = dto.MissedRunPolicy, TimeZoneId = _timeZoneService.IsSupportedTimeZoneId(dto.TimeZoneId) ? dto.TimeZoneId : await DefaultTimeZoneAsync(cancellationToken), DeliveryTarget = dto.DeliveryTarget }, cancellationToken));
+        var timeZoneId = _timeZoneService.IsSupportedTimeZoneId(dto.TimeZoneId) ? dto.TimeZoneId : await DefaultTimeZoneAsync(cancellationToken);
+        return View("Index", await BuildPageAsync(CreateEditForm(dto, timeZoneId), cancellationToken));
     }
 
     [HttpPost("save"), ValidateAntiForgeryToken]
     public async Task<IActionResult> Save([FromForm] AiScheduledTaskFormViewModel form, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid) return View("Index", await BuildPageAsync(form, cancellationToken));
-        var result = await _service.SaveAsync(new SaveAiScheduledTaskCommand { AiScheduledTaskId = form.AiScheduledTaskId, OwnerUserId = UserId(), Name = form.Name, Prompt = form.Prompt, Enabled = form.Enabled, FirstRunAtUtc = form.FirstRunAtUtc, RepeatEnabled = form.RepeatEnabled, RepeatEvery = form.RepeatEvery, RepeatUnit = form.RepeatUnit, MissedRunPolicy = form.MissedRunPolicy, TimeZoneId = form.TimeZoneId, DeliveryTarget = form.DeliveryTarget }, cancellationToken);
+        var result = await _service.SaveAsync(new SaveAiScheduledTaskCommand { AiScheduledTaskId = form.AiScheduledTaskId, OwnerUserId = UserId(), Name = form.Name, Prompt = form.Prompt, Enabled = form.Enabled, FirstRunDate = form.FirstRunDate, FirstRunTime = form.FirstRunTime, RepeatEnabled = form.RepeatEnabled, RepeatEvery = form.RepeatEvery, RepeatUnit = form.RepeatUnit, MissedRunPolicy = form.MissedRunPolicy, TimeZoneId = form.TimeZoneId, DeliveryTarget = form.DeliveryTarget }, cancellationToken);
         if (!result.Succeeded) { var page = await BuildPageAsync(form, cancellationToken); page.ErrorMessage = result.ErrorMessage; return View("Index", page); }
         TempData["StatusMessage"] = "Scheduled AI task saved."; return RedirectToAction(nameof(Index));
     }
@@ -62,6 +63,28 @@ public sealed class AiScheduledTasksController : Controller
         var id = await _timeZoneService.GetCurrentUserTimeZoneIdAsync(cancellationToken);
         if (_timeZoneService.IsSupportedTimeZoneId(id)) return id;
         return _timeZoneService.IsSupportedTimeZoneId("Europe/London") ? "Europe/London" : "UTC";
+    }
+
+    private static AiScheduledTaskFormViewModel CreateDefaultForm(string timeZoneId)
+    {
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var local = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow.AddHours(1), timeZone);
+        return new AiScheduledTaskFormViewModel { TimeZoneId = timeZoneId, FirstRunDate = DateOnly.FromDateTime(local.DateTime), FirstRunTime = TimeOnly.FromDateTime(local.DateTime) };
+    }
+
+    private static AiScheduledTaskFormViewModel CreateEditForm(AiScheduledTaskDto dto, string timeZoneId)
+    {
+        DateOnly? date = null;
+        TimeOnly? time = null;
+        if (dto.FirstRunAtUtc is not null)
+        {
+            var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            var local = TimeZoneInfo.ConvertTime(dto.FirstRunAtUtc.Value, timeZone);
+            date = DateOnly.FromDateTime(local.DateTime);
+            time = TimeOnly.FromDateTime(local.DateTime);
+        }
+
+        return new AiScheduledTaskFormViewModel { AiScheduledTaskId = dto.AiScheduledTaskId, Name = dto.Name, Prompt = dto.Prompt, Enabled = dto.Enabled, FirstRunDate = date, FirstRunTime = time, RepeatEnabled = dto.RepeatEnabled, RepeatEvery = dto.RepeatEvery ?? 1, RepeatUnit = dto.RepeatUnit ?? AiScheduledTaskRepeatUnit.Days, MissedRunPolicy = dto.MissedRunPolicy, TimeZoneId = timeZoneId, DeliveryTarget = dto.DeliveryTarget };
     }
     private string UserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 }

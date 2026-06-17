@@ -27,8 +27,60 @@ public sealed class AiScheduledTasksSliceTests
     {
         var source = ReadWebFile("Views", "AiScheduledTasks", "Index.cshtml");
         Assert.Contains("<select asp-for=\"Form.TimeZoneId\"", source);
+        Assert.Contains("asp-for=\"Form.FirstRunDate\" type=\"date\"", source);
+        Assert.Contains("asp-for=\"Form.FirstRunTime\" type=\"time\" step=\"60\"", source);
+        Assert.Contains("The first run date and time are interpreted in the selected time zone", source);
+        Assert.DoesNotContain("asp-for=\"Form.FirstRunAtUtc\"", source);
         Assert.DoesNotContain("placeholder=\"UTC\"", source);
         Assert.Contains("Minutes, seconds, cron expressions, free-text parsing, and AI-generated schedules are not supported", source);
+    }
+
+
+    [Fact]
+    public void LocalFirstRunConversion_UsesEuropeLondonSummerOffset()
+    {
+        var result = AiScheduledTaskService.ConvertLocalFirstRunToUtc(new DateOnly(2026, 6, 17), new TimeOnly(13, 30), "Europe/London");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateTimeOffset(2026, 6, 17, 12, 30, 0, TimeSpan.Zero), result.UtcValue);
+    }
+
+    [Fact]
+    public void LocalFirstRunConversion_UsesUtcDirectly()
+    {
+        var result = AiScheduledTaskService.ConvertLocalFirstRunToUtc(new DateOnly(2026, 6, 17), new TimeOnly(13, 30), "UTC");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateTimeOffset(2026, 6, 17, 13, 30, 0, TimeSpan.Zero), result.UtcValue);
+    }
+
+    [Fact]
+    public void LocalFirstRunConversion_RejectsInvalidTimeZoneAndDstGap()
+    {
+        var invalidZone = AiScheduledTaskService.ConvertLocalFirstRunToUtc(new DateOnly(2026, 6, 17), new TimeOnly(13, 30), "Not/AZone");
+        var dstGap = AiScheduledTaskService.ConvertLocalFirstRunToUtc(new DateOnly(2026, 3, 29), new TimeOnly(1, 30), "Europe/London");
+
+        Assert.False(invalidZone.Succeeded);
+        Assert.False(dstGap.Succeeded);
+    }
+
+    [Fact]
+    public void LocalFirstRunConversion_AmbiguousLondonTimeChoosesEarlierOccurrence()
+    {
+        var result = AiScheduledTaskService.ConvertLocalFirstRunToUtc(new DateOnly(2026, 10, 25), new TimeOnly(1, 30), "Europe/London");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateTimeOffset(2026, 10, 25, 0, 30, 0, TimeSpan.Zero), result.UtcValue);
+    }
+
+    [Fact]
+    public void FormModel_UsesExplicitDateAndTimeFields()
+    {
+        var source = ReadWebFile("ViewModels", "AiScheduledTasks", "AiScheduledTasksPageViewModel.cs");
+
+        Assert.Contains("FirstRunDate", source);
+        Assert.Contains("FirstRunTime", source);
+        Assert.DoesNotContain("FirstRunAtUtc { get; set; }", source);
     }
 
     [Fact]
