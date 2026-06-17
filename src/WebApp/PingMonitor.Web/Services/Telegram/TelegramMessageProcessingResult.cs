@@ -8,4 +8,5 @@ public sealed class TelegramMessageProcessingResult
     public string Message { get; init; } = string.Empty;
     public bool ShouldReply { get; init; }
     public string? ReplyText { get; init; }
+    public TelegramMessageFormat ReplyFormat { get; init; } = TelegramMessageFormat.PlainText;
 }

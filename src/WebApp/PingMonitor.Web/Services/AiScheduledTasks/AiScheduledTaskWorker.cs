@@ -71,7 +71,7 @@ internal sealed class AiScheduledTaskWorker : BackgroundService
                 var response = await chat.SendAsync(new AiChatRequest { Source = AiChatSource.ScheduledTask, UserMessage = task.Prompt, ApplicationUserId = task.OwnerUserId, Principal = principal }, cancellationToken);
                 if (!response.Succeeded || string.IsNullOrWhiteSpace(response.AssistantMessage)) throw new InvalidOperationException(response.ErrorMessage ?? "AI provider did not return a scheduled task response.");
                 var telegram = scope.ServiceProvider.GetRequiredService<ITelegramDirectMessageSender>();
-                var send = await telegram.SendToUserAsync(task.OwnerUserId, $"Ping Monitor scheduled AI task: {task.Name}\n\n{response.AssistantMessage}", cancellationToken);
+                var send = await telegram.SendToUserAsync(task.OwnerUserId, $"Ping Monitor scheduled AI task: {task.Name}\n\n{response.AssistantMessage}", cancellationToken, TelegramMessageFormat.AiMarkdown);
                 if (!send.Succeeded) throw new InvalidOperationException(send.Message);
                 task.LastStatus = task.RepeatEnabled ? AiScheduledTaskLastStatus.Succeeded : AiScheduledTaskLastStatus.Completed;
                 task.LastSucceededAtUtc = DateTimeOffset.UtcNow; task.LastError = null; task.LastResponsePreview = Truncate(response.AssistantMessage, AiScheduledTask.LastResponsePreviewMaxLength);
