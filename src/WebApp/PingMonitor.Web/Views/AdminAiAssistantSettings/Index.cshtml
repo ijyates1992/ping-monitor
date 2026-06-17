@@ -84,6 +84,42 @@
             </div>
         </section>
 
+
+        <section class="card grid">
+            <h2>Tool/context limits</h2>
+            <p class="field-help">These limits control how much context AI tools may return to the model. Higher values can improve rich reports but increase token usage, latency, and the chance of oversized responses. Lower values reduce token usage and are better for smaller local models.</p>
+            <p class="field-help"><strong>Recommended defaults:</strong> 3 tool rounds, 5 tool calls per round, 24,000 total tool-result characters, and 12,000 characters per single tool result. Setting maximum tool rounds to 0 safely disables tool execution for AI requests even when tool calling is enabled.</p>
+            <h3>General tool loop limits</h3>
+            <div class="grid two">
+                <div><label asp-for="MaxToolRounds"></label><input asp-for="MaxToolRounds" type="number" min="0" max="10" /><span class="validation" asp-validation-for="MaxToolRounds"></span></div>
+                <div><label asp-for="MaxToolCallsPerRound"></label><input asp-for="MaxToolCallsPerRound" type="number" min="0" max="20" /><span class="validation" asp-validation-for="MaxToolCallsPerRound"></span></div>
+                <div><label asp-for="MaxTotalToolResultCharacters"></label><input asp-for="MaxTotalToolResultCharacters" type="number" min="1000" max="200000" /><span class="validation" asp-validation-for="MaxTotalToolResultCharacters"></span></div>
+                <div><label asp-for="MaxSingleToolResultCharacters"></label><input asp-for="MaxSingleToolResultCharacters" type="number" min="1000" max="100000" /><span class="validation" asp-validation-for="MaxSingleToolResultCharacters"></span></div>
+            </div>
+            <h3>Endpoint/metrics tool limits</h3>
+            <div class="grid two">
+                <div><label asp-for="MaxEndpointSearchResults"></label><input asp-for="MaxEndpointSearchResults" type="number" /><span class="validation" asp-validation-for="MaxEndpointSearchResults"></span></div>
+                <div><label asp-for="MaxEndpointMetricsSampleTailPoints"></label><input asp-for="MaxEndpointMetricsSampleTailPoints" type="number" /><span class="validation" asp-validation-for="MaxEndpointMetricsSampleTailPoints"></span></div>
+                <div><label asp-for="MaxEndpointTransitionItems"></label><input asp-for="MaxEndpointTransitionItems" type="number" /><span class="validation" asp-validation-for="MaxEndpointTransitionItems"></span></div>
+                <div><label asp-for="MaxEndpointFailureClusters"></label><input asp-for="MaxEndpointFailureClusters" type="number" /><span class="validation" asp-validation-for="MaxEndpointFailureClusters"></span></div>
+                <div><label asp-for="DefaultEndpointMetricsWindow"></label><select asp-for="DefaultEndpointMetricsWindow"><option>1h</option><option>6h</option><option>24h</option><option>7d</option></select><span class="validation" asp-validation-for="DefaultEndpointMetricsWindow"></span></div>
+                <div><label asp-for="MaximumEndpointMetricsWindow"></label><select asp-for="MaximumEndpointMetricsWindow"><option>1h</option><option>6h</option><option>24h</option><option>7d</option></select><span class="validation" asp-validation-for="MaximumEndpointMetricsWindow"></span></div>
+            </div>
+            <h3>Diagram/runtime/memory limits</h3>
+            <div class="grid two">
+                <div><label asp-for="MaxDiagramListResults"></label><input asp-for="MaxDiagramListResults" type="number" /></div>
+                <div><label asp-for="MaxDiagramNodeSearchResults"></label><input asp-for="MaxDiagramNodeSearchResults" type="number" /></div>
+                <div><label asp-for="MaxDiagramConnectionResults"></label><input asp-for="MaxDiagramConnectionResults" type="number" /></div>
+                <div><label asp-for="MaxFullDiagramNodesReturned"></label><input asp-for="MaxFullDiagramNodesReturned" type="number" /></div>
+                <div><label asp-for="MaxFullDiagramLinksReturned"></label><input asp-for="MaxFullDiagramLinksReturned" type="number" /></div>
+                <div><label asp-for="MaxDiagramToolResultCharacters"></label><input asp-for="MaxDiagramToolResultCharacters" type="number" /></div>
+                <div><label asp-for="MaxDiagramItemMetadataCharacters"></label><input asp-for="MaxDiagramItemMetadataCharacters" type="number" /></div>
+                <div><label asp-for="MaxMemorySearchResults"></label><input asp-for="MaxMemorySearchResults" type="number" /></div>
+                <div><label asp-for="MaxMemoryContentCharacters"></label><input asp-for="MaxMemoryContentCharacters" type="number" /></div>
+                <div><label asp-for="MaxRuntimeLargestTablesReturned"></label><input asp-for="MaxRuntimeLargestTablesReturned" type="number" /></div>
+            </div>
+        </section>
+
         <section class="card grid">
             <h2>Admin global prompt</h2>
             <textarea asp-for="GlobalSystemPrompt" maxlength="20000"></textarea>

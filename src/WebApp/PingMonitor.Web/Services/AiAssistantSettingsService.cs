@@ -3,6 +3,8 @@ using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using PingMonitor.Web.Services.AiTools;
 
 namespace PingMonitor.Web.Services;
 
@@ -58,6 +60,7 @@ internal sealed class AiAssistantSettingsService : IAiAssistantSettingsService
         settings.Temperature = command.Temperature;
         settings.ToolCallingEnabled = command.ToolCallingEnabled;
         settings.GlobalSystemPrompt = command.GlobalSystemPrompt?.Trim() ?? string.Empty;
+        settings.ToolExecutionLimitsJson = JsonSerializer.Serialize(command.ToolLimits ?? new AiToolExecutionLimits(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         if (command.ClearApiKey)
         {
@@ -111,6 +114,7 @@ internal sealed class AiAssistantSettingsService : IAiAssistantSettingsService
             Temperature = 0.2,
             ToolCallingEnabled = true,
             GlobalSystemPrompt = string.Empty,
+            ToolExecutionLimitsJson = JsonSerializer.Serialize(new AiToolExecutionLimits(), new JsonSerializerOptions(JsonSerializerDefaults.Web)),
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
@@ -155,6 +159,13 @@ internal sealed class AiAssistantSettingsService : IAiAssistantSettingsService
             : AiAssistantSettings.OpenAICompatibleProviderType;
     }
 
+    private static AiToolExecutionLimits DeserializeLimits(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new AiToolExecutionLimits();
+        try { return JsonSerializer.Deserialize<AiToolExecutionLimits>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new AiToolExecutionLimits(); }
+        catch (JsonException) { return new AiToolExecutionLimits(); }
+    }
+
     private static AiAssistantSettingsDto ToDto(AiAssistantSettings settings)
     {
         return new AiAssistantSettingsDto
@@ -174,6 +185,7 @@ internal sealed class AiAssistantSettingsService : IAiAssistantSettingsService
             Temperature = settings.Temperature,
             ToolCallingEnabled = settings.ToolCallingEnabled,
             GlobalSystemPrompt = settings.GlobalSystemPrompt,
+            ToolLimits = DeserializeLimits(settings.ToolExecutionLimitsJson),
             UpdatedAtUtc = settings.UpdatedAtUtc,
             UpdatedByUserId = settings.UpdatedByUserId
         };

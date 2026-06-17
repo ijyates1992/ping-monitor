@@ -39,6 +39,7 @@ For endpoint-specific questions:
 Use `get_endpoint_metrics_summary` for questions about uptime, downtime, UNKNOWN state, SUPPRESSED state, RTT, latency, jitter, packet loss, failed checks, recent check pattern, reliability, or flapping.
 Do not guess endpoint state or metrics when tools can answer.
 If tools are unavailable or return no data, say so.
+AI tool results may be limited or truncated by administrator-configured context limits. If a tool result says it is truncated, mention that limitation and ask the user to narrow the request if needed.
 Do not invent endpoint states, outage history, metrics, CheckResults, diagrams, ports, VLANs, links, devices, diagram names, or topology.
 If a diagram tool returns no match or multiple matches, say so or ask the user to clarify.
 Do not display raw JSON tool results to the user.
@@ -65,9 +66,6 @@ Prompt history, persistent audit log, and non-memory write actions are not conne
 """;
 
     private readonly IAiAssistantSettingsService _settingsService;
-    private const int MaxToolRounds = 3;
-    private const int MaxToolCallsPerRound = 5;
-    private const int MaxTotalToolResultCharacters = 36000;
 
     private readonly IAiProviderClient _providerClient;
     private readonly IAiToolRegistry _toolRegistry;
@@ -100,6 +98,7 @@ Prompt history, persistent audit log, and non-memory write actions are not conne
         }
 
         var runtime = await _settingsService.GetProviderRuntimeSettingsAsync(cancellationToken);
+        var limits = settings.ToolLimits ?? new AiToolExecutionLimits();
         if (!string.Equals(runtime.ProviderType, AiAssistantSettings.OpenAICompatibleProviderType, StringComparison.Ordinal))
         {
             return ConfigurationError(settings, "AI provider configuration is incomplete. Provider type must be OpenAICompatible.");
@@ -116,12 +115,12 @@ Prompt history, persistent audit log, and non-memory write actions are not conne
         }
 
         var messages = BuildMessages(settings.GlobalSystemPrompt, request.ConversationHistory, request.UserMessage);
-        var toolsEnabled = runtime.ToolCallingEnabled;
+        var toolsEnabled = runtime.ToolCallingEnabled && limits.MaxToolRounds > 0;
         var toolDefinitions = toolsEnabled ? _toolRegistry.GetDefinitions().Where(x => settings.MemoryEnabled || !x.Name.Contains("user_memor", StringComparison.Ordinal)).Select(x => x.ToProviderDefinition()).ToArray() : [];
         var totalToolResultCharacters = 0;
         AiProviderChatResult result = new();
 
-        for (var round = 0; round <= MaxToolRounds; round++)
+        for (var round = 0; round <= limits.MaxToolRounds; round++)
         {
             result = await _providerClient.SendChatAsync(new AiProviderChatRequest
             {
@@ -142,12 +141,12 @@ Prompt history, persistent audit log, and non-memory write actions are not conne
                 break;
             }
 
-            if (round == MaxToolRounds)
+            if (round == limits.MaxToolRounds)
             {
                 return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ProviderName = runtime.ProviderDisplayName, ModelName = runtime.ModelName, ErrorMessage = "The AI assistant requested too many tool rounds. Please narrow the request and try again." };
             }
 
-            if (result.ToolCalls.Count > MaxToolCallsPerRound)
+            if (result.ToolCalls.Count > limits.MaxToolCallsPerRound)
             {
                 return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ProviderName = runtime.ProviderDisplayName, ModelName = runtime.ModelName, ErrorMessage = "The AI assistant requested too many tools at once. Please narrow the request and try again." };
             }
@@ -155,9 +154,14 @@ Prompt history, persistent audit log, and non-memory write actions are not conne
             messages.Add(new AiProviderChatMessage { Role = "assistant", Content = result.ResponseText, ToolCalls = result.ToolCalls.ToList() });
             foreach (var toolCall in result.ToolCalls)
             {
-                var toolResult = await _toolRegistry.ExecuteAsync(new AiToolCall { Name = toolCall.Function.Name, ArgumentsJson = toolCall.Function.Arguments, Principal = request.Principal, ApplicationUserId = request.ApplicationUserId, CurrentUserMessage = request.UserMessage, ConversationSource = request.Source.ToString() }, cancellationToken);
+                var toolResult = await _toolRegistry.ExecuteAsync(new AiToolCall { Name = toolCall.Function.Name, ArgumentsJson = toolCall.Function.Arguments, Principal = request.Principal, ApplicationUserId = request.ApplicationUserId, CurrentUserMessage = request.UserMessage, ConversationSource = request.Source.ToString(), Limits = limits }, cancellationToken);
+                if (toolResult.ContentJson.Length > limits.MaxSingleToolResultCharacters)
+                {
+                    return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ProviderName = runtime.ProviderDisplayName, ModelName = runtime.ModelName, ErrorMessage = "An AI assistant tool result was too large. Please narrow the request and try again." };
+                }
+
                 totalToolResultCharacters += toolResult.ContentJson.Length;
-                if (totalToolResultCharacters > MaxTotalToolResultCharacters)
+                if (totalToolResultCharacters > limits.MaxTotalToolResultCharacters)
                 {
                     return new AiChatResponse { AssistantEnabled = true, WebChatEnabled = settings.WebChatEnabled, TelegramChatEnabled = settings.TelegramChatEnabled, ProviderName = runtime.ProviderDisplayName, ModelName = runtime.ModelName, ErrorMessage = "The AI assistant tool results were too large. Please narrow the request and try again." };
                 }

@@ -10,8 +10,8 @@ public sealed class AiScheduledTasksSliceTests
     [Fact]
     public void BuiltInPrompt_SaysScheduledTasksAreGuiOnly()
     {
-        Assert.Contains("Scheduled AI tasks can only be created, edited, enabled, disabled, or deleted from the web UI", AiChatService.BuiltInSystemPrompt);
-        Assert.Contains("You do not have tools to schedule tasks", AiChatService.BuiltInSystemPrompt);
+        Assert.Contains("Scheduled and event-triggered AI tasks can only be created, edited, enabled, disabled, or deleted from the web UI", AiChatService.BuiltInSystemPrompt);
+        Assert.Contains("they must use the Scheduled AI tasks page", AiChatService.BuiltInSystemPrompt);
     }
 
     [Fact]

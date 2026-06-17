@@ -1,3 +1,5 @@
+using PingMonitor.Web.Services.AiTools;
+
 namespace PingMonitor.Web.Services;
 
 public sealed class AiAssistantSettingsDto
@@ -17,6 +19,7 @@ public sealed class AiAssistantSettingsDto
     public double Temperature { get; set; } = 0.2;
     public bool ToolCallingEnabled { get; set; } = true;
     public string GlobalSystemPrompt { get; set; } = string.Empty;
+    public AiToolExecutionLimits ToolLimits { get; set; } = new();
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public string? UpdatedByUserId { get; set; }
 }

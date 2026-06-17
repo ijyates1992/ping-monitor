@@ -1,0 +1,46 @@
+namespace PingMonitor.Web.Services.AiTools;
+
+public sealed class AiToolExecutionLimits
+{
+    public const int DefaultMaxToolRounds = 3;
+    public const int DefaultMaxToolCallsPerRound = 5;
+    public const int DefaultMaxTotalToolResultCharacters = 24000;
+    public const int DefaultMaxSingleToolResultCharacters = 12000;
+    public const int DefaultMaxEndpointSearchResults = 10;
+    public const int DefaultMaxEndpointMetricsSampleTailPoints = 120;
+    public const int DefaultMaxEndpointTransitionItems = 20;
+    public const int DefaultMaxEndpointFailureClusters = 10;
+    public const string DefaultDefaultEndpointMetricsWindow = "24h";
+    public const string DefaultMaximumEndpointMetricsWindow = "7d";
+    public const int DefaultMaxDiagramListResults = 50;
+    public const int DefaultMaxDiagramNodeSearchResults = 10;
+    public const int DefaultMaxDiagramConnectionResults = 50;
+    public const int DefaultMaxFullDiagramNodesReturned = 100;
+    public const int DefaultMaxFullDiagramLinksReturned = 150;
+    public const int DefaultMaxDiagramToolResultCharacters = 30000;
+    public const int DefaultMaxDiagramItemMetadataCharacters = 500;
+    public const int DefaultMaxMemorySearchResults = 10;
+    public const int DefaultMaxMemoryContentCharacters = 1000;
+    public const int DefaultMaxRuntimeLargestTablesReturned = 10;
+
+    public int MaxToolRounds { get; set; } = DefaultMaxToolRounds;
+    public int MaxToolCallsPerRound { get; set; } = DefaultMaxToolCallsPerRound;
+    public int MaxTotalToolResultCharacters { get; set; } = DefaultMaxTotalToolResultCharacters;
+    public int MaxSingleToolResultCharacters { get; set; } = DefaultMaxSingleToolResultCharacters;
+    public int MaxEndpointSearchResults { get; set; } = DefaultMaxEndpointSearchResults;
+    public int MaxEndpointMetricsSampleTailPoints { get; set; } = DefaultMaxEndpointMetricsSampleTailPoints;
+    public int MaxEndpointTransitionItems { get; set; } = DefaultMaxEndpointTransitionItems;
+    public int MaxEndpointFailureClusters { get; set; } = DefaultMaxEndpointFailureClusters;
+    public string DefaultEndpointMetricsWindow { get; set; } = DefaultDefaultEndpointMetricsWindow;
+    public string MaximumEndpointMetricsWindow { get; set; } = DefaultMaximumEndpointMetricsWindow;
+    public int MaxDiagramListResults { get; set; } = DefaultMaxDiagramListResults;
+    public int MaxDiagramNodeSearchResults { get; set; } = DefaultMaxDiagramNodeSearchResults;
+    public int MaxDiagramConnectionResults { get; set; } = DefaultMaxDiagramConnectionResults;
+    public int MaxFullDiagramNodesReturned { get; set; } = DefaultMaxFullDiagramNodesReturned;
+    public int MaxFullDiagramLinksReturned { get; set; } = DefaultMaxFullDiagramLinksReturned;
+    public int MaxDiagramToolResultCharacters { get; set; } = DefaultMaxDiagramToolResultCharacters;
+    public int MaxDiagramItemMetadataCharacters { get; set; } = DefaultMaxDiagramItemMetadataCharacters;
+    public int MaxMemorySearchResults { get; set; } = DefaultMaxMemorySearchResults;
+    public int MaxMemoryContentCharacters { get; set; } = DefaultMaxMemoryContentCharacters;
+    public int MaxRuntimeLargestTablesReturned { get; set; } = DefaultMaxRuntimeLargestTablesReturned;
+}

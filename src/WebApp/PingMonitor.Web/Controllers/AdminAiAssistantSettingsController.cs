@@ -4,6 +4,7 @@ using PingMonitor.Web.Models;
 using PingMonitor.Web.Services;
 using PingMonitor.Web.Services.Identity;
 using PingMonitor.Web.Services.AiProviders;
+using PingMonitor.Web.Services.AiTools;
 using PingMonitor.Web.ViewModels.Admin;
 
 namespace PingMonitor.Web.Controllers;
@@ -61,6 +62,7 @@ public sealed class AdminAiAssistantSettingsController : Controller
             Temperature = model.Temperature,
             ToolCallingEnabled = model.ToolCallingEnabled,
             GlobalSystemPrompt = model.GlobalSystemPrompt,
+            ToolLimits = ToLimits(model),
             UpdatedByUserId = User?.Identity?.Name
         }, cancellationToken);
 
@@ -145,7 +147,39 @@ public sealed class AdminAiAssistantSettingsController : Controller
         {
             ModelState.AddModelError(nameof(model.RequestTimeoutSeconds), "Request timeout seconds must be between 1 and 600.");
         }
+
+        var allowedWindows = new[] { "1h", "6h", "24h", "7d" };
+        if (!allowedWindows.Contains(model.DefaultEndpointMetricsWindow)) ModelState.AddModelError(nameof(model.DefaultEndpointMetricsWindow), "Default endpoint metrics window must be 1h, 6h, 24h, or 7d.");
+        if (!allowedWindows.Contains(model.MaximumEndpointMetricsWindow)) ModelState.AddModelError(nameof(model.MaximumEndpointMetricsWindow), "Maximum endpoint metrics window must be 1h, 6h, 24h, or 7d.");
+        if (WindowRank(model.DefaultEndpointMetricsWindow) > WindowRank(model.MaximumEndpointMetricsWindow)) ModelState.AddModelError(nameof(model.DefaultEndpointMetricsWindow), "Default endpoint metrics window cannot exceed the maximum endpoint metrics window.");
     }
+
+
+    private static int WindowRank(string? window) => window switch { "1h" => 1, "6h" => 2, "24h" => 3, "7d" => 4, _ => 0 };
+
+    private static AiToolExecutionLimits ToLimits(AiAssistantSettingsPageViewModel model) => new()
+    {
+        MaxToolRounds = model.MaxToolRounds,
+        MaxToolCallsPerRound = model.MaxToolCallsPerRound,
+        MaxTotalToolResultCharacters = model.MaxTotalToolResultCharacters,
+        MaxSingleToolResultCharacters = model.MaxSingleToolResultCharacters,
+        MaxEndpointSearchResults = model.MaxEndpointSearchResults,
+        MaxEndpointMetricsSampleTailPoints = model.MaxEndpointMetricsSampleTailPoints,
+        MaxEndpointTransitionItems = model.MaxEndpointTransitionItems,
+        MaxEndpointFailureClusters = model.MaxEndpointFailureClusters,
+        DefaultEndpointMetricsWindow = model.DefaultEndpointMetricsWindow,
+        MaximumEndpointMetricsWindow = model.MaximumEndpointMetricsWindow,
+        MaxDiagramListResults = model.MaxDiagramListResults,
+        MaxDiagramNodeSearchResults = model.MaxDiagramNodeSearchResults,
+        MaxDiagramConnectionResults = model.MaxDiagramConnectionResults,
+        MaxFullDiagramNodesReturned = model.MaxFullDiagramNodesReturned,
+        MaxFullDiagramLinksReturned = model.MaxFullDiagramLinksReturned,
+        MaxDiagramToolResultCharacters = model.MaxDiagramToolResultCharacters,
+        MaxDiagramItemMetadataCharacters = model.MaxDiagramItemMetadataCharacters,
+        MaxMemorySearchResults = model.MaxMemorySearchResults,
+        MaxMemoryContentCharacters = model.MaxMemoryContentCharacters,
+        MaxRuntimeLargestTablesReturned = model.MaxRuntimeLargestTablesReturned
+    };
 
     private static AiAssistantSettingsPageViewModel ToViewModel(AiAssistantSettingsDto settings, bool saved)
     {
@@ -166,6 +200,26 @@ public sealed class AdminAiAssistantSettingsController : Controller
             MaxOutputTokens = settings.MaxOutputTokens,
             Temperature = settings.Temperature,
             ToolCallingEnabled = settings.ToolCallingEnabled,
+            MaxToolRounds = settings.ToolLimits.MaxToolRounds,
+            MaxToolCallsPerRound = settings.ToolLimits.MaxToolCallsPerRound,
+            MaxTotalToolResultCharacters = settings.ToolLimits.MaxTotalToolResultCharacters,
+            MaxSingleToolResultCharacters = settings.ToolLimits.MaxSingleToolResultCharacters,
+            MaxEndpointSearchResults = settings.ToolLimits.MaxEndpointSearchResults,
+            MaxEndpointMetricsSampleTailPoints = settings.ToolLimits.MaxEndpointMetricsSampleTailPoints,
+            MaxEndpointTransitionItems = settings.ToolLimits.MaxEndpointTransitionItems,
+            MaxEndpointFailureClusters = settings.ToolLimits.MaxEndpointFailureClusters,
+            DefaultEndpointMetricsWindow = settings.ToolLimits.DefaultEndpointMetricsWindow,
+            MaximumEndpointMetricsWindow = settings.ToolLimits.MaximumEndpointMetricsWindow,
+            MaxDiagramListResults = settings.ToolLimits.MaxDiagramListResults,
+            MaxDiagramNodeSearchResults = settings.ToolLimits.MaxDiagramNodeSearchResults,
+            MaxDiagramConnectionResults = settings.ToolLimits.MaxDiagramConnectionResults,
+            MaxFullDiagramNodesReturned = settings.ToolLimits.MaxFullDiagramNodesReturned,
+            MaxFullDiagramLinksReturned = settings.ToolLimits.MaxFullDiagramLinksReturned,
+            MaxDiagramToolResultCharacters = settings.ToolLimits.MaxDiagramToolResultCharacters,
+            MaxDiagramItemMetadataCharacters = settings.ToolLimits.MaxDiagramItemMetadataCharacters,
+            MaxMemorySearchResults = settings.ToolLimits.MaxMemorySearchResults,
+            MaxMemoryContentCharacters = settings.ToolLimits.MaxMemoryContentCharacters,
+            MaxRuntimeLargestTablesReturned = settings.ToolLimits.MaxRuntimeLargestTablesReturned,
             GlobalSystemPrompt = settings.GlobalSystemPrompt,
             UpdatedAtUtc = settings.UpdatedAtUtc,
             UpdatedByUserId = settings.UpdatedByUserId,
