@@ -33,10 +33,12 @@ internal sealed class AiScheduledTaskService : IAiScheduledTaskService
             _dbContext.AiScheduledTasks.Add(entity);
         }
 
+        var firstRunUtc = ConvertLocalFirstRunToUtc(command.FirstRunDate!.Value, command.FirstRunTime!.Value, command.TimeZoneId.Trim()).UtcValue!.Value;
+
         entity.Name = command.Name.Trim();
         entity.Prompt = command.Prompt.Trim();
         entity.Enabled = command.Enabled;
-        entity.FirstRunAtUtc = command.FirstRunAtUtc!.Value.ToUniversalTime();
+        entity.FirstRunAtUtc = firstRunUtc;
         entity.RepeatEnabled = command.RepeatEnabled;
         entity.RepeatEvery = command.RepeatEnabled ? command.RepeatEvery : null;
         entity.RepeatUnit = command.RepeatEnabled ? command.RepeatUnit : null;
@@ -72,14 +74,18 @@ internal sealed class AiScheduledTaskService : IAiScheduledTaskService
         if (!Enum.IsDefined(command.DeliveryTarget) || command.DeliveryTarget != AiScheduledTaskDeliveryTarget.TelegramOwner) return "Delivery target is invalid.";
         if (!IsValidTimeZone(command.TimeZoneId)) return "Select a valid time zone.";
         if (!Enum.IsDefined(command.MissedRunPolicy)) return "Missed run behaviour is invalid.";
-        if (command.FirstRunAtUtc is null) return "First run is required.";
+        if (command.FirstRunDate is null) return "First run date is required.";
+        if (command.FirstRunTime is null) return "First run time is required.";
+        if (command.FirstRunTime.Value.Ticks % TimeSpan.TicksPerMinute != 0) return "First run time must use HH:mm minute precision.";
+        var firstRunConversion = ConvertLocalFirstRunToUtc(command.FirstRunDate.Value, command.FirstRunTime.Value, command.TimeZoneId.Trim());
+        if (!firstRunConversion.Succeeded) return firstRunConversion.ErrorMessage;
         if (command.RepeatEnabled)
         {
             if (command.RepeatEvery is null or < 1) return "Repeat every must be at least 1.";
             if (command.RepeatUnit is null || !Enum.IsDefined(command.RepeatUnit.Value)) return "Repeat unit is invalid.";
         }
         if (command.Enabled && !await _dbContext.TelegramAccounts.AsNoTracking().AnyAsync(x => x.UserId == command.OwnerUserId && x.Verified && x.IsActive, cancellationToken)) return "Link your Telegram account before enabling scheduled AI tasks.";
-        if (command.FirstRunAtUtc <= DateTimeOffset.UtcNow && command.MissedRunPolicy != AiScheduledTaskMissedRunPolicy.RetryOnce) return "First run must be in the future unless missed runs are set to run once as soon as possible.";
+        if (firstRunConversion.UtcValue!.Value <= DateTimeOffset.UtcNow && command.MissedRunPolicy != AiScheduledTaskMissedRunPolicy.RetryOnce) return "First run must be in the future unless missed runs are set to run once as soon as possible.";
         return null;
     }
 
@@ -113,10 +119,25 @@ internal sealed class AiScheduledTaskService : IAiScheduledTaskService
         _ => value
     };
 
+    public static AiScheduledTaskLocalTimeConversion ConvertLocalFirstRunToUtc(DateOnly date, TimeOnly time, string timeZoneId)
+    {
+        if (!IsValidTimeZone(timeZoneId)) return new(false, null, "Select a valid time zone.");
+        if (time.Ticks % TimeSpan.TicksPerMinute != 0) return new(false, null, "First run time must use HH:mm minute precision.");
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId.Trim());
+        var local = date.ToDateTime(time, DateTimeKind.Unspecified);
+        if (timeZone.IsInvalidTime(local)) return new(false, null, "First run time does not exist in the selected time zone due to daylight saving time. Choose a valid time.");
+        return new(true, LocalToUtc(local, timeZone), null);
+    }
+
     private static DateTimeOffset SafeLocalToUtc(DateTime local, TimeZoneInfo tz)
     {
         while (tz.IsInvalidTime(local)) local = local.AddHours(1);
-        if (tz.IsAmbiguousTime(local)) return new DateTimeOffset(local, tz.GetAmbiguousTimeOffsets(local).Min()).ToUniversalTime();
+        return LocalToUtc(local, tz);
+    }
+
+    private static DateTimeOffset LocalToUtc(DateTime local, TimeZoneInfo tz)
+    {
+        if (tz.IsAmbiguousTime(local)) return new DateTimeOffset(local, tz.GetAmbiguousTimeOffsets(local).Max()).ToUniversalTime();
         return TimeZoneInfo.ConvertTimeToUtc(local, tz);
     }
 

@@ -21,7 +21,8 @@ public sealed class AiScheduledTaskFormViewModel
     [Required, StringLength(128)] public string Name { get; set; } = string.Empty;
     [Required, StringLength(4000)] public string Prompt { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
-    [Required] public DateTimeOffset? FirstRunAtUtc { get; set; }
+    [Required(ErrorMessage = "First run date is required.")] public DateOnly? FirstRunDate { get; set; }
+    [Required(ErrorMessage = "First run time is required.")] public TimeOnly? FirstRunTime { get; set; }
     public bool RepeatEnabled { get; set; }
     [Range(1, int.MaxValue)] public int? RepeatEvery { get; set; } = 1;
     public AiScheduledTaskRepeatUnit? RepeatUnit { get; set; } = AiScheduledTaskRepeatUnit.Days;
