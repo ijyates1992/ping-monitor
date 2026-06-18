@@ -63,6 +63,12 @@ public sealed class AiAssistantSettingsPageViewModel
     [Range(1, 500)] public int MaxEndpointTransitionItems { get; set; } = 20;
     [Display(Name = "Maximum endpoint failure clusters returned (items)")]
     [Range(1, 500)] public int MaxEndpointFailureClusters { get; set; } = 10;
+    [Display(Name = "Maximum state transition search results (items)")]
+    [Range(1, 1000)] public int MaxStateTransitionSearchResults { get; set; } = 200;
+    [Display(Name = "Maximum state transition lookback window (days)")]
+    [Range(1, 365)] public int MaxStateTransitionLookbackDays { get; set; } = 90;
+    [Display(Name = "Maximum state transition endpoint details returned (items)")]
+    [Range(1, 1000)] public int MaxStateTransitionEndpointDetails { get; set; } = 200;
     [Display(Name = "Default endpoint metrics window")] public string DefaultEndpointMetricsWindow { get; set; } = "24h";
     [Display(Name = "Maximum endpoint metrics window")] public string MaximumEndpointMetricsWindow { get; set; } = "7d";
     [Display(Name = "Maximum diagram list results (items)")]
