@@ -10,6 +10,9 @@ public sealed class AiToolExecutionLimits
     public const int DefaultMaxEndpointMetricsSampleTailPoints = 120;
     public const int DefaultMaxEndpointTransitionItems = 20;
     public const int DefaultMaxEndpointFailureClusters = 10;
+    public const int DefaultMaxStateTransitionSearchResults = 200;
+    public const int DefaultMaxStateTransitionLookbackDays = 90;
+    public const int DefaultMaxStateTransitionEndpointDetails = 200;
     public const string DefaultDefaultEndpointMetricsWindow = "24h";
     public const string DefaultMaximumEndpointMetricsWindow = "7d";
     public const int DefaultMaxDiagramListResults = 50;
@@ -35,6 +38,9 @@ public sealed class AiToolExecutionLimits
     public int MaxEndpointMetricsSampleTailPoints { get; set; } = DefaultMaxEndpointMetricsSampleTailPoints;
     public int MaxEndpointTransitionItems { get; set; } = DefaultMaxEndpointTransitionItems;
     public int MaxEndpointFailureClusters { get; set; } = DefaultMaxEndpointFailureClusters;
+    public int MaxStateTransitionSearchResults { get; set; } = DefaultMaxStateTransitionSearchResults;
+    public int MaxStateTransitionLookbackDays { get; set; } = DefaultMaxStateTransitionLookbackDays;
+    public int MaxStateTransitionEndpointDetails { get; set; } = DefaultMaxStateTransitionEndpointDetails;
     public string DefaultEndpointMetricsWindow { get; set; } = DefaultDefaultEndpointMetricsWindow;
     public string MaximumEndpointMetricsWindow { get; set; } = DefaultMaximumEndpointMetricsWindow;
     public int MaxDiagramListResults { get; set; } = DefaultMaxDiagramListResults;
