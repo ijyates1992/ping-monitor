@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using PingMonitor.Web.Data;
 using PingMonitor.Web.Models;
 using PingMonitor.Web.Models.Identity;
+using PingMonitor.Web.Services.Identity;
 
 namespace PingMonitor.Web.Services.AiTools;
 
@@ -134,9 +135,9 @@ internal abstract class LogLookupAiToolBase(PingMonitorDbContext dbContext, User
     protected static string? ReadString(JsonElement root, string name) => root.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()?.Trim() : null;
     protected static int? ReadInt(JsonElement root, string name) => root.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var value) ? value : null;
 
-    private static LogRow ToRow(DateTimeOffset timestamp, string category, string level, string source, string message, string? details, string? entityType, string? entityId, string correlationId, int maxChars, ref bool redacted)
+    private static LogRow ToRow(DateTimeOffset timestamp, string category, string level, string source, string? message, string? details, string? entityType, string? entityId, string correlationId, int maxChars, ref bool redacted)
     {
-        var sanitizedMessage = Sanitize(Truncate(message, maxChars), ref redacted);
+        var sanitizedMessage = Sanitize(Truncate(message, maxChars), ref redacted) ?? string.Empty;
         var sanitizedDetails = Sanitize(Truncate(details, maxChars), ref redacted);
         return new LogRow(timestamp, category, level, source, sanitizedMessage, entityType, entityId, null, sanitizedDetails, correlationId);
     }
