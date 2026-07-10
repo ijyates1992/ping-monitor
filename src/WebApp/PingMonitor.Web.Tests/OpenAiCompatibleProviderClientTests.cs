@@ -11,6 +11,9 @@ public sealed class OpenAiCompatibleProviderClientTests
     [Theory]
     [InlineData("http://localhost:11434/v1", "http://localhost:11434/v1/chat/completions")]
     [InlineData("http://localhost:11434/v1/", "http://localhost:11434/v1/chat/completions")]
+    [InlineData("https://api.openai.com", "https://api.openai.com/v1/chat/completions")]
+    [InlineData("https://api.openai.com/v1", "https://api.openai.com/v1/chat/completions")]
+    [InlineData("https://api.openai.com/v1/", "https://api.openai.com/v1/chat/completions")]
     public async Task BuildsChatCompletionsRequest_AndSendsExpectedBody(string baseUrl, string expectedUrl)
     {
         var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -27,11 +30,52 @@ public sealed class OpenAiCompatibleProviderClientTests
         Assert.Equal("secret", handler.AuthorizationParameter);
         using var json = JsonDocument.Parse(handler.Body!);
         Assert.Equal("llama", json.RootElement.GetProperty("model").GetString());
-        Assert.False(json.RootElement.GetProperty("stream").GetBoolean());
-        Assert.Equal(0.2, json.RootElement.GetProperty("temperature").GetDouble());
-        Assert.Equal(256, json.RootElement.GetProperty("max_tokens").GetInt32());
+        if (baseUrl.Contains("api.openai.com", StringComparison.Ordinal))
+        {
+            Assert.False(json.RootElement.TryGetProperty("temperature", out _));
+            Assert.False(json.RootElement.TryGetProperty("max_tokens", out _));
+            Assert.False(json.RootElement.TryGetProperty("stream", out _));
+            Assert.Equal(256, json.RootElement.GetProperty("max_completion_tokens").GetInt32());
+        }
+        else
+        {
+            Assert.False(json.RootElement.GetProperty("stream").GetBoolean());
+            Assert.Equal(0.2, json.RootElement.GetProperty("temperature").GetDouble());
+            Assert.Equal(256, json.RootElement.GetProperty("max_tokens").GetInt32());
+        }
         Assert.Equal("system", json.RootElement.GetProperty("messages")[0].GetProperty("role").GetString());
         Assert.Equal("user", json.RootElement.GetProperty("messages")[1].GetProperty("role").GetString());
+    }
+
+
+    [Fact]
+    public async Task OpenAiOfficial_MapsSystemRoleForModernReasoningModels()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}") });
+        var request = BuildRequest("https://api.openai.com/v1");
+        request.ModelName = "gpt-5-mini";
+
+        var result = await CreateClient(handler).SendChatAsync(request, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        using var json = JsonDocument.Parse(handler.Body!);
+        Assert.Equal("developer", json.RootElement.GetProperty("messages")[0].GetProperty("role").GetString());
+        Assert.Equal("user", json.RootElement.GetProperty("messages")[1].GetProperty("role").GetString());
+    }
+
+    [Fact]
+    public async Task OpenAiOfficial_ParsesStructuredErrorAndRedactsSecrets()
+    {
+        var body = "{\"error\":{\"message\":\"Unsupported parameter max_tokens for sk-test-secret\",\"type\":\"invalid_request_error\",\"param\":\"max_tokens\",\"code\":\"unsupported_parameter\"}}";
+        var client = CreateClient(new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent(body) }));
+
+        var result = await client.SendChatAsync(BuildRequest("https://api.openai.com/v1"), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("OpenAI returned 400 invalid_request_error code=unsupported_parameter param=max_tokens", result.ErrorMessage);
+        Assert.DoesNotContain("sk-test-secret", result.ErrorMessage);
+        Assert.DoesNotContain("sk-test-secret", result.RawErrorBody);
     }
 
     [Fact]
@@ -88,7 +132,7 @@ public sealed class OpenAiCompatibleProviderClientTests
         var result = await client.SendChatAsync(BuildRequest("http://localhost:11434/v1"), CancellationToken.None);
         Assert.False(result.Succeeded);
         Assert.Equal(400, result.StatusCode);
-        Assert.Contains("HTTP 400", result.ErrorMessage);
+        Assert.Contains("Provider returned 400", result.ErrorMessage);
         Assert.Equal("bad request body", result.RawErrorBody);
     }
 
