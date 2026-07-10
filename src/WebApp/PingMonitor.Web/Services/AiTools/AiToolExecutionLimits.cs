@@ -29,6 +29,10 @@ public sealed class AiToolExecutionLimits
     public const int DefaultMaxDependencyPathsReturned = 100;
     public const int DefaultMaxDependencyTraversalDepth = 5;
     public const int DefaultMaxTopDependedOnEndpoints = 20;
+    public const int DefaultMaxLogSearchResults = 100;
+    public const int DefaultMaxLogContextWindowMinutes = 60;
+    public const int DefaultMaxLogLookupLookbackDays = 30;
+    public const int DefaultMaxLogMessageDetailCharacters = 1000;
 
     public int MaxToolRounds { get; set; } = DefaultMaxToolRounds;
     public int MaxToolCallsPerRound { get; set; } = DefaultMaxToolCallsPerRound;
@@ -57,4 +61,8 @@ public sealed class AiToolExecutionLimits
     public int MaxDependencyPathsReturned { get; set; } = DefaultMaxDependencyPathsReturned;
     public int MaxDependencyTraversalDepth { get; set; } = DefaultMaxDependencyTraversalDepth;
     public int MaxTopDependedOnEndpoints { get; set; } = DefaultMaxTopDependedOnEndpoints;
+    public int MaxLogSearchResults { get; set; } = DefaultMaxLogSearchResults;
+    public int MaxLogContextWindowMinutes { get; set; } = DefaultMaxLogContextWindowMinutes;
+    public int MaxLogLookupLookbackDays { get; set; } = DefaultMaxLogLookupLookbackDays;
+    public int MaxLogMessageDetailCharacters { get; set; } = DefaultMaxLogMessageDetailCharacters;
 }

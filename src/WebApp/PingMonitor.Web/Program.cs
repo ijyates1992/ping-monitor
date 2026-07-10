@@ -220,6 +220,8 @@ builder.Services.AddScoped<IAiTool, AiRuntimeInfoTool>();
 builder.Services.AddScoped<IAiTool, SearchEndpointsAiTool>();
 builder.Services.AddScoped<IAiTool, EndpointMetricsSummaryAiTool>();
 builder.Services.AddScoped<IAiTool, SearchStateTransitionsAiTool>();
+builder.Services.AddScoped<IAiTool, SearchLogsAiTool>();
+builder.Services.AddScoped<IAiTool, GetLogContextAiTool>();
 builder.Services.AddScoped<IAiTool, GetEndpointDependenciesAiTool>();
 builder.Services.AddScoped<IAiTool, GetDependencyImpactAiTool>();
 builder.Services.AddScoped<IAiTool, GetDependencySummaryAiTool>();
